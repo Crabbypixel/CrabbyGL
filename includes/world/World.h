@@ -7,6 +7,7 @@
 #include "world/ChunkMeshBuilder.h"
 #include "Raycast.h"
 #include "world/PerlinNoise173.h"
+#include "world/worldgen/WorldGen.h"
 
 #include <cmath>
 #include <array>

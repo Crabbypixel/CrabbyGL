@@ -96,6 +96,18 @@
     <ClCompile Include="src\rendering\ChunkMesh.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="includes\world\worldgen\CaveGen.h">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="src\world\worldgen\CaveGen.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="src\world\worldgen\TerrainGen.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="src\world\worldgen\WorldGen.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="externals\glad\glad.h">
@@ -1338,6 +1350,15 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="includes\world\PerlinNoise173.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="includes\world\worldgen\WorldGen.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="includes\world\worldgen\NoiseSettings.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="includes\world\worldgen\TerrainGen.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

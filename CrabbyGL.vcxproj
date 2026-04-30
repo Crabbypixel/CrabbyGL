@@ -152,6 +152,7 @@
     <ClCompile Include="externals\imgui\imgui_impl_opengl3.cpp" />
     <ClCompile Include="externals\imgui\imgui_tables.cpp" />
     <ClCompile Include="externals\imgui\imgui_widgets.cpp" />
+    <ClCompile Include="includes\world\worldgen\CaveGen.h" />
     <ClCompile Include="src\debug\ChunkDebug.cpp" />
     <ClCompile Include="src\player\Player.cpp" />
     <ClCompile Include="src\rendering\ChunkMesh.cpp" />
@@ -170,6 +171,9 @@
     <ClCompile Include="src\core\OpenGL_3D.cpp" />
     <ClCompile Include="src\glad.c" />
     <ClCompile Include="src\Main.cpp" />
+    <ClCompile Include="src\world\worldgen\CaveGen.cpp" />
+    <ClCompile Include="src\world\worldgen\TerrainGen.cpp" />
+    <ClCompile Include="src\world\worldgen\WorldGen.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="externals\assimp\aabb.h" />
@@ -586,6 +590,9 @@
     <ClInclude Include="includes\world\Raycast.h" />
     <ClInclude Include="includes\world\World.h" />
     <ClInclude Include="includes\world\PerlinNoise173.h" />
+    <ClInclude Include="includes\world\worldgen\NoiseSettings.h" />
+    <ClInclude Include="includes\world\worldgen\TerrainGen.h" />
+    <ClInclude Include="includes\world\worldgen\WorldGen.h" />
   </ItemGroup>
   <ItemGroup>
     <None Include="assets\shaders\ChunkDebug.glsl" />

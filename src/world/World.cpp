@@ -140,88 +140,99 @@ float World::GetTerrainHeight(int wx, int wz)
 //    chunk.modified = false;
 //}
 
+//void World::FillChunkData(Chunk& chunk, glm::ivec2 coord)
+//{
+//    if (LoadChunkFromDisk(chunk, coord)) { chunk.modified = false; return; }
+//
+//    chunk.chunkPos = coord;
+//    int cx = coord.x, cz = coord.y;
+//
+//    // Noise scales — tune these
+//    constexpr float H_SCALE = 0.005f;   // horizontal frequency
+//    constexpr float V_SCALE = 0.010f;   // vertical frequency (tighter = more layered)
+//    constexpr float SEA_LEVEL = 64.0f;
+//    constexpr float V_BIAS = 0.025f;  // how fast density drops with height
+//
+//    for (int x = 0; x < CX; x++)
+//        for (int z = 0; z < CZ; z++)
+//        {
+//            int wx = cx * CX + x;
+//            int wz = cz * CZ + z;
+//
+//            // Bedrock
+//            chunk.blocks[x][0][z] = BlockType::BEDROCK;
+//
+//            // Surface tracking for grass placement
+//            int surfaceY = -1;
+//
+//            for (int y = CY - 1; y >= 1; y--)
+//            {
+//                float fx = wx * H_SCALE;
+//                float fy = y * V_SCALE;
+//                float fz = wz * H_SCALE;
+//
+//                // Low terrain noise
+//                float low = stb_perlin_noise3(fx, fy, fz, 0, 0, 0);
+//                low += stb_perlin_noise3(fx * 2.0f, fy * 2.0f, fz * 2.0f, 0, 0, 0) * 0.5f;
+//                low += stb_perlin_noise3(fx * 4.0f, fy * 4.0f, fz * 4.0f, 0, 0, 0) * 0.25f;
+//                low /= 1.75f;
+//
+//                // High terrain noise (different offset = different pattern)
+//                float high = stb_perlin_noise3(fx + 100.0f, fy, fz + 100.0f, 0, 0, 0);
+//                high += stb_perlin_noise3(fx * 2.0f + 100.0f, fy * 2.0f, fz * 2.0f + 100.0f, 0, 0, 0) * 0.5f;
+//                high /= 1.5f;
+//
+//                // Selector — blends between low and high
+//                float sel = stb_perlin_noise3(fx * 0.5f, fy * 0.5f, fz * 0.5f, 0, 0, 0);
+//                sel = (sel + 1.0f) * 0.5f;   // 0..1
+//                sel = sel * sel;               // bias toward low terrain (flat majority)
+//
+//                float density = low + sel * (high - low);
+//
+//                // Y bias — pulls density down with height, creates natural ceiling
+//                density -= (y - SEA_LEVEL) * V_BIAS;
+//
+//                if (density > 0.0f)
+//                {
+//                    // Determine block type — will be patched to DIRT/GRASS after
+//                    chunk.blocks[x][y][z] = BlockType::STONE;
+//                    if (surfaceY < 0) surfaceY = y;   // first solid from top
+//                }
+//                else
+//                {
+//                    chunk.blocks[x][y][z] = BlockType::AIR;
+//                }
+//            }
+//
+//            // Surface pass — replace top layers with dirt + grass
+//            if (surfaceY > 0)
+//            {
+//                chunk.blocks[x][surfaceY][z] = BlockType::GRASS;
+//                for (int d = 1; d <= 3 && surfaceY - d >= 1; d++)
+//                    if (chunk.blocks[x][surfaceY - d][z] == BlockType::STONE)
+//                        chunk.blocks[x][surfaceY - d][z] = BlockType::DIRT;
+//            }
+//
+//            // Cave carve — inside density loop is better but this works
+//            for (int y = 1; y < CY - 4; y++)
+//            {
+//                if (chunk.blocks[x][y][z] == BlockType::AIR) continue;
+//                float cave = stb_perlin_noise3(wx * 0.05f, y * 0.08f, wz * 0.05f, 0, 0, 0);
+//                if (cave > 0.35f)
+//                    chunk.blocks[x][y][z] = BlockType::AIR;
+//            }
+//        }
+//
+//    chunk.dirty = true;
+//    chunk.modified = false;
+//}
+
 void World::FillChunkData(Chunk& chunk, glm::ivec2 coord)
 {
     if (LoadChunkFromDisk(chunk, coord)) { chunk.modified = false; return; }
 
     chunk.chunkPos = coord;
-    int cx = coord.x, cz = coord.y;
-
-    // Noise scales — tune these
-    constexpr float H_SCALE = 0.005f;   // horizontal frequency
-    constexpr float V_SCALE = 0.010f;   // vertical frequency (tighter = more layered)
-    constexpr float SEA_LEVEL = 64.0f;
-    constexpr float V_BIAS = 0.025f;  // how fast density drops with height
-
-    for (int x = 0; x < CX; x++)
-        for (int z = 0; z < CZ; z++)
-        {
-            int wx = cx * CX + x;
-            int wz = cz * CZ + z;
-
-            // Bedrock
-            chunk.blocks[x][0][z] = BlockType::BEDROCK;
-
-            // Surface tracking for grass placement
-            int surfaceY = -1;
-
-            for (int y = CY - 1; y >= 1; y--)
-            {
-                float fx = wx * H_SCALE;
-                float fy = y * V_SCALE;
-                float fz = wz * H_SCALE;
-
-                // Low terrain noise
-                float low = stb_perlin_noise3(fx, fy, fz, 0, 0, 0);
-                low += stb_perlin_noise3(fx * 2.0f, fy * 2.0f, fz * 2.0f, 0, 0, 0) * 0.5f;
-                low += stb_perlin_noise3(fx * 4.0f, fy * 4.0f, fz * 4.0f, 0, 0, 0) * 0.25f;
-                low /= 1.75f;
-
-                // High terrain noise (different offset = different pattern)
-                float high = stb_perlin_noise3(fx + 100.0f, fy, fz + 100.0f, 0, 0, 0);
-                high += stb_perlin_noise3(fx * 2.0f + 100.0f, fy * 2.0f, fz * 2.0f + 100.0f, 0, 0, 0) * 0.5f;
-                high /= 1.5f;
-
-                // Selector — blends between low and high
-                float sel = stb_perlin_noise3(fx * 0.5f, fy * 0.5f, fz * 0.5f, 0, 0, 0);
-                sel = (sel + 1.0f) * 0.5f;   // 0..1
-                sel = sel * sel;               // bias toward low terrain (flat majority)
-
-                float density = low + sel * (high - low);
-
-                // Y bias — pulls density down with height, creates natural ceiling
-                density -= (y - SEA_LEVEL) * V_BIAS;
-
-                if (density > 0.0f)
-                {
-                    // Determine block type — will be patched to DIRT/GRASS after
-                    chunk.blocks[x][y][z] = BlockType::STONE;
-                    if (surfaceY < 0) surfaceY = y;   // first solid from top
-                }
-                else
-                {
-                    chunk.blocks[x][y][z] = BlockType::AIR;
-                }
-            }
-
-            // Surface pass — replace top layers with dirt + grass
-            if (surfaceY > 0)
-            {
-                chunk.blocks[x][surfaceY][z] = BlockType::GRASS;
-                for (int d = 1; d <= 3 && surfaceY - d >= 1; d++)
-                    if (chunk.blocks[x][surfaceY - d][z] == BlockType::STONE)
-                        chunk.blocks[x][surfaceY - d][z] = BlockType::DIRT;
-            }
-
-            // Cave carve — inside density loop is better but this works
-            for (int y = 1; y < CY - 4; y++)
-            {
-                if (chunk.blocks[x][y][z] == BlockType::AIR) continue;
-                float cave = stb_perlin_noise3(wx * 0.05f, y * 0.08f, wz * 0.05f, 0, 0, 0);
-                if (cave > 0.35f)
-                    chunk.blocks[x][y][z] = BlockType::AIR;
-            }
-        }
+    WorldGen::Generate(chunk, coord);
 
     chunk.dirty = true;
     chunk.modified = false;
