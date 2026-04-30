@@ -7,7 +7,6 @@ Release/
 *.pdb
 *.ilk
 *.exp
-*.lib
 
 # VS clutter
 .vs/
