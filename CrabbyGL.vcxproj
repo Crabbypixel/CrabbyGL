@@ -170,7 +170,6 @@
     <ClCompile Include="src\core\OpenGL_3D.cpp" />
     <ClCompile Include="src\glad.c" />
     <ClCompile Include="src\Main.cpp" />
-    <ClCompile Include="src\world\WorldGen.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="externals\assimp\aabb.h" />
@@ -586,7 +585,6 @@
     <ClInclude Include="includes\world\ChunkMeshBuilder.h" />
     <ClInclude Include="includes\world\Raycast.h" />
     <ClInclude Include="includes\world\World.h" />
-    <ClInclude Include="includes\world\WorldGen.h" />
   </ItemGroup>
   <ItemGroup>
     <None Include="assets\shaders\ChunkDebug.glsl" />

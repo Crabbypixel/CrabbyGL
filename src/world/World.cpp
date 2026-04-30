@@ -9,7 +9,7 @@
 World::World()
 {
     chunks.reserve(1000);
-    WorldGen::SetSeed(1337);   // MUST be first
+    //WorldGen::SetSeed(1337);   // MUST be first
     m_saveWorker = std::thread(&World::SaveWorkerLoop, this);
 }
 
