@@ -1,0 +1,24 @@
+# Build output
+bin/
+x64/
+Debug/
+Release/
+*.exe
+*.obj
+*.pdb
+*.ilk
+*.exp
+*.lib
+
+# VS clutter
+.vs/
+*.user
+*.suo
+*.VC.db
+*.VC.opendb
+
+# Saves (world data — optional, exclude for clean repo)
+saves/
+
+# Dependencies (if vendored and large)
+# vendor/  ← only ignore if deps are huge
