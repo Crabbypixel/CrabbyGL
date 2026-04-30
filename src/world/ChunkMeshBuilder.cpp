@@ -28,6 +28,9 @@ static constexpr int TEXTURE_GRASS_SIDE_OVERLAY = 2;
 static constexpr int TEXTURE_STONE = 3;
 static constexpr int TEXTURE_BEDROCK = 4;
 static constexpr int TEXTURE_BRICK = 5;
+static constexpr int TEXTURE_TREE_LOG_SIDES = 6;
+static constexpr int TEXTURE_TREE_LOG_TOP = 7;
+static constexpr int TEXTURE_TREE_LEAVES = 8;
 
 // Face order: +Y -Y +X -X +Z -Z
 static UVRect GetBlockFaceUV(BlockType type, int face)
@@ -50,6 +53,13 @@ static UVRect GetBlockFaceUV(BlockType type, int face)
 
     case BlockType::BRICK:
         return Tile(TEXTURE_BRICK);
+
+    case BlockType::TREE_LOG:
+        if (face == 0 || face == 1) return Tile(TEXTURE_TREE_LOG_TOP);      // +Y & -Y
+        return Tile(TEXTURE_TREE_LOG_SIDES);                                // +X, -X, +Z, -Z
+
+    case BlockType::TREE_LEAVES:
+        return Tile(TEXTURE_TREE_LEAVES);
 
     default:
         return Tile(TEXTURE_DIRT);

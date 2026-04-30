@@ -17,7 +17,15 @@ enum class BlockType : uint8_t
 	STONE = 2,
 	DIRT = 3,
 	GRASS = 4,
-	BRICK = 5
+	BRICK = 5,
+	TREE_LOG = 6,
+	TREE_LEAVES = 7,
+	LAVA = 8,
+	WATER = 9,
+	SANDSTONE = 10,
+	SAND = 11,
+	GRAVEL = 12,
+	ICE = 13
 };
 
 struct BlockInstance

@@ -179,6 +179,10 @@ public:
 		ImGui_ImplGlfw_InitForOpenGL(window, true);
 		ImGui_ImplOpenGL3_Init("#version 330");
 
+		// Enable transparency
+		glEnable(GL_BLEND);
+		//glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
 		return true;
 	}
 
@@ -250,7 +254,7 @@ public:
 		if (GetMouseButton(Mouse::RIGHT).bPressed && (playerPos != raycastPlacePos) && (glm::ivec3(playerPos.x, playerPos.y + 1, playerPos.z) != raycastPlacePos))
 		{
 			auto hit = RaycastDDA(camera.position, camera.front, world);
-			if (world.PlaceBlock(hit, BlockType::STONE)) {}
+			if (world.PlaceBlock(hit, BlockType::TREE_LEAVES)) {}
 				//world.SyncRenderer();
 		}
 

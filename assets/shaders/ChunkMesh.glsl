@@ -74,6 +74,9 @@ void main() {
     // Sample texture by block type
     vec4 base = texture(u_atlas, fBaseUV);
 
+    if (base.a < 0.5)
+        discard;
+
     if(fUseOverlay > 0.5f)
     {
         vec4 overlay = texture(u_atlas, fOverlayUV);

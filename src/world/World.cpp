@@ -9,6 +9,7 @@
 World::World()
 {
     chunks.reserve(1000);
+    WorldGen::SetSeed(1337);   // MUST be first
     m_saveWorker = std::thread(&World::SaveWorkerLoop, this);
 }
 
@@ -98,47 +99,64 @@ float World::GetTerrainHeight(int wx, int wz)
 // Invoked by worker
 //void World::FillChunkData(Chunk& chunk, glm::ivec2 coord)
 //{
-//    // Try disk first
 //    if (LoadChunkFromDisk(chunk, coord))
 //    {
 //        chunk.modified = false;
 //        return;
 //    }
 //
-//    // Fresh Perlin gen
 //    chunk.chunkPos = coord;
-//    int cx = coord.x;
-//    int cz = coord.y;
 //
-//    for (int x = 0; x < CX; x++)
-//    {
-//        for (int z = 0; z < CZ; z++)
-//        {
-//            int worldX = cx * CX + x;
-//            int worldZ = cz * CZ + z;
-//            int height = (int)GetTerrainHeight(worldX, worldZ);
-//
-//            float n = (height - 20.0f) / (100.0f - 20.0f);
-//            int   thickness = 4 + (int)((1.0f - n) * 10.0f);
-//            int   base = std::max(1, height - thickness);
-//
-//            chunk.blocks[x][0][z] = BlockType::BEDROCK;
-//            for (int y = 1; y < base; y++) chunk.blocks[x][y][z] = BlockType::STONE;
-//            for (int y = base; y < height; y++) chunk.blocks[x][y][z] = BlockType::DIRT;
-//            chunk.blocks[x][height][z] = BlockType::GRASS;
-//
-//            if (cx * CX + x == 0 || cz * CZ + z == 0)
-//                chunk.blocks[x][height + 1][z] = BlockType::BRICK;
-//
-//            float cave = stb_perlin_noise3(worldX * 0.05f, chunk.chunkPos.y * 0.1f, worldZ * 0.05f, 0, 0, 0);
-//            if (cave > 0.3f && chunk.chunkPos.y > 5 && chunk.chunkPos.y < height - 3)
-//                chunk.blocks[x][chunk.chunkPos.y][z] = BlockType::AIR;
-//        }
-//    }
+//    WorldGen::Generate(chunk, coord);
 //
 //    chunk.dirty = true;
 //    chunk.modified = false;
 //}
+
+//// ORIGINAL
+void World::FillChunkData(Chunk& chunk, glm::ivec2 coord)
+{
+    // Try disk first
+    if (LoadChunkFromDisk(chunk, coord))
+    {
+        chunk.modified = false;
+        return;
+    }
+
+    // Fresh Perlin gen
+    chunk.chunkPos = coord;
+    int cx = coord.x;
+    int cz = coord.y;
+
+    for (int x = 0; x < CX; x++)
+    {
+        for (int z = 0; z < CZ; z++)
+        {
+            int worldX = cx * CX + x;
+            int worldZ = cz * CZ + z;
+            int height = (int)GetTerrainHeight(worldX, worldZ);
+
+            float n = (height - 20.0f) / (100.0f - 20.0f);
+            int   thickness = 4 + (int)((1.0f - n) * 10.0f);
+            int   base = std::max(1, height - thickness);
+
+            chunk.blocks[x][0][z] = BlockType::BEDROCK;
+            for (int y = 1; y < base; y++) chunk.blocks[x][y][z] = BlockType::STONE;
+            for (int y = base; y < height; y++) chunk.blocks[x][y][z] = BlockType::DIRT;
+            chunk.blocks[x][height][z] = BlockType::GRASS;
+
+            if (cx * CX + x == 0 || cz * CZ + z == 0)
+                chunk.blocks[x][height + 1][z] = BlockType::BRICK;
+
+            float cave = stb_perlin_noise3(worldX * 0.05f, chunk.chunkPos.y * 0.1f, worldZ * 0.05f, 0, 0, 0);
+            if (cave > 0.3f && chunk.chunkPos.y > 5 && chunk.chunkPos.y < height - 3)
+                chunk.blocks[x][chunk.chunkPos.y][z] = BlockType::AIR;
+        }
+    }   
+
+    chunk.dirty = true;
+    chunk.modified = false;
+}
 
 //void World::FillChunkData(Chunk& chunk, glm::ivec2 coord)
 //{
@@ -227,16 +245,16 @@ float World::GetTerrainHeight(int wx, int wz)
 //    chunk.modified = false;
 //}
 
-void World::FillChunkData(Chunk& chunk, glm::ivec2 coord)
-{
-    if (LoadChunkFromDisk(chunk, coord)) { chunk.modified = false; return; }
-
-    chunk.chunkPos = coord;
-    WorldGen::Generate(chunk, coord);
-
-    chunk.dirty = true;
-    chunk.modified = false;
-}
+//void World::FillChunkData(Chunk& chunk, glm::ivec2 coord)
+//{
+//    if (LoadChunkFromDisk(chunk, coord)) { chunk.modified = false; return; }
+//
+//    chunk.chunkPos = coord;
+//    WorldGen::Generate(chunk, coord);
+//
+//    chunk.dirty = true;
+//    chunk.modified = false;
+//}
 
 // ───── File IO ──────────────────────────────────────────────────
 std::string World::ChunkFilePath(glm::ivec2 coord)
