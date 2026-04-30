@@ -333,7 +333,7 @@ public:
 
 		// ImGui Window
 		ImGui::Begin("Debug Console");
-		ImGui::Text("Hello World!");
+		ImGui::Text("Welcome!!");
 		glm::ivec2 playerChunk = World::ChunkCoord(player.pos.x, player.pos.z);
 		ImGui::Text("Currently at chunk: %d %d", playerChunk.x, playerChunk.y);
 
