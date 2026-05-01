@@ -1,4 +1,4 @@
-# CrabbyGL
+# CrabbyGL - C++ based Voxel Engine
 
 > A Minecraft-inspired voxel engine built from scratch in **C++ and OpenGL 3.3**
 
