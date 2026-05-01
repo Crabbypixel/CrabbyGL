@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup Label="ProjectConfigurations">
     <ProjectConfiguration Include="Debug|Win32">
@@ -155,6 +155,7 @@
     <ClCompile Include="src\debug\ChunkDebug.cpp" />
     <ClCompile Include="src\player\Player.cpp" />
     <ClCompile Include="src\rendering\ChunkMesh.cpp" />
+    <ClCompile Include="src\world\BlockRegistry.cpp" />
     <ClCompile Include="src\world\Chunk.cpp" />
     <ClCompile Include="src\world\ChunkMeshBuilder.cpp" />
     <ClCompile Include="src\world\Raycast.cpp" />
@@ -581,6 +582,8 @@
     <ClInclude Include="includes\core\Camera.h" />
     <ClInclude Include="includes\core\OpenGL_3D.h" />
     <ClInclude Include="includes\core\defines.h" />
+    <ClInclude Include="includes\world\BlockRef.h" />
+    <ClInclude Include="includes\world\BlockRegistry.h" />
     <ClInclude Include="includes\world\Chunk.h" />
     <ClInclude Include="includes\world\ChunkMeshBuilder.h" />
     <ClInclude Include="includes\world\Raycast.h" />

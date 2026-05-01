@@ -13,13 +13,14 @@ constexpr int CZ = 16;
 enum class BlockType : uint8_t
 {
 	AIR = 0,
-	BEDROCK = 1,
-	STONE = 2,
-	DIRT = 3,
-	GRASS = 4,
+	DIRT = 1,
+	GRASS = 2,
+	STONE = 3,
+	BEDROCK = 4,
 	BRICK = 5,
 	TREE_LOG = 6,
-	TREE_LEAVES = 7
+	TREE_LEAVES = 7,
+	COBBLESTONE = 8
 };
 
 struct BlockInstance

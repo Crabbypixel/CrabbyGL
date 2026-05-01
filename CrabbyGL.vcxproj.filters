@@ -96,7 +96,7 @@
     <ClCompile Include="src\rendering\ChunkMesh.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="src\world\WorldGen.cpp">
+    <ClCompile Include="src\world\BlockRegistry.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
@@ -1340,7 +1340,10 @@
     <ClInclude Include="includes\world\ChunkMeshBuilder.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="includes\world\WorldGen.h">
+    <ClInclude Include="includes\world\BlockRef.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="includes\world\BlockRegistry.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

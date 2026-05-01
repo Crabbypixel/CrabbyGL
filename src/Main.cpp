@@ -68,6 +68,11 @@ private:
 	float fPhysicsAccumulatedTime = 0.0f;
 	float fDebugTimer = 0.0f;
 
+	// Fly
+	const float DOUBLE_TAP_WINDOW = 0.3f;
+	float spaceTimer = 0.0f;
+	bool waitingForSecondTap = false;
+
 	bool isAOEnabled = true;
 	bool isLinearAO = false;
 
@@ -199,13 +204,46 @@ public:
 		// Clear colorbuffer, depthbuffer and stencilbuffer
 		glClearColor(0.227f, 0.757f, 1.0f, 1.0f);
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
-		
+
 		// Render scene to depth cubemap
 		glEnable(GL_DEPTH_TEST);
 
-		if (GetKey(GLFW_KEY_TAB).bPressed)
+		// Fly toggle
+		if (GetKey(GLFW_KEY_SPACE).bPressed)
 		{
-			player.canFly = !player.canFly;
+			if (waitingForSecondTap)
+			{
+				if (spaceTimer <= DOUBLE_TAP_WINDOW)
+				{
+					// DOUBLE TAP
+					player.canFly = !player.canFly;
+
+					waitingForSecondTap = false;
+					spaceTimer = DOUBLE_TAP_WINDOW + 1.0f; // invalidate
+				}
+				else
+				{
+					// Too late -> restart as first tap
+					spaceTimer = 0.0f;
+				}
+			}
+			else
+			{
+				// First tap
+				waitingForSecondTap = true;
+				spaceTimer = 0.0f;
+			}
+		}
+
+		// Fly toggle - timer update
+		if (waitingForSecondTap)
+		{
+			spaceTimer += dt;
+
+			if (spaceTimer > DOUBLE_TAP_WINDOW)
+			{
+				waitingForSecondTap = false;
+			}
 		}
 
 		if (GetKey('T').bPressed)
@@ -254,7 +292,7 @@ public:
 		if (GetMouseButton(Mouse::RIGHT).bPressed && (playerPos != raycastPlacePos) && (glm::ivec3(playerPos.x, playerPos.y + 1, playerPos.z) != raycastPlacePos))
 		{
 			auto hit = RaycastDDA(camera.position, camera.front, world);
-			if (world.PlaceBlock(hit, BlockType::TREE_LEAVES)) {}
+			if (world.PlaceBlock(hit, BlockType::COBBLESTONE)) {}
 				//world.SyncRenderer();
 		}
 
@@ -286,27 +324,10 @@ public:
 			chunkMeshShader.setIvec3("u_selectedBlock", m_currentHit.blockPos);
 		}
 		else
-		{
 			chunkMeshShader.setBool("u_isSelected", false);
-		}
 
-		if (isAOEnabled)
-		{
-			chunkMeshShader.setBool("u_isAOEnabled", true);
-		}
-		else
-		{
-			chunkMeshShader.setBool("u_isAOEnabled", false);
-		}
-
-		if (isLinearAO)
-		{
-			chunkMeshShader.setBool("u_isLinearAO", true);
-		}
-		else
-		{
-			chunkMeshShader.setBool("u_isLinearAO", false);
-		}
+		chunkMeshShader.setBool("u_isAOEnabled", isAOEnabled);
+		chunkMeshShader.setBool("u_isLinearAO", isLinearAO);
 
 		world.DrawAll(matProjection, camera.getLookAt());
 

@@ -1,69 +1,36 @@
+#include <glm/glm.hpp>
+
+#include "world/BlockRegistry.h"
+#include "world/Chunk.h"
+#include "rendering/ChunkMesh.h"
 #include "world/ChunkMeshBuilder.h"
 #include "world/World.h"
-#include <glm/glm.hpp>
 
 // UV rect per face
 struct UVRect { glm::vec2 min, max; };
 
 // Atlas constants
-static constexpr float TW = 16.0f / 256.0f;   // 0.0625 — tile width
-static constexpr float TH = 16.0f / 256.0f;   // 0.0625 — tile height
-static constexpr float TV0 = 1.0f - TH;       // 0.9375 — v bottom of tile row
-static constexpr float TV1 = 1.0f;            // v top
+static constexpr float TILE_WIDTH = 16.0f;
+static constexpr float TILE_HEIGHT = 16.0f;
+static constexpr float TEXTURE_MAP_WIDTH = 256.0f;
+static constexpr float TEXTURE_MAP_HEIGHT = 256.0f;
+static constexpr float SCREEN_TILE_WIDTH = TILE_WIDTH / TEXTURE_MAP_WIDTH;   // 0.0625 — tile width
+static constexpr float SCREEN_TILE_HEIGHT = TILE_HEIGHT / TEXTURE_MAP_HEIGHT;   // 0.0625 — tile height
 
 // Get the position of texture block based on block type
 static UVRect Tile(int i)
 {
-    return { { i * TW, TV0 }, { (i + 1) * TW, TV1 } };
-}
+    const int SIZE = 16;
+    int col = i % SIZE;
+    int row = i / SIZE;
 
-// Default grass tint
-static const glm::vec3 GRASS_TINT = { 0.55f, 0.78f, 0.28f };
-//static const glm::vec3 GRASS_TINT = { 0.72f, 0.74f, 0.30f };
+    float u0 = col * SCREEN_TILE_WIDTH;
+    float u1 = (col + 1) * SCREEN_TILE_WIDTH;
 
-// Tile indices - block type
-static constexpr int TEXTURE_DIRT = 0;
-static constexpr int TEXTURE_GRASS_TOP = 1;
-static constexpr int TEXTURE_GRASS_SIDE_OVERLAY = 2;
-static constexpr int TEXTURE_STONE = 3;
-static constexpr int TEXTURE_BEDROCK = 4;
-static constexpr int TEXTURE_BRICK = 5;
-static constexpr int TEXTURE_TREE_LOG_SIDES = 6;
-static constexpr int TEXTURE_TREE_LOG_TOP = 7;
-static constexpr int TEXTURE_TREE_LEAVES = 8;
+    float v0 = 1.0f - (row + 1) * SCREEN_TILE_HEIGHT;
+    float v1 = 1.0f - row * SCREEN_TILE_HEIGHT;
 
-// Face order: +Y -Y +X -X +Z -Z
-static UVRect GetBlockFaceUV(BlockType type, int face)
-{
-    switch (type)
-    {
-    case BlockType::GRASS:
-        if (face == 0) return Tile(TEXTURE_GRASS_TOP);    // +Y
-        if (face == 1) return Tile(TEXTURE_DIRT);         // -Y
-        return Tile(TEXTURE_DIRT);          // sides
-
-    case BlockType::DIRT:
-        return Tile(TEXTURE_DIRT);
-
-    case BlockType::STONE:
-        return Tile(TEXTURE_STONE);
-
-    case BlockType::BEDROCK:
-        return Tile(TEXTURE_BEDROCK);
-
-    case BlockType::BRICK:
-        return Tile(TEXTURE_BRICK);
-
-    case BlockType::TREE_LOG:
-        if (face == 0 || face == 1) return Tile(TEXTURE_TREE_LOG_TOP);      // +Y & -Y
-        return Tile(TEXTURE_TREE_LOG_SIDES);                                // +X, -X, +Z, -Z
-
-    case BlockType::TREE_LEAVES:
-        return Tile(TEXTURE_TREE_LEAVES);
-
-    default:
-        return Tile(TEXTURE_DIRT);
-    }
+    return { { u0, v0 }, { u1, v1 } };
 }
 
 // 6 faces: +Y -Y +X -X +Z -Z
@@ -125,38 +92,42 @@ bool ChunkMeshBuilder::IsSolidLocal(const Chunk& chunk, int x, int y, int z, con
         return false;
 
     if (x >= 0 && x < CX && z >= 0 && z < CZ)
-        return chunk.GetUnchecked(x, y, z) != BlockType::AIR;
+        return IsOpaque(chunk.GetUnchecked(x, y, z));
 
     // Side blocks
     if (nPX && x >= CX && z >= 0 && z < CZ)
-        return nPX->GetUnchecked(0, y, z) != BlockType::AIR;                    // RIGHT
+        return IsOpaque(nPX->GetUnchecked(0, y, z));                    // RIGHT
     else if (nNX && x < 0 && z >= 0 && z < CZ)
-        return nNX->GetUnchecked(CX - 1, y, z) != BlockType::AIR;               // LEFT
+        return IsOpaque(nNX->GetUnchecked(CX - 1, y, z));               // LEFT
     else if (nPZ && z >= CZ && x >= 0 && x < CX)
-        return nPZ->GetUnchecked(x, y, 0) != BlockType::AIR;                    // FORWARD
+        return IsOpaque(nPZ->GetUnchecked(x, y, 0));                    // FORWARD
     else if (nNZ && z < 0 && x >= 0 && x < CX)
-        return nNZ->GetUnchecked(x, y, CZ - 1) != BlockType::AIR;               // BACK
+        return IsOpaque(nNZ->GetUnchecked(x, y, CZ - 1));               // BACK
 
     // Corner blocks
     else if (nPX_PZ && x >= CX && z >= CZ)
-        return nPX_PZ->GetUnchecked(0, y, 0) != BlockType::AIR;                 // FORWARD-RIGHT
+        return IsOpaque(nPX_PZ->GetUnchecked(0, y, 0));                 // FORWARD-RIGHT
     else if (nPX_NZ && x >= CX && z < 0)
-        return nPX_NZ->GetUnchecked(0, y, CZ - 1) != BlockType::AIR;            // BACK-RIGHT
+        return IsOpaque(nPX_NZ->GetUnchecked(0, y, CZ - 1));            // BACK-RIGHT
     else if (nNX_PZ && x < 0 && z >= CZ)
-        return nNX_PZ->GetUnchecked(CX - 1, y, 0) != BlockType::AIR;            // FORWARD-LEFT
+        return IsOpaque(nNX_PZ->GetUnchecked(CX - 1, y, 0));            // FORWARD-LEFT
     else if (nNX_NZ && x < 0 && z < 0)
-        return nNX_NZ->GetUnchecked(CX - 1, y, CZ - 1) != BlockType::AIR;       // BACK-LEFT
+        return IsOpaque(nNX_NZ->GetUnchecked(CX - 1, y, CZ - 1));       // BACK-LEFT
     else
         return false;
 }
 
 void ChunkMeshBuilder::AddFace(std::vector<ChunkMesh::Vertex>& verts, const glm::ivec3& worldPos, const glm::ivec3& chunkLocalPos, Face face, BlockType type, const Chunk& chunk, const Chunk* nPX, const Chunk* nNX, const Chunk* nPZ, const Chunk* nNZ, const Chunk* nPX_PZ, const Chunk* nPX_NZ, const Chunk* nNX_PZ, const Chunk* nNX_NZ)
 {
+    const BlockDef& blockInfo = GetDef(type);
 
-    bool isGrassSide = (type == BlockType::GRASS && face > 1);  // Only sides
+    // Overlay logic (only for side faces like grass)
+    bool useOverlay = blockInfo.useOverlay && face > 1;
 
-    const UVRect baseRect = isGrassSide ? Tile(TEXTURE_DIRT) : GetBlockFaceUV(type, face);
-    const UVRect overlayRect = isGrassSide ? Tile(TEXTURE_GRASS_SIDE_OVERLAY) : Tile(0);
+    // Base texture
+    const UVRect baseRect = Tile(blockInfo.faces[face]);
+    // Overlay texture
+    const UVRect overlayRect = useOverlay ? Tile(blockInfo.overlay) : UVRect{ {0,0},{0,0} };
 
     // Map quad corners to atlas sub-region
     glm::vec2 baseUVs[4] = {
@@ -222,8 +193,8 @@ void ChunkMeshBuilder::AddFace(std::vector<ChunkMesh::Vertex>& verts, const glm:
             overlayUVs[i],
             NORMALS[face],
             worldPos,
-            (type == BlockType::GRASS && face != Face::BOTTOM) ? GRASS_TINT : glm::vec3(1.0f),
-            isGrassSide ? 1.0f : 0.0f,
+            blockInfo.tint,
+            useOverlay ? 1.0f : 0.0f,
             ao[i] / 3.0f
             });
     }
@@ -251,7 +222,7 @@ void ChunkMeshBuilder::Build(const Chunk& chunk, const Chunk* nPX, const Chunk* 
             for (int z = 0; z < CZ; z++)
             {
                 BlockType blockType = chunk.Get(x, y, z);
-                if (blockType == BlockType::AIR)        // If air, continue
+                if (IsTransparent(blockType))        // If air, continue
                     continue;
 
                 // Local world coordinates
@@ -269,15 +240,15 @@ void ChunkMeshBuilder::Build(const Chunk& chunk, const Chunk* nPX, const Chunk* 
                     if (Chunk::InBounds(nx, ny, nz))
                     {
                         // Neighbor is inside this chunk — safe direct access
-                        isNeighborSolid = chunk.GetUnchecked(nx, ny, nz) != BlockType::AIR;
+                        isNeighborSolid = IsOpaque(chunk.GetUnchecked(nx, ny, nz));
                     }
                     else
                     {
                         // Out of chunk bounds — query neighbor chunk
-                        if (nx < 0 && nNX) isNeighborSolid = nNX->GetUnchecked(CX - 1, ny, nz) != BlockType::AIR;
-                        else if (nx >= CX && nPX) isNeighborSolid = nPX->GetUnchecked(0, ny, nz) != BlockType::AIR;
-                        else if (nz < 0 && nNZ) isNeighborSolid = nNZ->GetUnchecked(nx, ny, CZ - 1) != BlockType::AIR;
-                        else if (nz >= CZ && nPZ) isNeighborSolid = nPZ->GetUnchecked(nx, ny, 0) != BlockType::AIR;
+                        if (nx < 0 && nNX) isNeighborSolid = IsOpaque(nNX->GetUnchecked(CX - 1, ny, nz));
+                        else if (nx >= CX && nPX) isNeighborSolid = IsOpaque(nPX->GetUnchecked(0, ny, nz));
+                        else if (nz < 0 && nNZ) isNeighborSolid = IsOpaque(nNZ->GetUnchecked(nx, ny, CZ - 1));
+                        else if (nz >= CZ && nPZ) isNeighborSolid = IsOpaque(nPZ->GetUnchecked(nx, ny, 0));
 
                         // null neighbor -> isNeighborSolid stays false -> face renders (correct — exposed to unloaded chunk)
                     }

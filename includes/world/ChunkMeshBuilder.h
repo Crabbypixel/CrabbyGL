@@ -1,6 +1,6 @@
 #pragma once
-#include "world/Chunk.h"
-#include "rendering/ChunkMesh.h"
+class Chunk;
+class ChunkMesh;
 
 class ChunkMeshBuilder
 {
