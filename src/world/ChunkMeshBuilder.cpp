@@ -117,7 +117,7 @@ bool ChunkMeshBuilder::IsSolidLocal(const Chunk& chunk, int x, int y, int z, con
         return false;
 }
 
-void ChunkMeshBuilder::AddFace(std::vector<ChunkMesh::Vertex>& verts, const glm::ivec3& worldPos, const glm::ivec3& chunkLocalPos, Face face, BlockType type, const Chunk& chunk, const Chunk* nPX, const Chunk* nNX, const Chunk* nPZ, const Chunk* nNZ, const Chunk* nPX_PZ, const Chunk* nPX_NZ, const Chunk* nNX_PZ, const Chunk* nNX_NZ)
+void ChunkMeshBuilder::AddFace(std::vector<Vertex>& verts, const glm::ivec3& worldPos, const glm::ivec3& chunkLocalPos, Face face, BlockType type, const Chunk& chunk, const Chunk* nPX, const Chunk* nNX, const Chunk* nPZ, const Chunk* nNZ, const Chunk* nPX_PZ, const Chunk* nPX_NZ, const Chunk* nNX_PZ, const Chunk* nNX_NZ)
 {
     const BlockDef& blockInfo = GetDef(type);
 
@@ -187,7 +187,7 @@ void ChunkMeshBuilder::AddFace(std::vector<ChunkMesh::Vertex>& verts, const glm:
 
     for (int i : tri)
     {
-        verts.emplace_back(ChunkMesh::Vertex{
+        verts.emplace_back(Vertex{
             worldPos + FACE_VERTS[face][i],
             baseUVs[i],                      // <- atlas sub-region now
             overlayUVs[i],
@@ -200,7 +200,7 @@ void ChunkMeshBuilder::AddFace(std::vector<ChunkMesh::Vertex>& verts, const glm:
     }
 }
 
-void ChunkMeshBuilder::Build(const Chunk& chunk, const Chunk* nPX, const Chunk* nNX, const Chunk* nPZ, const Chunk* nNZ, const Chunk* nPX_PZ, const Chunk* nPX_NZ, const Chunk* nNX_PZ, const Chunk* nNX_NZ, std::vector<ChunkMesh::Vertex>& outVertices)
+void ChunkMeshBuilder::Build(const Chunk& chunk, const Chunk* nPX, const Chunk* nNX, const Chunk* nPZ, const Chunk* nNZ, const Chunk* nPX_PZ, const Chunk* nPX_NZ, const Chunk* nNX_PZ, const Chunk* nNX_NZ, std::vector<Vertex>& outVertices)
 {
     std::shared_lock lock(chunk.chunkMutex);
     std::shared_lock lockPX = nPX ? std::shared_lock(nPX->chunkMutex) : std::shared_lock<std::shared_mutex>{};

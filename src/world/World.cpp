@@ -1,10 +1,17 @@
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb/stb_image.h"
 
-#include "world/World.h"
-
 #define STB_PERLIN_IMPLEMENTATION
 #include "stb/stb_perlin.h"
+
+#include "rendering/ChunkMesh.h"
+#include "world/Chunk.h"
+#include "rendering/ChunkMesh.h"
+#include "world/Raycast.h"
+#include "world/World.h"
+#include "world/BlockRegistry.h"
+#include "world/ChunkMeshBuilder.h"
+#include "rendering/Shader.h"
 
 World::World()
 {
@@ -49,7 +56,7 @@ const Chunk* World::GetChunk(int worldX, int worldZ) const
 // ───── Block access ──────────────────────────────────────────────────
 bool World::IsSolid(int worldX, int worldY, int worldZ) const
 {
-    return GetBlock(worldX, worldY, worldZ) != BlockType::AIR;
+    return ::IsSolid(GetBlock(worldX, worldY, worldZ));
 }
 
 BlockType World::GetBlock(int worldX, int worldY, int worldZ) const
@@ -430,7 +437,7 @@ void World::SyncRenderer()
 
     // Phase 2: Drain mesh staging & GPU upload
     // Move the meshes from the staging region to local main thread memory
-    std::unordered_map<glm::ivec2, std::vector<ChunkMesh::Vertex>, IVec2Hash> ready;
+    std::unordered_map<glm::ivec2, std::vector<Vertex>, IVec2Hash> ready;
     {
         std::lock_guard<std::mutex> lock(m_meshStagingMutex);
         ready.swap(m_meshStaging);
@@ -839,7 +846,7 @@ void World::SaveWorkerLoop()
 
 void World::MeshWorkerLoop()
 {
-    std::vector<ChunkMesh::Vertex> verts;
+    std::vector<Vertex> verts;
     verts.reserve(CX * CY * CZ * 3);
 
     while (true)

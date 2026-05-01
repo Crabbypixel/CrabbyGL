@@ -57,15 +57,6 @@
     <ClCompile Include="src\rendering\Shader.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="src\models\AssimpModelLoader.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="src\models\Mesh.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="src\models\SimpleModel.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="src\rendering\Texture2D.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -1232,25 +1223,16 @@
     <ClInclude Include="externals\assimp\revision.h.in">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="includes\models\AssimpModelLoader.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="includes\rendering\BufferLayout.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="includes\rendering\IndexBuffer.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="includes\models\Mesh.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="includes\utils\Random.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="includes\rendering\Shader.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="includes\models\SimpleModel.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="includes\rendering\VertexArray.h">
@@ -1344,6 +1326,9 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="includes\world\BlockRegistry.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="includes\rendering\Vertex.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

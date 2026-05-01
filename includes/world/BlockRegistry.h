@@ -1,6 +1,9 @@
 #pragma once
+#include <glm/glm.hpp>
 #include <cstdint>
-#include "world/Chunk.h"
+
+enum class BlockType : uint8_t;
+struct BlockInstance;
 
 namespace Tiles
 {

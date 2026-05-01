@@ -13,7 +13,7 @@ public:
         const Chunk* nPZ, const Chunk* nNZ,
         const Chunk* nPX_PZ, const Chunk* nPX_NZ,
         const Chunk* nNX_PZ, const Chunk* nNX_NZ,
-        std::vector<ChunkMesh::Vertex>& outVertices
+        std::vector<Vertex>& outVertices
     );
 
 private:
@@ -27,7 +27,7 @@ private:
     };
 
     static void AddFace(
-        std::vector<ChunkMesh::Vertex>& verts,
+        std::vector<Vertex>& verts,
         const glm::ivec3& pos,
         const glm::ivec3& chunkLocalPos,
         Face face,

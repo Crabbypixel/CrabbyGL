@@ -7,9 +7,6 @@
 #include "imgui_includes.h"
 #include "imgui_internal.h"
 
-#include "models/SimpleModel.h"
-#include "models/AssimpModelLoader.h"
-
 #include "core/Camera.h"
 #include "core/OpenGL_3D.h"
 
@@ -18,6 +15,7 @@
 
 #include "world/Raycast.h"
 #include "world/World.h"
+#include "world/Chunk.h"
 
 #include "player/Player.h"
 

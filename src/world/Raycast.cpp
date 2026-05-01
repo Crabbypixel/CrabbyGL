@@ -1,6 +1,9 @@
 #include "world/Raycast.h"
 #include "world/World.h"
 
+#include <vector>
+#include <limits>
+
 RaycastHit RaycastDDA(const glm::vec3& origin, const glm::vec3& direction, const World& world, float maxDistance)
 {
 	RaycastHit result;

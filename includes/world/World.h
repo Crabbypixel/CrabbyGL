@@ -2,12 +2,7 @@
 
 #include <glm/glm.hpp>
 
-#include "world/Chunk.h"
 #include "rendering/ChunkMesh.h"
-#include "world/ChunkMeshBuilder.h"
-#include "Raycast.h"
-//#include "world/PerlinNoise173.h"
-//#include "world/WorldGen.h"
 
 #include <cmath>
 #include <array>
@@ -22,6 +17,14 @@
 #include <atomic>
 #include <shared_mutex>
 #include <condition_variable>
+
+class Shader;
+
+class Chunk;
+class RaycastHit;
+
+enum class BlockType : uint8_t;
+struct BlockInstance;
 
 static struct IVec2Hash
 {
@@ -59,27 +62,6 @@ static struct MeshJob
     Chunk* nNX_PZ = nullptr;    // (-X, +Z)
     Chunk* nNX_NZ = nullptr;    // (-X, -Z)
 };
-
-// In World.h or a TerrainGen struct
-//struct TerrainGen {
-//    PerlinNoise173 lowNoise1, lowNoise2;
-//    PerlinNoise173 highNoise1, highNoise2;
-//    PerlinNoise173 selector;
-//
-//    TerrainGen(uint64_t worldSeed)
-//        : lowNoise1(makeRng(worldSeed, 1)),
-//        lowNoise2(makeRng(worldSeed, 2)),
-//        highNoise1(makeRng(worldSeed, 3)),
-//        highNoise2(makeRng(worldSeed, 4)),
-//        selector(makeRng(worldSeed, 5))
-//    {
-//    }
-//
-//private:
-//    static std::mt19937_64 makeRng(uint64_t seed, int salt) {
-//        return std::mt19937_64(seed + salt * 0x9e3779b97f4a7c15ULL);
-//    }
-//};
 
 class World
 {
@@ -182,7 +164,7 @@ private:
 
     // ──────── Mesh worker ────────
     // Staging region
-    std::unordered_map<glm::ivec2, std::vector<ChunkMesh::Vertex>, IVec2Hash> m_meshStaging;
+    std::unordered_map<glm::ivec2, std::vector<Vertex>, IVec2Hash> m_meshStaging;
     std::mutex m_meshStagingMutex;
 
     // Mesh job queue
