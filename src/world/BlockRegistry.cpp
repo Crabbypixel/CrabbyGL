@@ -5,15 +5,24 @@ using namespace Tiles;
 // +Y -Y +X -X +Z -Z
 const BlockDef BLOCK_DEFS[] =
 {
-	{ "air", { 0, 0, 0, 0, 0, 0 }, -1, { 1, 1, 1 }, BLOCK_TRANSPARENT, 0.0f, false },
-	{ "dirt", { DIRT, DIRT, DIRT, DIRT, DIRT, DIRT }, -1, { 1, 1, 1 }, BLOCK_OPAQUE | BLOCK_SOLID, 1.5f, false },
-	{ "grass", { GRASS_TOP, DIRT, DIRT, DIRT, DIRT, DIRT }, GRASS_OVERLAY, { 0.55f, 0.78f, 0.28f }, BLOCK_OPAQUE | BLOCK_SOLID, 0.6f, true },
-	{ "stone", { STONE, STONE, STONE, STONE, STONE, STONE }, -1, { 1, 1, 1 }, BLOCK_OPAQUE | BLOCK_SOLID, 1.5f, false },
-	{ "bedrock", { BEDROCK, BEDROCK, BEDROCK, BEDROCK, BEDROCK, BEDROCK }, -1, { 1, 1, 1 }, BLOCK_OPAQUE | BLOCK_SOLID, 10000.0f, false },
-	{ "brick", { BRICK, BRICK, BRICK, BRICK, BRICK, BRICK }, -1, { 1, 1, 1 }, BLOCK_OPAQUE | BLOCK_SOLID, 1.5f, false },
-	{ "log", { TREE_LOG_TOP, TREE_LOG_TOP, TREE_LOG_SIDES, TREE_LOG_SIDES, TREE_LOG_SIDES, TREE_LOG_SIDES }, -1, { 1, 1, 1 }, BLOCK_OPAQUE | BLOCK_SOLID, 1.5f, false },
-	{ "leaves", { TREE_LEAVES, TREE_LEAVES, TREE_LEAVES, TREE_LEAVES, TREE_LEAVES, TREE_LEAVES }, -1, { 1, 1, 1 }, BLOCK_TRANSPARENT | BLOCK_SOLID, 10000.0f, false },
-	{ "cobblestone", { COBBLESTONE, COBBLESTONE, COBBLESTONE, COBBLESTONE, COBBLESTONE, COBBLESTONE }, -1, { 1, 1, 1 }, BLOCK_OPAQUE | BLOCK_SOLID, 1.5f, false },
+/* 0*/	{ "Air", { 0, 0, 0, 0, 0, 0 }, -1, { 1, 1, 1 }, BLOCK_TRANSPARENT, 0.0f, false },
+/* 1*/	{ "Dirt", { DIRT, DIRT, DIRT, DIRT, DIRT, DIRT }, -1, { 1, 1, 1 }, BLOCK_OPAQUE | BLOCK_SOLID, 1.5f, false },
+/* 2*/	{ "Grass", { GRASS_TOP, DIRT, DIRT, DIRT, DIRT, DIRT }, GRASS_OVERLAY, { 0.55f, 0.78f, 0.28f }, BLOCK_OPAQUE | BLOCK_SOLID, 0.6f, true },
+/* 3*/	{ "Stone", { STONE, STONE, STONE, STONE, STONE, STONE }, -1, { 1, 1, 1 }, BLOCK_OPAQUE | BLOCK_SOLID, 1.5f, false },
+/* 4*/	{ "Bedrock", { BEDROCK, BEDROCK, BEDROCK, BEDROCK, BEDROCK, BEDROCK }, -1, { 1, 1, 1 }, BLOCK_OPAQUE | BLOCK_SOLID, 10000.0f, false },
+/* 5*/	{ "Brick", { BRICK, BRICK, BRICK, BRICK, BRICK, BRICK }, -1, { 1, 1, 1 }, BLOCK_OPAQUE | BLOCK_SOLID, 1.5f, false },
+/* 6*/	{ "Log", { TREE_LOG_TOP, TREE_LOG_TOP, TREE_LOG_SIDES, TREE_LOG_SIDES, TREE_LOG_SIDES, TREE_LOG_SIDES }, -1, { 1, 1, 1 }, BLOCK_OPAQUE | BLOCK_SOLID, 1.5f, false },
+/* 7*/	{ "Leaves", { TREE_LEAVES, TREE_LEAVES, TREE_LEAVES, TREE_LEAVES, TREE_LEAVES, TREE_LEAVES }, -1, { 1, 1, 1 }, BLOCK_TRANSPARENT | BLOCK_SOLID, 10000.0f, false },
+/* 8*/	{ "Cobblestone", { COBBLESTONE, COBBLESTONE, COBBLESTONE, COBBLESTONE, COBBLESTONE, COBBLESTONE }, -1, { 1, 1, 1 }, BLOCK_OPAQUE | BLOCK_SOLID, 1.5f, false },
+/* 9*/	{ "Planks", { PLANK, PLANK, PLANK, PLANK, PLANK, PLANK }, -1, { 1, 1, 1 }, BLOCK_OPAQUE | BLOCK_SOLID, 1.5f, false },
+/*10*/	{ "Sand", { SAND, SAND, SAND, SAND, SAND, SAND }, -1, { 1, 1, 1 }, BLOCK_OPAQUE | BLOCK_SOLID, 1.5f, false },
+/*11*/	{ "Gravel", { GRAVEL, GRAVEL, GRAVEL, GRAVEL, GRAVEL, GRAVEL }, -1, { 1, 1, 1 }, BLOCK_OPAQUE | BLOCK_SOLID, 1.5f, false },
+/*12*/	{ "Glass", { GLASS, GLASS, GLASS, GLASS, GLASS, GLASS }, -1, { 1, 1, 1 }, BLOCK_TRANSPARENT | BLOCK_SOLID, 10000.0f, false },
+/*13*/	{ "Gold ore", { ORE_GOLD, ORE_GOLD, ORE_GOLD, ORE_GOLD, ORE_GOLD, ORE_GOLD }, -1, { 1, 1, 1 }, BLOCK_OPAQUE | BLOCK_SOLID, 1.5f, false },
+/*14*/	{ "Iron ore", { ORE_IRON, ORE_IRON, ORE_IRON, ORE_IRON, ORE_IRON, ORE_IRON }, -1, { 1, 1, 1 }, BLOCK_OPAQUE | BLOCK_SOLID, 1.5f, false },
+/*15*/	{ "Coal ore", { ORE_COAL, ORE_COAL, ORE_COAL, ORE_COAL, ORE_COAL, ORE_COAL }, -1, { 1, 1, 1 }, BLOCK_OPAQUE | BLOCK_SOLID, 1.5f, false },
+/*16*/	{ "Diamond ore", { ORE_DIAMOND, ORE_DIAMOND, ORE_DIAMOND, ORE_DIAMOND, ORE_DIAMOND, ORE_DIAMOND }, -1, { 1, 1, 1 }, BLOCK_OPAQUE | BLOCK_SOLID, 1.5f, false },
+/*17*/	{ "Smooth stone", { SMOOTH_STONE, SMOOTH_STONE, SMOOTH_STONE, SMOOTH_STONE, SMOOTH_STONE, SMOOTH_STONE }, -1, { 1, 1, 1 }, BLOCK_OPAQUE | BLOCK_SOLID, 1.5f, false },
 };
 
 const BlockDef& GetDef(BlockType t)

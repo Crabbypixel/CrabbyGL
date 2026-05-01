@@ -4,9 +4,6 @@
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
 
-#include "imgui_includes.h"
-#include "imgui_internal.h"
-
 #include "core/Camera.h"
 #include "core/OpenGL_3D.h"
 
@@ -16,12 +13,16 @@
 #include "world/Raycast.h"
 #include "world/World.h"
 #include "world/Chunk.h"
+#include "world/BlockRegistry.h"
 
 #include "player/Player.h"
 
 #include "rendering/VertexArray.h"
 #include "rendering/VertexBuffer.h"
 #include "rendering/BufferLayout.h"
+
+#include "imgui/imgui_includes.h"
+#include "imgui/imgui_internal.h"
 
 #include <iostream>
 #include <iomanip>
@@ -75,8 +76,9 @@ private:
 	float spaceTimer = 0.0f;
 	bool waitingForSecondTap = false;
 
+	BlockType selectedBlock = BlockType::AIR;
+
 	bool isAOEnabled = true;
-	bool isLinearAO = false;
 
 public:
 	bool Setup() override
@@ -248,15 +250,9 @@ public:
 			}
 		}
 
-		if (GetKey('T').bPressed)
-		{
+		if (GetKey('H').bPressed)
 			isAOEnabled = !isAOEnabled;
-		}
 
-		if (GetKey('Y').bPressed)
-		{
-			isLinearAO = !isLinearAO;
-		}
 
 		if (!bIsPaused)
 		{
@@ -282,21 +278,17 @@ public:
 		glm::ivec3 raycastPlacePos = m_currentHit.blockPos + m_currentHit.normal;
 		glm::ivec3 playerPos = { (int)floor(player.pos.x), (int)floor(player.pos.y), (int)floor(player.pos.z) };
 
+		// Select block
+		if (GetMouseButton(Mouse::MIDDLE).bPressed && m_currentHit.hit)
+			selectedBlock = world.GetBlock(m_currentHit.blockPos.x, m_currentHit.blockPos.y, m_currentHit.blockPos.z);
+
 		// Break block
-		if (GetMouseButton(Mouse::LEFT).bPressed)
-		{
-			auto hit = RaycastDDA(camera.position, camera.front, world);
-			if (world.BreakBlock(hit)) {}
-				//world.SyncRenderer();
-		}
+		if (GetMouseButton(Mouse::LEFT).bPressed && m_currentHit.hit)
+			world.BreakBlock(m_currentHit);
 
 		// Place block
-		if (GetMouseButton(Mouse::RIGHT).bPressed && (playerPos != raycastPlacePos) && (glm::ivec3(playerPos.x, playerPos.y + 1, playerPos.z) != raycastPlacePos))
-		{
-			auto hit = RaycastDDA(camera.position, camera.front, world);
-			if (world.PlaceBlock(hit, BlockType::COBBLESTONE)) {}
-				//world.SyncRenderer();
-		}
+		if (GetMouseButton(Mouse::RIGHT).bPressed && (playerPos != raycastPlacePos) && (glm::ivec3(playerPos.x, playerPos.y + 1, playerPos.z) != raycastPlacePos) && m_currentHit.hit)
+			world.PlaceBlock(m_currentHit, selectedBlock);
 
 		// Update chunk streaming state based on player position:
 		// - Enqueue new chunks for generation within view distance
@@ -304,7 +296,7 @@ public:
 		// - Maintains streaming window around the player
 		world.UpdateChunkStreaming(player.pos);
 		
-		// Promote fully generated chunks from staging into the main world:
+		// Promote fully generated chunks from staging into the main world: 
 		// - Transfers ownership into `chunks` map (main thread)
 		// - Ensures chunks become visible/usable only after complete generation
 		world.CommitGeneratedChunks();
@@ -329,7 +321,6 @@ public:
 			chunkMeshShader.setBool("u_isSelected", false);
 
 		chunkMeshShader.setBool("u_isAOEnabled", isAOEnabled);
-		chunkMeshShader.setBool("u_isLinearAO", isLinearAO);
 
 		world.DrawAll(matProjection, camera.getLookAt());
 
@@ -359,15 +350,16 @@ public:
 		glDrawArrays(GL_TRIANGLES, 0, 6);
 
 		// ImGui Window
-		ImGui::Begin("Debug Console");
-		ImGui::Text("Welcome!!");
 		glm::ivec2 playerChunk = World::ChunkCoord(player.pos.x, player.pos.z);
+		ImGui::Begin("Debug Console");
+		ImGui::Text("Hello World!");
+		ImGui::Text("Player Position: %d %d %d", (int)camera.position.x, (int)camera.position.y, (int)camera.position.z);
 		ImGui::Text("Currently at chunk: %d %d", playerChunk.x, playerChunk.y);
 
-		ImGui::Text("Player Position: %d %d %d", (int)camera.position.x, (int)camera.position.y, (int)camera.position.z);
+		ImGui::Text("Selected Block: %s", GetDef(selectedBlock).name);
 		ImGui::Text("Raycast place position: %d %d %d", raycastPlacePos.x, raycastPlacePos.y, raycastPlacePos.z);
-		ImGui::Text("Ambient Occlusion: %s", isAOEnabled ? "true" : "false");
-		ImGui::Text("Quadratic AO: %s", !(isAOEnabled && isLinearAO) ? "true" : "false");
+		ImGui::Text("AO (H to toggle): %s", isAOEnabled ? "Yes" : "No");
+		ImGui::Text("Chunk borders (G to toggle): %s", chunkDebug.visible ? "Enabled" : "Disabled");
 
 		static int teleportX = 0;
 		static int teleportY = 0;

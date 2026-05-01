@@ -16,7 +16,23 @@ namespace Tiles
 	constexpr int TREE_LOG_SIDES = 6;
 	constexpr int TREE_LOG_TOP = 7;
 	constexpr int TREE_LEAVES = 8;
-	constexpr int COBBLESTONE = 16;
+	constexpr int COBBLESTONE = 9;
+
+	constexpr int PLANK = 10;
+	constexpr int SAND = 16;
+	constexpr int GRAVEL = 17;
+	constexpr int GLASS = 11;
+	constexpr int SMOOTH_STONE = 12;
+	constexpr int ORE_GOLD = 32;
+	constexpr int ORE_IRON = 33;
+	constexpr int ORE_COAL = 34;
+	constexpr int ORE_DIAMOND = 35;
+
+	constexpr int SAPLING = 13;
+	constexpr int ROSE = 14;
+	constexpr int DANDELION = 15;
+	constexpr int BROWN_MUSHROOM = 31;
+	constexpr int RED_MUSHROOM = 30;
 }
 
 struct BlockDef

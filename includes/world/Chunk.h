@@ -18,7 +18,16 @@ enum class BlockType : uint8_t
 	BRICK = 5,
 	TREE_LOG = 6,
 	TREE_LEAVES = 7,
-	COBBLESTONE = 8
+	COBBLESTONE = 8,
+	PLANK = 9,
+	SAND = 10,
+	GRAVEL = 11,
+	GLASS = 12,
+	GOLD_ORE = 13,
+	IRON_ORE = 14,
+	COAL_ORE = 15,
+	DIAMOND_ORE = 16,
+	SMOOTH_STONE = 17,
 };
 
 struct BlockInstance

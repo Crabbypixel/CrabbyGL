@@ -222,7 +222,7 @@ void ChunkMeshBuilder::Build(const Chunk& chunk, const Chunk* nPX, const Chunk* 
             for (int z = 0; z < CZ; z++)
             {
                 BlockType blockType = chunk.Get(x, y, z);
-                if (IsTransparent(blockType))        // If air, continue
+                if (blockType == BlockType::AIR)        // If air, continue
                     continue;
 
                 // Local world coordinates
