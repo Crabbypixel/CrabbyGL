@@ -132,7 +132,6 @@ void OpenGL_3D::RendererThread()
 		}
 
 		m_mouseScroll = 0;
-		//m_mouse[2].bPressed = false;
 		m_mouse[2].bReleased = false;
 
 		// Swap buffers
@@ -344,19 +343,86 @@ void OpenGL_3D::mouse_button_callback(GLFWwindow* window, int button, int action
 
 void OpenGL_3D::DisplayGPU()
 {
-	const unsigned char* renderer = glGetString(GL_RENDERER);
-	const unsigned char* vendor = glGetString(GL_VENDOR);
-	const unsigned char* version = glGetString(GL_VERSION);
-	const unsigned char* glslVersion = glGetString(GL_SHADING_LANGUAGE_VERSION);
+	const char* renderer = (const char*)glGetString(GL_RENDERER);
+	const char* vendor = (const char*)glGetString(GL_VENDOR);
+	const char* version = (const char*)glGetString(GL_VERSION);
+	const char* glslVersion = (const char*)glGetString(GL_SHADING_LANGUAGE_VERSION);
 
-	std::cout << "---------- GPU information ----------\n";
-	std::cout << std::endl;
-	std::cout << "Renderer: " << renderer << '\n';
-	std::cout << "Vendor: " << vendor << '\n';
-	std::cout << "OpenGL Version: " << version << '\n';
-	std::cout << "GLSL Version: " << glslVersion << '\n';
-	std::cout << std::endl;
-	std::cout << "-------------------------------------\n\n";
+	std::cout << "========== GPU INFORMATION ==========\n\n";
+
+	// Basic Info
+	std::cout << "[Core]\n";
+	std::cout << "Renderer        : " << renderer << '\n';
+	std::cout << "Vendor          : " << vendor << '\n';
+	std::cout << "OpenGL Version  : " << version << '\n';
+	std::cout << "GLSL Version    : " << glslVersion << "\n\n";
+
+	// Check if OpenGL context exists
+	if (!renderer)
+	{
+		std::cout << "[ERROR] OpenGL not initialized!\n";
+		return;
+	}
+
+	// Limits
+	GLint maxTextureSize;
+	GLint maxVertexAttribs;
+	GLint maxUniforms;
+	GLint maxDrawBuffers;
+
+	glGetIntegerv(GL_MAX_TEXTURE_SIZE, &maxTextureSize);
+	glGetIntegerv(GL_MAX_VERTEX_ATTRIBS, &maxVertexAttribs);
+	glGetIntegerv(GL_MAX_VERTEX_UNIFORM_COMPONENTS, &maxUniforms);
+	glGetIntegerv(GL_MAX_DRAW_BUFFERS, &maxDrawBuffers);
+
+	std::cout << "[Limits]\n";
+	std::cout << "Max Texture Size       : " << maxTextureSize << '\n';
+	std::cout << "Max Vertex Attribs     : " << maxVertexAttribs << '\n';
+	std::cout << "Max Vertex Uniforms    : " << maxUniforms << '\n';
+	std::cout << "Max Draw Buffers       : " << maxDrawBuffers << "\n\n";
+
+	// Compute Shader Support
+	GLint major = 0, minor = 0;
+	glGetIntegerv(GL_MAJOR_VERSION, &major);
+	glGetIntegerv(GL_MINOR_VERSION, &minor);
+
+	bool computeSupported = (major > 4 || (major == 4 && minor >= 3));
+
+	std::cout << "[Features]\n";
+	std::cout << "Compute Shader Support : " << (computeSupported ? "YES" : "NO") << '\n';
+
+	GLint workGroupCount[3];
+	GLint workGroupSize[3];
+
+	// VRAM (NVIDIA)
+#ifdef GL_NVX_gpu_memory_info
+	GLint totalMemKB = 0;
+	GLint availMemKB = 0;
+
+	glGetIntegerv(GL_GPU_MEMORY_INFO_TOTAL_AVAILABLE_MEMORY_NVX, &totalMemKB);
+	glGetIntegerv(GL_GPU_MEMORY_INFO_CURRENT_AVAILABLE_VIDMEM_NVX, &availMemKB);
+
+	std::cout << "[Memory - NVIDIA]\n";
+	std::cout << "Total VRAM (MB)        : " << totalMemKB / 1024 << '\n';
+	std::cout << "Available VRAM (MB)    : " << availMemKB / 1024 << "\n\n";
+#endif
+
+#ifdef GL_ATI_meminfo
+	GLint memInfo[4];
+	glGetIntegerv(GL_TEXTURE_FREE_MEMORY_ATI, memInfo);
+
+	std::cout << "[Memory - AMD]\n";
+	std::cout << "Free Texture Memory MB : " << memInfo[0] / 1024 << "\n\n";
+#endif
+
+	// Extensions count
+	GLint numExtensions = 0;
+	glGetIntegerv(GL_NUM_EXTENSIONS, &numExtensions);
+
+	std::cout << "[Extensions]\n";
+	std::cout << "Total Extensions       : " << numExtensions << '\n';
+
+	std::cout << "\n=====================================\n\n";
 }
 
 OpenGL_3D::~OpenGL_3D()

@@ -396,7 +396,7 @@ public:
 
 		if (fDebugTimer >= 0.5f)
 		{
-			std::cout << "Chunks loaded: " << world.chunks.size() << '\n';
+			//std::cout << "Chunks loaded: " << world.chunks.size() << '\n';
 			fDebugTimer = 0.0f;
 		}
 	}
