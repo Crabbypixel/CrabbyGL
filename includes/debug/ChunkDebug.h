@@ -1,10 +1,9 @@
 #pragma once
-#include <glad/glad.h>
-#include <glm/glm.hpp>
 #include "rendering/Shader.h"
-#include "rendering/VertexArray.h"
-#include "rendering/VertexBuffer.h"
-#include "rendering/BufferLayout.h"
+
+#include <glad/glad.h>
+
+#include <string>
 
 class ChunkDebug
 {

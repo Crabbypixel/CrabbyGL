@@ -1,5 +1,8 @@
 #include "core/Camera.h"
 
+#include <glm/gtc/matrix_transform.hpp>
+#include <glm/gtc/type_ptr.hpp>
+
 float Camera::CAMERA_FAST_SPEED = 20.0f;
 float Camera::CAMERA_NORMAL_SPEED = 5.0f;
 

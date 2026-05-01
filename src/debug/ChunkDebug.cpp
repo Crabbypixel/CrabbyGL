@@ -1,9 +1,10 @@
 #include "debug/ChunkDebug.h"
 
-#include "rendering/Shader.h"
-#include <vector>
+#include "rendering/VertexArray.h"
+#include "rendering/VertexBuffer.h"
+#include "rendering/BufferLayout.h"
 
-#define CHUNK_SIZE 16
+#include <vector>
 
 void ChunkDebug::Init(const std::string& shaderFile)
 {

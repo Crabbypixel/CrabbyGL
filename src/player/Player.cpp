@@ -1,4 +1,6 @@
 #include "player/Player.h"
+#include "world/World.h"
+
 #include <glm/glm.hpp>
 #include <algorithm>
 #include <cmath>

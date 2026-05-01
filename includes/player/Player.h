@@ -1,6 +1,7 @@
 #pragma once
 #include <glm/glm.hpp>
-#include "world/World.h"
+
+class World;
 
 class Player
 {

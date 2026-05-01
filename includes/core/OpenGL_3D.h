@@ -4,17 +4,17 @@
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
 
-#include <string>
-#include <atomic>
-
 // GLM (needed for matProjection)
 #include <glm/glm.hpp>
 
 #include "core/Camera.h"
 
+#include <string>
+#include <atomic>
+
 // Constants
-#define MAX_KEYS GLFW_KEY_LAST
-#define MAX_MOUSE_BUTTONS 3
+static constexpr int MAX_KEYS = GLFW_KEY_LAST;
+static constexpr int MAX_MOUSE_BUTTONS = 3;
 constexpr float pi = 3.14159f;
 
 class OpenGL_3D

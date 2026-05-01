@@ -7,7 +7,7 @@
 #include "world/World.h"
 
 // UV rect per face
-struct UVRect { glm::vec2 min, max; };
+static struct UVRect { glm::vec2 min, max; };
 
 // Atlas constants
 static constexpr float TILE_WIDTH = 16.0f;

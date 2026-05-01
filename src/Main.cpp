@@ -19,6 +19,10 @@
 
 #include "player/Player.h"
 
+#include "rendering/VertexArray.h"
+#include "rendering/VertexBuffer.h"
+#include "rendering/BufferLayout.h"
+
 #include <iostream>
 #include <iomanip>
 #include <string>

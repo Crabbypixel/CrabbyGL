@@ -1781,6 +1781,8 @@
     <None Include="assets\shaders\ChunkMesh.glsl" />
     <None Include="libraries\assimp-vc143-mtd.dll" />
     <None Include="assimp-vc143-mtd.dll" />
+    <None Include=".gitignore" />
+    <None Include="imgui.ini" />
   </ItemGroup>
   <ItemGroup>
     <Library Include="libraries\glfw3.lib" />
