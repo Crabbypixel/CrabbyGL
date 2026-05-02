@@ -83,7 +83,7 @@ private:
 public:
 	bool Setup() override
 	{
-		player.pos = glm::vec3(24.0f, 200.0f, 56.0f);
+		player.pos = glm::vec3(20.0f, 39.0f, 78.0f);
 		camera.init(glm::vec3(24.0f, 37.0f, 56.0f), glm::vec3(0.0f, 0.0f, -1.0f), ScreenWidth(), ScreenHeight());
 
 		// Axes
@@ -165,7 +165,6 @@ public:
 			// UBOs to unnecessarily avoid settings uniforms in shaders repeatedly
 			// Bind "Matrices" uniform to binding index 0 in every shader
 			glUniformBlockBinding(axesShader.getID(), glGetUniformBlockIndex(axesShader.getID(), "Matrices"), 0);
-			//glUniformBlockBinding(blockShader.getID(), glGetUniformBlockIndex(blockShader.getID(), "Matrices"), 0);
 			glUniformBlockBinding(chunkMeshShader.getID(), glGetUniformBlockIndex(chunkMeshShader.getID(), "Matrices"), 0);
 
 			ErrorLog();

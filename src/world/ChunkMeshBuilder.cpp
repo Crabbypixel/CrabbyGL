@@ -211,8 +211,8 @@ void ChunkMeshBuilder::Build(const Chunk& chunk, const Chunk* nPX, const Chunk* 
     outVertices.clear();
 
     // Chunk world coordinates (not global world coordinates)
-    int wx0 = chunk.chunkPos.x * CX;
-    int wz0 = chunk.chunkPos.y * CZ;
+    int chunk_wx0 = chunk.chunkPos.x * CX;
+    int chunk_wz0 = chunk.chunkPos.y * CZ;
 
     // Iterate over every block
     for (int x = 0; x < CX; x++)
@@ -225,36 +225,103 @@ void ChunkMeshBuilder::Build(const Chunk& chunk, const Chunk* nPX, const Chunk* 
                 if (blockType == BlockType::AIR)        // If air, continue
                     continue;
 
-                // Local world coordinates
-                glm::ivec3 worldPos = glm::vec3(wx0 + x, y, wz0 + z);
-
-                // Check all six faces
-                for (int face = 0; face < 6; face++)
+                // For rendering faces of translucent objects
+                else if (IsTranslucent(blockType))
                 {
-                    int nx = x + NORMALS[face].x;
-                    int ny = y + NORMALS[face].y;
-                    int nz = z + NORMALS[face].z;
+                    // Local world coordinates
+                    glm::ivec3 worldPos = glm::vec3(chunk_wx0 + x, y, chunk_wz0 + z);
 
-                    bool isNeighborSolid = false;
-
-                    if (Chunk::InBounds(nx, ny, nz))
+                    // Check all six faces
+                    for (int face = 0; face < 6; face++)
                     {
-                        // Neighbor is inside this chunk — safe direct access
-                        isNeighborSolid = IsOpaque(chunk.GetUnchecked(nx, ny, nz));
+                        int nx = x + NORMALS[face].x;
+                        int ny = y + NORMALS[face].y;
+                        int nz = z + NORMALS[face].z;
+
+                        bool shouldRenderFace = false;
+
+                        if (Chunk::InBounds(nx, ny, nz))
+                        {
+                            // Neighbor is inside this chunk — safe direct access
+                            auto neighbor = chunk.GetUnchecked(nx, ny, nz);
+
+                            bool isTranslucent = IsTranslucent(neighbor);
+                            bool isSolid = IsSolid(neighbor);
+
+                            // Render the face if the neighbor is solid, or if it is translucent of the same type.
+                            // Do NOT render if the neighbor is translucent and a different type (e.g., glass vs leaves).
+                            shouldRenderFace = (isSolid || isTranslucent) && !(isTranslucent && neighbor != blockType);
+                        }
+                        else
+                        {
+                            BlockType neighbor;
+                            bool hasNeighbor = true;
+
+                            // Fetch neighbor from adjacent chunk
+                            if (nx < 0 && nNX)
+                                neighbor = nNX->GetUnchecked(CX - 1, ny, nz);
+                            else if (nx >= CX && nPX)
+                                neighbor = nPX->GetUnchecked(0, ny, nz);
+                            else if (nz < 0 && nNZ)
+                                neighbor = nNZ->GetUnchecked(nx, ny, CZ - 1);
+                            else if (nz >= CZ && nPZ)
+                                neighbor = nPZ->GetUnchecked(nx, ny, 0);
+                            else
+                                hasNeighbor = false;
+
+                            // Do the same here
+                            if (hasNeighbor)
+                            {
+                                bool isTranslucent = IsTranslucent(neighbor);
+                                bool isSolid = IsSolid(neighbor);
+
+                                shouldRenderFace = (isSolid || isTranslucent) &&
+                                    !(isTranslucent && neighbor != blockType);
+                            }
+                            else
+                            {
+                                // No neighbor chunk -> face is exposed
+                                shouldRenderFace = true;
+                            }
+                        }
+
+                        if (!shouldRenderFace)
+                            AddFace(outVertices, worldPos, glm::ivec3{ x, y, z }, (Face)face, blockType, chunk, nPX, nNX, nPZ, nNZ, nPX_PZ, nPX_NZ, nNX_PZ, nNX_NZ);
                     }
-                    else
+                }
+
+                // For rendering faces of opaque objects
+                else
+                {
+                    // Local world coordinates
+                    glm::ivec3 worldPos = glm::vec3(chunk_wx0 + x, y, chunk_wz0 + z);
+
+                    // Check all six faces
+                    for (int face = 0; face < 6; face++)
                     {
-                        // Out of chunk bounds — query neighbor chunk
-                        if (nx < 0 && nNX) isNeighborSolid = IsOpaque(nNX->GetUnchecked(CX - 1, ny, nz));
-                        else if (nx >= CX && nPX) isNeighborSolid = IsOpaque(nPX->GetUnchecked(0, ny, nz));
-                        else if (nz < 0 && nNZ) isNeighborSolid = IsOpaque(nNZ->GetUnchecked(nx, ny, CZ - 1));
-                        else if (nz >= CZ && nPZ) isNeighborSolid = IsOpaque(nPZ->GetUnchecked(nx, ny, 0));
+                        int nx = x + NORMALS[face].x;
+                        int ny = y + NORMALS[face].y;
+                        int nz = z + NORMALS[face].z;
 
-                        // null neighbor -> isNeighborSolid stays false -> face renders (correct — exposed to unloaded chunk)
+                        bool shouldRenderFace = false;
+
+                        if (Chunk::InBounds(nx, ny, nz))
+                        {
+                            // Neighbor is inside this chunk — safe direct access
+                            shouldRenderFace = IsOpaque(chunk.GetUnchecked(nx, ny, nz));
+                        }
+                        else
+                        {
+                            // Out of chunk bounds — query neighbor chunk
+                            if (nx < 0 && nNX) shouldRenderFace = IsOpaque(nNX->GetUnchecked(CX - 1, ny, nz));
+                            else if (nx >= CX && nPX) shouldRenderFace = IsOpaque(nPX->GetUnchecked(0, ny, nz));
+                            else if (nz < 0 && nNZ) shouldRenderFace = IsOpaque(nNZ->GetUnchecked(nx, ny, CZ - 1));
+                            else if (nz >= CZ && nPZ) shouldRenderFace = IsOpaque(nPZ->GetUnchecked(nx, ny, 0));
+                        }
+
+                        if (!shouldRenderFace)
+                            AddFace(outVertices, worldPos, glm::ivec3{ x, y, z }, (Face)face, blockType, chunk, nPX, nNX, nPZ, nNZ, nPX_PZ, nPX_NZ, nNX_PZ, nNX_NZ);
                     }
-
-                    if (!isNeighborSolid)
-                        AddFace(outVertices, worldPos, glm::ivec3{x, y, z}, (Face)face, blockType, chunk, nPX, nNX, nPZ, nNZ, nPX_PZ, nPX_NZ, nNX_PZ, nNX_NZ);
                 }
             }
         }

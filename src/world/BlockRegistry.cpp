@@ -12,12 +12,12 @@ const BlockDef BLOCK_DEFS[] =
 /* 4*/	{ "Bedrock", { BEDROCK, BEDROCK, BEDROCK, BEDROCK, BEDROCK, BEDROCK }, -1, { 1, 1, 1 }, BLOCK_OPAQUE | BLOCK_SOLID, 10000.0f, false },
 /* 5*/	{ "Brick", { BRICK, BRICK, BRICK, BRICK, BRICK, BRICK }, -1, { 1, 1, 1 }, BLOCK_OPAQUE | BLOCK_SOLID, 1.5f, false },
 /* 6*/	{ "Log", { TREE_LOG_TOP, TREE_LOG_TOP, TREE_LOG_SIDES, TREE_LOG_SIDES, TREE_LOG_SIDES, TREE_LOG_SIDES }, -1, { 1, 1, 1 }, BLOCK_OPAQUE | BLOCK_SOLID, 1.5f, false },
-/* 7*/	{ "Leaves", { TREE_LEAVES, TREE_LEAVES, TREE_LEAVES, TREE_LEAVES, TREE_LEAVES, TREE_LEAVES }, -1, { 1, 1, 1 }, BLOCK_TRANSPARENT | BLOCK_SOLID, 10000.0f, false },
+/* 7*/	{ "Leaves", { TREE_LEAVES, TREE_LEAVES, TREE_LEAVES, TREE_LEAVES, TREE_LEAVES, TREE_LEAVES }, -1, { 1, 1, 1 }, BLOCK_TRANSLUCENT | BLOCK_SOLID, 10000.0f, false },
 /* 8*/	{ "Cobblestone", { COBBLESTONE, COBBLESTONE, COBBLESTONE, COBBLESTONE, COBBLESTONE, COBBLESTONE }, -1, { 1, 1, 1 }, BLOCK_OPAQUE | BLOCK_SOLID, 1.5f, false },
 /* 9*/	{ "Planks", { PLANK, PLANK, PLANK, PLANK, PLANK, PLANK }, -1, { 1, 1, 1 }, BLOCK_OPAQUE | BLOCK_SOLID, 1.5f, false },
 /*10*/	{ "Sand", { SAND, SAND, SAND, SAND, SAND, SAND }, -1, { 1, 1, 1 }, BLOCK_OPAQUE | BLOCK_SOLID, 1.5f, false },
 /*11*/	{ "Gravel", { GRAVEL, GRAVEL, GRAVEL, GRAVEL, GRAVEL, GRAVEL }, -1, { 1, 1, 1 }, BLOCK_OPAQUE | BLOCK_SOLID, 1.5f, false },
-/*12*/	{ "Glass", { GLASS, GLASS, GLASS, GLASS, GLASS, GLASS }, -1, { 1, 1, 1 }, BLOCK_TRANSPARENT | BLOCK_SOLID, 10000.0f, false },
+/*12*/	{ "Glass", { GLASS, GLASS, GLASS, GLASS, GLASS, GLASS }, -1, { 1, 1, 1 }, BLOCK_TRANSLUCENT | BLOCK_SOLID, 10000.0f, false },
 /*13*/	{ "Gold ore", { ORE_GOLD, ORE_GOLD, ORE_GOLD, ORE_GOLD, ORE_GOLD, ORE_GOLD }, -1, { 1, 1, 1 }, BLOCK_OPAQUE | BLOCK_SOLID, 1.5f, false },
 /*14*/	{ "Iron ore", { ORE_IRON, ORE_IRON, ORE_IRON, ORE_IRON, ORE_IRON, ORE_IRON }, -1, { 1, 1, 1 }, BLOCK_OPAQUE | BLOCK_SOLID, 1.5f, false },
 /*15*/	{ "Coal ore", { ORE_COAL, ORE_COAL, ORE_COAL, ORE_COAL, ORE_COAL, ORE_COAL }, -1, { 1, 1, 1 }, BLOCK_OPAQUE | BLOCK_SOLID, 1.5f, false },
@@ -43,4 +43,9 @@ bool IsTransparent(BlockType t)
 bool IsSolid(BlockType t)
 {
 	return GetDef(t).flags & BLOCK_SOLID;
+}
+
+bool IsTranslucent(BlockType t)
+{
+	return GetDef(t).flags & BLOCK_TRANSLUCENT;
 }

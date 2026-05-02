@@ -51,10 +51,12 @@ enum BlockFlags : uint16_t
 	BLOCK_OPAQUE = 1 << 0,
 	BLOCK_SOLID = 1 << 1,
 	BLOCK_TRANSPARENT = 1 << 2,
-	BLOCK_EMISSIVE = 1 << 3
+	BLOCK_TRANSLUCENT = 1 << 3,
+	BLOCK_EMISSIVE = 1 << 4
 };
 
 const BlockDef& GetDef(BlockType t);
 bool IsOpaque(BlockType t);
 bool IsTransparent(BlockType t);
 bool IsSolid(BlockType t);
+bool IsTranslucent(BlockType t);
