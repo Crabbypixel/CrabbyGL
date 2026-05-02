@@ -15,7 +15,7 @@ public:
     static constexpr float HALF_W = 0.30f;   // AABB half-width (total 0.6)
     static constexpr float HEIGHT = 1.80f;   // AABB full height
     static constexpr float EYE_OFF = 1.60f;   // eye height above feet
-    static constexpr float SPEED = 10.0f;
+    static constexpr float SPEED = 5.0f;
     static constexpr float JUMP_VEL = 8.0f;
     static constexpr float GRAVITY = -24.0f;
     static constexpr float MAX_FALL = -50.0f;

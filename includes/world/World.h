@@ -26,7 +26,7 @@ class RaycastHit;
 enum class BlockType : uint8_t;
 struct BlockInstance;
 
-static struct IVec2Hash
+struct IVec2Hash
 {
     size_t operator()(const glm::ivec2& v) const
     {
@@ -36,7 +36,7 @@ static struct IVec2Hash
     }
 };
 
-static struct Frustum
+struct Frustum
 {
     std::array<glm::vec4, 6> planes;
 
@@ -44,7 +44,7 @@ static struct Frustum
     bool ContainsAABB(const glm::vec3& min, const glm::vec3& max) const;
 };
 
-static struct MeshJob
+struct MeshJob
 { 
     glm::ivec2 coord;
     Chunk* chunk;

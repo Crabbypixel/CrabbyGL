@@ -17,7 +17,7 @@ public:
     );
 
 private:
-    static enum Face {
+    enum Face {
         TOP = 0,
         BOTTOM = 1,
         POS_X = 2,

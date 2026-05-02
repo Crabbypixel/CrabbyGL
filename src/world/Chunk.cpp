@@ -1,6 +1,7 @@
 #include "world/Chunk.h"
 
 #include <vector>
+#include <mutex>
 
 bool Chunk::InBounds(int x, int y, int z)
 {

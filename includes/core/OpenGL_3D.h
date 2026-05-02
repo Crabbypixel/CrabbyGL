@@ -30,15 +30,15 @@ private:
 	// Arrays to store key states
 	short m_keyNewState[MAX_KEYS] = { 0 };
 	short m_keyOldState[MAX_KEYS] = { 0 };
-	short m_mouseOldState[MAX_MOUSE_BUTTONS];
-	short m_mouseNewState[MAX_MOUSE_BUTTONS];
+	short m_mouseOldState[MAX_MOUSE_BUTTONS] = { 0 };
+	short m_mouseNewState[MAX_MOUSE_BUTTONS] = { 0 };
 
 	struct sKeyState
 	{
 		bool bPressed;
 		bool bReleased;
 		bool bHeld;
-	} m_keys[MAX_KEYS], m_mouse[MAX_MOUSE_BUTTONS];
+	} m_keys[MAX_KEYS] = {}, m_mouse[MAX_MOUSE_BUTTONS] = {};
 
 	// Mouse variables
 	float m_mousePosX;
