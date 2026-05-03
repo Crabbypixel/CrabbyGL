@@ -94,7 +94,7 @@ bool ChunkMeshBuilder::IsSolidLocal(const Chunk& chunk, int x, int y, int z, con
     if (x >= 0 && x < CX && z >= 0 && z < CZ)
         return IsOpaque(chunk.GetUnchecked(x, y, z));
 
-    // Side blocks
+    // Side chunks
     if (nPX && x >= CX && z >= 0 && z < CZ)
         return IsOpaque(nPX->GetUnchecked(0, y, z));                    // RIGHT
     else if (nNX && x < 0 && z >= 0 && z < CZ)
@@ -104,7 +104,7 @@ bool ChunkMeshBuilder::IsSolidLocal(const Chunk& chunk, int x, int y, int z, con
     else if (nNZ && z < 0 && x >= 0 && x < CX)
         return IsOpaque(nNZ->GetUnchecked(x, y, CZ - 1));               // BACK
 
-    // Corner blocks
+    // Corner chunks
     else if (nPX_PZ && x >= CX && z >= CZ)
         return IsOpaque(nPX_PZ->GetUnchecked(0, y, 0));                 // FORWARD-RIGHT
     else if (nPX_NZ && x >= CX && z < 0)

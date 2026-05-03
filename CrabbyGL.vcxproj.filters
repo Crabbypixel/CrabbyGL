@@ -1506,8 +1506,11 @@
     <None Include="assimp-vc143-mtd.dll" />
     <None Include=".gitignore" />
     <None Include="imgui.ini" />
+    <None Include="libraries\glfw3.dll" />
   </ItemGroup>
   <ItemGroup>
     <Library Include="libraries\glfw3.lib" />
+    <Library Include="libraries\libglfw3.a" />
+    <Library Include="libraries\libglfw3dll.a" />
   </ItemGroup>
 </Project>
