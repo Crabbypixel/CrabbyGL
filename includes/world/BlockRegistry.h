@@ -52,7 +52,8 @@ enum BlockFlags : uint16_t
 	BLOCK_SOLID = 1 << 1,
 	BLOCK_TRANSPARENT = 1 << 2,
 	BLOCK_TRANSLUCENT = 1 << 3,
-	BLOCK_EMISSIVE = 1 << 4
+	BLOCK_EMISSIVE = 1 << 4,
+	BLOCK_CROSS = 1 << 5
 };
 
 const BlockDef& GetDef(BlockType t);

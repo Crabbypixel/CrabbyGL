@@ -289,6 +289,12 @@ public:
 		if (GetMouseButton(Mouse::RIGHT).bPressed && (playerPos != raycastPlacePos) && (glm::ivec3(playerPos.x, playerPos.y + 1, playerPos.z) != raycastPlacePos) && m_currentHit.hit)
 			world.PlaceBlock(m_currentHit, selectedBlock);
 
+		/*
+		 "Dandelion",  {D
+		 "Brown mushroom"
+		 "Red mushroom", 
+		*/
+
 		// Update chunk streaming state based on player position:
 		// - Enqueue new chunks for generation within view distance
 		// - Identify chunks outside unload distance for removal

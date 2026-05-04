@@ -23,11 +23,23 @@ const BlockDef BLOCK_DEFS[] =
 /*15*/	{ "Coal ore", { ORE_COAL, ORE_COAL, ORE_COAL, ORE_COAL, ORE_COAL, ORE_COAL }, -1, { 1, 1, 1 }, BLOCK_OPAQUE | BLOCK_SOLID, 1.5f, false },
 /*16*/	{ "Diamond ore", { ORE_DIAMOND, ORE_DIAMOND, ORE_DIAMOND, ORE_DIAMOND, ORE_DIAMOND, ORE_DIAMOND }, -1, { 1, 1, 1 }, BLOCK_OPAQUE | BLOCK_SOLID, 1.5f, false },
 /*17*/	{ "Smooth stone", { SMOOTH_STONE, SMOOTH_STONE, SMOOTH_STONE, SMOOTH_STONE, SMOOTH_STONE, SMOOTH_STONE }, -1, { 1, 1, 1 }, BLOCK_OPAQUE | BLOCK_SOLID, 1.5f, false },
+
+/*18*/  { "Sapling",    {SAPLING,   SAPLING,   SAPLING,   SAPLING,   SAPLING,   SAPLING   }, -1, {1,1,1}, BLOCK_TRANSPARENT | BLOCK_CROSS, 0.0f, false },
+/*19*/  { "Rose",       {ROSE,      ROSE,      ROSE,      ROSE,      ROSE,      ROSE      }, -1, {1,1,1}, BLOCK_TRANSPARENT | BLOCK_CROSS, 0.0f, false },
+/*20*/  { "Dandelion",  {DANDELION, DANDELION, DANDELION, DANDELION, DANDELION, DANDELION }, -1, {1,1,1}, BLOCK_TRANSPARENT | BLOCK_CROSS, 0.0f, false },
+/*21*/  { "Brown mushroom",  {BROWN_MUSHROOM, BROWN_MUSHROOM, BROWN_MUSHROOM, BROWN_MUSHROOM, BROWN_MUSHROOM, BROWN_MUSHROOM }, -1, {1,1,1}, BLOCK_TRANSPARENT | BLOCK_CROSS, 0.0f, false },
+/*22*/  { "Red mushroom",  {RED_MUSHROOM, RED_MUSHROOM, RED_MUSHROOM, RED_MUSHROOM, RED_MUSHROOM, RED_MUSHROOM }, -1, {1,1,1}, BLOCK_TRANSPARENT | BLOCK_CROSS, 0.0f, false },
+
 };
 
 const BlockDef& GetDef(BlockType t)
 {
 	return BLOCK_DEFS[(uint8_t)t];
+}
+
+bool IsCross(BlockType t)
+{
+	return GetDef(t).flags & BLOCK_CROSS;
 }
 
 bool IsOpaque(BlockType t)

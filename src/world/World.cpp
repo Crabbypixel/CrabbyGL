@@ -6,7 +6,6 @@
 
 #include "rendering/ChunkMesh.h"
 #include "world/Chunk.h"
-#include "rendering/ChunkMesh.h"
 #include "world/Raycast.h"
 #include "world/World.h"
 #include "world/BlockRegistry.h"
@@ -338,17 +337,15 @@ void World::UnloadChunks()
 // ───── Raycast CRUD ──────────────────────────────────────────────────
 bool World::PlaceBlock(const RaycastHit& hit, BlockType type)
 {
+    if (!hit.hit)
+        return false;
+
     glm::ivec3 target = hit.blockPos + hit.normal;
 
     if (IsSolid(target.x, target.y, target.z))
         return false;
 
     SetBlock(target.x, target.y, target.z, type);
-
-    // Mark this chunk as dirty (as we updated the chunk)
-    Chunk* c = GetChunk(target.x, target.z);
-    if (c)
-        c->dirty = true;
 
     MarkNeighborChunksDirty(hit.blockPos.x, hit.blockPos.y, hit.blockPos.z);
 
@@ -360,15 +357,13 @@ bool World::BreakBlock(const RaycastHit& hit)
     if (!hit.hit)
         return false;
 
-    if (!IsSolid(hit.blockPos.x, hit.blockPos.y, hit.blockPos.z))
-        return false;
+    const BlockType& blockType = GetBlock(hit.blockPos.x, hit.blockPos.y, hit.blockPos.z);
+    auto flags = GetDef(blockType).flags;
+
+    //if (!(flags & BLOCK_SOLID) && !(flags & BLOCK_CROSS))
+    //    return false;
 
     SetBlock(hit.blockPos.x, hit.blockPos.y, hit.blockPos.z, BlockType::AIR);
-
-    // Mark this chunk as dirty (as we updated the chunk)
-    Chunk* c = GetChunk(hit.blockPos.x, hit.blockPos.z);
-    if (c)
-        c->dirty = true;
 
     MarkNeighborChunksDirty(hit.blockPos.x, hit.blockPos.y, hit.blockPos.z);
 

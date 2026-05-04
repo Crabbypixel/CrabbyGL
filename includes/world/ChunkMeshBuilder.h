@@ -45,4 +45,9 @@ private:
         const Chunk* nPX_PZ, const Chunk* nPX_NZ,
         const Chunk* nNX_PZ, const Chunk* nNX_NZ
     );
+
+    static void EmitCross(std::vector<Vertex>& verts,
+        const glm::ivec3& worldPos,
+        BlockType type
+    );
 };

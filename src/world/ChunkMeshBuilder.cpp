@@ -145,7 +145,7 @@ void ChunkMeshBuilder::AddFace(std::vector<Vertex>& verts, const glm::ivec3& wor
     };
 
     // Ambient Occlusion
-    float ao[4];
+    float ao[4] = {};
 
     glm::ivec3 U = TANGENT_U[face];
     glm::ivec3 V = TANGENT_V[face];
@@ -200,6 +200,67 @@ void ChunkMeshBuilder::AddFace(std::vector<Vertex>& verts, const glm::ivec3& wor
     }
 }
 
+void ChunkMeshBuilder::EmitCross(std::vector<Vertex>& verts, const glm::ivec3& worldPos, BlockType type)
+{
+    BlockDef crossItem = GetDef(type);
+    UVRect uv = Tile(crossItem.faces[0]);
+    glm::vec3 tint = crossItem.tint;
+
+    // Map quad corners to atlas sub-region
+    glm::vec2 baseUVs[4] = {
+        {uv.min.x, uv.min.y},   // v0 bottom-left
+        {uv.max.x, uv.min.y},   // v1 bottom-right
+        {uv.max.x, uv.max.y},   // v2 top-right
+        {uv.min.x, uv.max.y},   // v3 top-left
+    };
+
+    glm::vec2 overlayUVs[4] = { {0, 0} };
+
+    static const glm::ivec3 CROSS_VERTS1[] = {
+        {0, 0, 1},
+        {1, 0, 0},
+        {1, 1, 0},
+        {0, 1, 1}
+    };
+
+    static const glm::ivec3 CROSS_VERTS2[] = {
+        {0, 0, 0},
+        {1, 0, 1},
+        {1, 1, 1},
+        {0, 1, 0}
+    };
+
+    int tri[] = { 0, 1, 2, 0, 2, 3 };
+
+    for (int i : tri)
+    {
+        verts.emplace_back(Vertex{
+            worldPos + CROSS_VERTS1[i],
+            baseUVs[i],                      // <- atlas sub-region now
+            overlayUVs[i],
+            NORMALS[crossItem.faces[0]],
+            worldPos,
+            tint,
+            0.0f,
+            1.0f
+        });
+    }
+
+    for (int i : tri)
+    {
+        verts.emplace_back(Vertex{
+            worldPos + CROSS_VERTS2[i],
+            baseUVs[i],                      // <- atlas sub-region now
+            overlayUVs[i],
+            NORMALS[crossItem.faces[0]],
+            worldPos,
+            tint,
+            0.0f,
+            1.0f
+            });
+    } 
+}
+
 void ChunkMeshBuilder::Build(const Chunk& chunk, const Chunk* nPX, const Chunk* nNX, const Chunk* nPZ, const Chunk* nNZ, const Chunk* nPX_PZ, const Chunk* nPX_NZ, const Chunk* nNX_PZ, const Chunk* nNX_NZ, std::vector<Vertex>& outVertices)
 {
     std::shared_lock lock(chunk.chunkMutex);
@@ -224,6 +285,15 @@ void ChunkMeshBuilder::Build(const Chunk& chunk, const Chunk* nPX, const Chunk* 
                 BlockType blockType = chunk.GetUnchecked(x, y, z);
                 if (blockType == BlockType::AIR)        // If air, continue
                     continue;
+
+                // Cross item
+                else if (GetDef(blockType).flags & BLOCK_CROSS)
+                {
+                    // Local world coordinates
+                    glm::ivec3 worldPos = glm::vec3(chunk_wx0 + x, y, chunk_wz0 + z);
+                    EmitCross(outVertices, worldPos, blockType);
+                    continue;                                   // skip normal face culling entirely
+                }
 
                 // For rendering faces of translucent objects
                 else if (IsTranslucent(blockType))
