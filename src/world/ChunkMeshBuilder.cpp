@@ -207,58 +207,39 @@ void ChunkMeshBuilder::EmitCross(std::vector<Vertex>& verts, const glm::ivec3& w
     glm::vec3 tint = crossItem.tint;
 
     // Map quad corners to atlas sub-region
-    glm::vec2 baseUVs[4] = {
-        {uv.min.x, uv.min.y},   // v0 bottom-left
-        {uv.max.x, uv.min.y},   // v1 bottom-right
-        {uv.max.x, uv.max.y},   // v2 top-right
-        {uv.min.x, uv.max.y},   // v3 top-left
+    glm::vec2 uvs[4] = {
+        { uv.min.x, uv.min.y },   // v0 bottom-left
+        { uv.max.x, uv.min.y },   // v1 bottom-right
+        { uv.max.x, uv.max.y },   // v2 top-right
+        { uv.min.x, uv.max.y },   // v3 top-left
     };
 
-    glm::vec2 overlayUVs[4] = { {0, 0} };
+    glm::vec2 noOverlay[4] = { {0, 0} };
 
-    static const glm::ivec3 CROSS_VERTS1[] = {
-        {0, 0, 1},
-        {1, 0, 0},
-        {1, 1, 0},
-        {0, 1, 1}
-    };
+    static const glm::ivec3 CROSS_VERTS1[4] = { {0,0,1},{1,0,0},{1,1,0},{0,1,1} };
+    static const glm::ivec3 CROSS_VERTS2[4] = { {0,0,0},{1,0,1},{1,1,1},{0,1,0} };
+    static const glm::ivec3 DUMMY_NORMAL = { 0, 1, 0 };  // lighting unused for cross
 
-    static const glm::ivec3 CROSS_VERTS2[] = {
-        {0, 0, 0},
-        {1, 0, 1},
-        {1, 1, 1},
-        {0, 1, 0}
-    };
+    // Forward + reversed winding → double-sided
+    constexpr int FWD[6] = { 0,1,2, 0,2,3 };
+    constexpr int REV[6] = { 0,2,1, 0,3,2 };
 
-    int tri[] = { 0, 1, 2, 0, 2, 3 };
+    auto emit = [&](const glm::ivec3 quad[4], const int idx[6]) {
+        for (int i = 0; i < 6; i++)
+            verts.emplace_back(Vertex{
+                worldPos + quad[idx[i]],
+                uvs[idx[i]],
+                noOverlay[idx[i]],
+                DUMMY_NORMAL,
+                worldPos,
+                tint,
+                0.0f,   // no overlay
+                0.6f    // ao = full bright
+             });
+        };
 
-    for (int i : tri)
-    {
-        verts.emplace_back(Vertex{
-            worldPos + CROSS_VERTS1[i],
-            baseUVs[i],                      // <- atlas sub-region now
-            overlayUVs[i],
-            NORMALS[crossItem.faces[0]],
-            worldPos,
-            tint,
-            0.0f,
-            1.0f
-        });
-    }
-
-    for (int i : tri)
-    {
-        verts.emplace_back(Vertex{
-            worldPos + CROSS_VERTS2[i],
-            baseUVs[i],                      // <- atlas sub-region now
-            overlayUVs[i],
-            NORMALS[crossItem.faces[0]],
-            worldPos,
-            tint,
-            0.0f,
-            1.0f
-            });
-    } 
+    emit(CROSS_VERTS1, FWD);  emit(CROSS_VERTS2, REV);
+    emit(CROSS_VERTS1, FWD);  emit(CROSS_VERTS2, REV);
 }
 
 void ChunkMeshBuilder::Build(const Chunk& chunk, const Chunk* nPX, const Chunk* nNX, const Chunk* nPZ, const Chunk* nNZ, const Chunk* nPX_PZ, const Chunk* nPX_NZ, const Chunk* nNX_PZ, const Chunk* nNX_NZ, std::vector<Vertex>& outVertices)
@@ -290,16 +271,16 @@ void ChunkMeshBuilder::Build(const Chunk& chunk, const Chunk* nPX, const Chunk* 
                 else if (GetDef(blockType).flags & BLOCK_CROSS)
                 {
                     // Local world coordinates
-                    glm::ivec3 worldPos = glm::vec3(chunk_wx0 + x, y, chunk_wz0 + z);
+                    glm::ivec3 worldPos = glm::ivec3(chunk_wx0 + x, y, chunk_wz0 + z);
                     EmitCross(outVertices, worldPos, blockType);
-                    continue;                                   // skip normal face culling entirely
+                    continue;
                 }
 
                 // For rendering faces of translucent objects
                 else if (IsTranslucent(blockType))
                 {
                     // Local world coordinates
-                    glm::ivec3 worldPos = glm::vec3(chunk_wx0 + x, y, chunk_wz0 + z);
+                    glm::ivec3 worldPos = glm::ivec3(chunk_wx0 + x, y, chunk_wz0 + z);
 
                     // Check all six faces
                     for (int face = 0; face < 6; face++)

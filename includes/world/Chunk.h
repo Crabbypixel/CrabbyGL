@@ -12,7 +12,7 @@ enum class BlockType : uint8_t
 {
 	/* 0*/	AIR,
 	/* 1*/	DIRT,
-	/* 2*/	GRASS,
+	/* 2*/	GRASS_BLOCK,
 	/* 3*/	STONE,
 	/* 4*/	BEDROCK,
 	/* 5*/	BRICK,
@@ -32,7 +32,8 @@ enum class BlockType : uint8_t
 	/*19*/	ROSE,
 	/*20*/	DANDELION,
 	/*21*/	BROWN_MUSHROOM,
-	/*22*/	RED_MUSHROOM
+	/*22*/	RED_MUSHROOM,
+	/*23*/  GRASS
 };
 
 struct BlockInstance

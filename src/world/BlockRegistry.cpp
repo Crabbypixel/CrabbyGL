@@ -7,7 +7,7 @@ const BlockDef BLOCK_DEFS[] =
 {
 /* 0*/	{ "Air", { 0, 0, 0, 0, 0, 0 }, -1, { 1, 1, 1 }, BLOCK_TRANSPARENT, 0.0f, false },
 /* 1*/	{ "Dirt", { DIRT, DIRT, DIRT, DIRT, DIRT, DIRT }, -1, { 1, 1, 1 }, BLOCK_OPAQUE | BLOCK_SOLID, 1.5f, false },
-/* 2*/	{ "Grass", { GRASS_TOP, DIRT, DIRT, DIRT, DIRT, DIRT }, GRASS_OVERLAY, { 0.55f, 0.78f, 0.28f }, BLOCK_OPAQUE | BLOCK_SOLID, 0.6f, true },
+/* 2*/	{ "Grass block", { GRASS_TOP, DIRT, DIRT, DIRT, DIRT, DIRT }, GRASS_OVERLAY, { 0.55f, 0.78f, 0.28f }, BLOCK_OPAQUE | BLOCK_SOLID, 0.6f, true },
 /* 3*/	{ "Stone", { STONE, STONE, STONE, STONE, STONE, STONE }, -1, { 1, 1, 1 }, BLOCK_OPAQUE | BLOCK_SOLID, 1.5f, false },
 /* 4*/	{ "Bedrock", { BEDROCK, BEDROCK, BEDROCK, BEDROCK, BEDROCK, BEDROCK }, -1, { 1, 1, 1 }, BLOCK_OPAQUE | BLOCK_SOLID, 10000.0f, false },
 /* 5*/	{ "Brick", { BRICK, BRICK, BRICK, BRICK, BRICK, BRICK }, -1, { 1, 1, 1 }, BLOCK_OPAQUE | BLOCK_SOLID, 1.5f, false },
@@ -29,6 +29,7 @@ const BlockDef BLOCK_DEFS[] =
 /*20*/  { "Dandelion",  {DANDELION, DANDELION, DANDELION, DANDELION, DANDELION, DANDELION }, -1, {1,1,1}, BLOCK_TRANSPARENT | BLOCK_CROSS, 0.0f, false },
 /*21*/  { "Brown mushroom",  {BROWN_MUSHROOM, BROWN_MUSHROOM, BROWN_MUSHROOM, BROWN_MUSHROOM, BROWN_MUSHROOM, BROWN_MUSHROOM }, -1, {1,1,1}, BLOCK_TRANSPARENT | BLOCK_CROSS, 0.0f, false },
 /*22*/  { "Red mushroom",  {RED_MUSHROOM, RED_MUSHROOM, RED_MUSHROOM, RED_MUSHROOM, RED_MUSHROOM, RED_MUSHROOM }, -1, {1,1,1}, BLOCK_TRANSPARENT | BLOCK_CROSS, 0.0f, false },
+/*23*/  { "Grass",  {GRASS, GRASS, GRASS, GRASS, GRASS, GRASS }, -1, { 0.592f, 0.902f, 0.239f }, BLOCK_TRANSPARENT | BLOCK_CROSS, 0.0f, false },
 
 };
 

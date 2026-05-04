@@ -68,7 +68,7 @@ BlockType World::GetBlock(int worldX, int worldY, int worldZ) const
         return BlockType::AIR;
 
     auto l = ChunkLocalCoord(worldX, worldY, worldZ);
-    return chunk->Get(l.x, l.y, l.z);
+    return chunk->GetUnchecked(l.x, l.y, l.z);
 }
 
 void World::SetBlock(int worldX, int worldY, int worldZ, BlockType type)
@@ -149,7 +149,7 @@ void World::FillChunkData(Chunk& chunk, glm::ivec2 coord)
             chunk.blocks[x][0][z] = BlockType::BEDROCK;
             for (int y = 1; y < base; y++) chunk.blocks[x][y][z] = BlockType::STONE;
             for (int y = base; y < height; y++) chunk.blocks[x][y][z] = BlockType::DIRT;
-            chunk.blocks[x][height][z] = BlockType::GRASS;
+            chunk.blocks[x][height][z] = BlockType::GRASS_BLOCK;
 
             if (cx * CX + x == 0 || cz * CZ + z == 0)
                 chunk.blocks[x][height + 1][z] = BlockType::BRICK;
@@ -340,6 +340,10 @@ bool World::PlaceBlock(const RaycastHit& hit, BlockType type)
     if (!hit.hit)
         return false;
 
+	// Prevent placing beside non-solid blocks (cross face blocks)
+    if(GetDef(GetBlock(hit.blockPos.x, hit.blockPos.y, hit.blockPos.z)).flags & BLOCK_CROSS)
+		return false;
+
     glm::ivec3 target = hit.blockPos + hit.normal;
 
     if (IsSolid(target.x, target.y, target.z))
@@ -359,9 +363,6 @@ bool World::BreakBlock(const RaycastHit& hit)
 
     const BlockType& blockType = GetBlock(hit.blockPos.x, hit.blockPos.y, hit.blockPos.z);
     auto flags = GetDef(blockType).flags;
-
-    //if (!(flags & BLOCK_SOLID) && !(flags & BLOCK_CROSS))
-    //    return false;
 
     SetBlock(hit.blockPos.x, hit.blockPos.y, hit.blockPos.z, BlockType::AIR);
 

@@ -33,6 +33,7 @@ namespace Tiles
 	constexpr int DANDELION = 15;
 	constexpr int BROWN_MUSHROOM = 31;
 	constexpr int RED_MUSHROOM = 30;
+	constexpr int GRASS = 29;
 }
 
 struct BlockDef
