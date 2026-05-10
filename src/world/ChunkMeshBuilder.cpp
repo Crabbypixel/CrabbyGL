@@ -14,8 +14,8 @@ static constexpr float TILE_WIDTH = 16.0f;
 static constexpr float TILE_HEIGHT = 16.0f;
 static constexpr float TEXTURE_MAP_WIDTH = 256.0f;
 static constexpr float TEXTURE_MAP_HEIGHT = 256.0f;
-static constexpr float SCREEN_TILE_WIDTH = TILE_WIDTH / TEXTURE_MAP_WIDTH;   // 0.0625 — tile width
-static constexpr float SCREEN_TILE_HEIGHT = TILE_HEIGHT / TEXTURE_MAP_HEIGHT;   // 0.0625 — tile height
+static constexpr float SCREEN_TILE_WIDTH = TILE_WIDTH / TEXTURE_MAP_WIDTH;      // 16/256 = 0.0625 — tile width
+static constexpr float SCREEN_TILE_HEIGHT = TILE_HEIGHT / TEXTURE_MAP_HEIGHT;   // 16/256 = 0.0625 — tile height
 
 // Get the position of texture block based on block type
 static UVRect Tile(int i)
@@ -74,7 +74,7 @@ static const glm::ivec3 FACE_VERTS[6][4] = {
     {{1,0,0},{0,0,0},{0,1,0},{1,1,0}}
 };
 
-// Quad -> 2 tris (indices into 4-vert quad)
+// Quad -> 2 tris (convert indices into 4-vert quad)
 static const int TRI_IDX[6] = { 0,1,2, 0,2,3 };
 
 static const int GetAOState(int side1, int side2, int corner) {
@@ -86,6 +86,7 @@ static const int GetAOState(int side1, int side2, int corner) {
 
 // We cannot access World's IsSolid(...) so we implement a similar function here
 // (x, y, z) are local chunk pos, may be -1 or CX/CZ for AO neighbor samples
+// Use GetUnchecked whenever possible so as to avoid redundant bounds checks
 bool ChunkMeshBuilder::IsSolidLocal(const Chunk& chunk, int x, int y, int z, const Chunk* nPX, const Chunk* nNX, const Chunk* nPZ, const Chunk* nNZ, const Chunk* nPX_PZ, const Chunk* nPX_NZ, const Chunk* nNX_PZ, const Chunk* nNX_NZ)
 {
     if (y < 0 || y >= CY)
@@ -115,6 +116,48 @@ bool ChunkMeshBuilder::IsSolidLocal(const Chunk& chunk, int x, int y, int z, con
         return IsOpaque(nNX_NZ->GetUnchecked(CX - 1, y, CZ - 1));       // BACK-LEFT
     else
         return false;
+}
+
+void ChunkMeshBuilder::EmitCross(std::vector<Vertex>& verts, const glm::ivec3& worldPos, BlockType type)
+{
+    BlockDef crossItem = GetDef(type);
+    UVRect uv = Tile(crossItem.faces[0]);
+    glm::vec3 tint = crossItem.tint;
+
+    // Map quad corners to atlas sub-region
+    glm::vec2 uvs[4] = {
+        { uv.min.x, uv.min.y },   // v0 bottom-left
+        { uv.max.x, uv.min.y },   // v1 bottom-right
+        { uv.max.x, uv.max.y },   // v2 top-right
+        { uv.min.x, uv.max.y },   // v3 top-left
+    };
+
+    glm::vec2 noOverlay[4] = { {0, 0} };
+
+    static const glm::ivec3 CROSS_VERTS1[4] = { {0,0,1},{1,0,0},{1,1,0},{0,1,1} };
+    static const glm::ivec3 CROSS_VERTS2[4] = { {0,0,0},{1,0,1},{1,1,1},{0,1,0} };
+    static const glm::ivec3 DUMMY_NORMAL = { 0, 1, 0 };  // lighting unused for cross
+
+    // Forward + reversed winding -> double-sided
+    constexpr int FWD[6] = { 0,1,2, 0,2,3 };
+    constexpr int REV[6] = { 0,2,1, 0,3,2 };
+
+    auto emit = [&](const glm::ivec3 quad[4], const int idx[6]) {
+        for (int i = 0; i < 6; i++)
+            verts.emplace_back(Vertex{
+                worldPos + quad[idx[i]],
+                uvs[idx[i]],
+                noOverlay[idx[i]],
+                DUMMY_NORMAL,
+                worldPos,
+                tint,
+                0.0f,   // no overlay
+                0.6f    // ao = full bright
+                });
+        };
+
+    emit(CROSS_VERTS1, FWD);  emit(CROSS_VERTS2, REV);
+    emit(CROSS_VERTS1, FWD);  emit(CROSS_VERTS2, REV);
 }
 
 void ChunkMeshBuilder::AddFace(std::vector<Vertex>& verts, const glm::ivec3& worldPos, const glm::ivec3& chunkLocalPos, Face face, BlockType type, const Chunk& chunk, const Chunk* nPX, const Chunk* nNX, const Chunk* nPZ, const Chunk* nNZ, const Chunk* nPX_PZ, const Chunk* nPX_NZ, const Chunk* nNX_PZ, const Chunk* nNX_NZ)
@@ -200,48 +243,7 @@ void ChunkMeshBuilder::AddFace(std::vector<Vertex>& verts, const glm::ivec3& wor
     }
 }
 
-void ChunkMeshBuilder::EmitCross(std::vector<Vertex>& verts, const glm::ivec3& worldPos, BlockType type)
-{
-    BlockDef crossItem = GetDef(type);
-    UVRect uv = Tile(crossItem.faces[0]);
-    glm::vec3 tint = crossItem.tint;
-
-    // Map quad corners to atlas sub-region
-    glm::vec2 uvs[4] = {
-        { uv.min.x, uv.min.y },   // v0 bottom-left
-        { uv.max.x, uv.min.y },   // v1 bottom-right
-        { uv.max.x, uv.max.y },   // v2 top-right
-        { uv.min.x, uv.max.y },   // v3 top-left
-    };
-
-    glm::vec2 noOverlay[4] = { {0, 0} };
-
-    static const glm::ivec3 CROSS_VERTS1[4] = { {0,0,1},{1,0,0},{1,1,0},{0,1,1} };
-    static const glm::ivec3 CROSS_VERTS2[4] = { {0,0,0},{1,0,1},{1,1,1},{0,1,0} };
-    static const glm::ivec3 DUMMY_NORMAL = { 0, 1, 0 };  // lighting unused for cross
-
-    // Forward + reversed winding → double-sided
-    constexpr int FWD[6] = { 0,1,2, 0,2,3 };
-    constexpr int REV[6] = { 0,2,1, 0,3,2 };
-
-    auto emit = [&](const glm::ivec3 quad[4], const int idx[6]) {
-        for (int i = 0; i < 6; i++)
-            verts.emplace_back(Vertex{
-                worldPos + quad[idx[i]],
-                uvs[idx[i]],
-                noOverlay[idx[i]],
-                DUMMY_NORMAL,
-                worldPos,
-                tint,
-                0.0f,   // no overlay
-                0.6f    // ao = full bright
-             });
-        };
-
-    emit(CROSS_VERTS1, FWD);  emit(CROSS_VERTS2, REV);
-    emit(CROSS_VERTS1, FWD);  emit(CROSS_VERTS2, REV);
-}
-
+// Builds mesh for chunks
 void ChunkMeshBuilder::Build(const Chunk& chunk, const Chunk* nPX, const Chunk* nNX, const Chunk* nPZ, const Chunk* nNZ, const Chunk* nPX_PZ, const Chunk* nPX_NZ, const Chunk* nNX_PZ, const Chunk* nNX_NZ, std::vector<Vertex>& outVertices)
 {
     std::shared_lock lock(chunk.chunkMutex);
