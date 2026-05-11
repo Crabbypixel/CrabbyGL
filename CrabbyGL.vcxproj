@@ -506,6 +506,7 @@
     <None Include="assets\shaders\ChunkMesh.glsl" />
     <None Include="assets\shaders\Crosshair.glsl" />
     <None Include="assimp-vc143-mtd.dll" />
+    <None Include="CrabbyGL.exe" />
     <None Include="externals\glm\detail\func_common.inl" />
     <None Include="externals\glm\detail\func_common_simd.inl" />
     <None Include="externals\glm\detail\func_exponential.inl" />
@@ -644,11 +645,8 @@
     <None Include="externals\glm\gtx\vector_angle.inl" />
     <None Include="externals\glm\gtx\vector_query.inl" />
     <None Include="externals\glm\gtx\wrap.inl" />
-    <None Include="assets\shaders\Cube.glsl" />
     <None Include="assets\shaders\Framebuffer.glsl" />
     <None Include="assets\shaders\Line.glsl" />
-    <None Include="assets\shaders\SimpleLightingShader.glsl" />
-    <None Include="assets\shaders\TextureLighting.glsl" />
     <None Include="imgui.ini" />
     <None Include="libraries\glfw3.dll" />
   </ItemGroup>
@@ -656,6 +654,9 @@
     <Library Include="libraries\glfw3.lib" />
     <Library Include="libraries\libglfw3.a" />
     <Library Include="libraries\libglfw3dll.a" />
+  </ItemGroup>
+  <ItemGroup>
+    <Image Include="assets\CrabbyGL.png" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

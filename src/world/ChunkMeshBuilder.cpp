@@ -291,7 +291,7 @@ void ChunkMeshBuilder::Build(const Chunk& chunk, const Chunk* nPX, const Chunk* 
                         int ny = y + NORMALS[face].y;
                         int nz = z + NORMALS[face].z;
 
-                        bool shouldDiscardFace = false;
+                        bool shoundRenderFace = true;
 
                         if (Chunk::InBounds(nx, ny, nz))
                         {
@@ -303,7 +303,7 @@ void ChunkMeshBuilder::Build(const Chunk& chunk, const Chunk* nPX, const Chunk* 
 
                             // Render the face if the neighbor is solid, or if it is translucent of the same type.
                             // Do NOT render if the neighbor is translucent and a different type (e.g., glass vs leaves).
-                            shouldDiscardFace = (isSolid || isTranslucent) && !(isTranslucent && neighbor != blockType);
+                            shoundRenderFace = !((isSolid || isTranslucent) && !(isTranslucent && neighbor != blockType));
                         }
                         else
                         {
@@ -328,17 +328,17 @@ void ChunkMeshBuilder::Build(const Chunk& chunk, const Chunk* nPX, const Chunk* 
                                 bool isTranslucent = IsTranslucent(neighbor);
                                 bool isSolid = IsSolid(neighbor);
 
-                                shouldDiscardFace = (isSolid || isTranslucent) &&
-                                    !(isTranslucent && neighbor != blockType);
+                                shoundRenderFace = !((isSolid || isTranslucent) &&
+                                    !(isTranslucent && neighbor != blockType));
                             }
                             else
                             {
                                 // No neighbor chunk -> face is exposed
-                                shouldDiscardFace = true;
+                                shoundRenderFace = false;
                             }
                         }
 
-                        if (!shouldDiscardFace)
+                        if (shoundRenderFace)
                             AddFace(outVertices, worldPos, glm::ivec3{ x, y, z }, (Face)face, blockType, chunk, nPX, nNX, nPZ, nNZ, nPX_PZ, nPX_NZ, nNX_PZ, nNX_NZ);
                     }
                 }
@@ -356,23 +356,23 @@ void ChunkMeshBuilder::Build(const Chunk& chunk, const Chunk* nPX, const Chunk* 
                         int ny = y + NORMALS[face].y;
                         int nz = z + NORMALS[face].z;
 
-                        bool shouldDiscardFace = false;
+                        bool shouldRenderFace = true;
 
                         if (Chunk::InBounds(nx, ny, nz))
                         {
                             // Neighbor is inside this chunk — safe direct access
-                            shouldDiscardFace = IsOpaque(chunk.GetUnchecked(nx, ny, nz));
+							shouldRenderFace = !IsOpaque(chunk.GetUnchecked(nx, ny, nz));
                         }
                         else
                         {
                             // Out of chunk bounds — query neighbor chunk
-                            if (nx < 0 && nNX) shouldDiscardFace = IsOpaque(nNX->GetUnchecked(CX - 1, ny, nz));
-                            else if (nx >= CX && nPX) shouldDiscardFace = IsOpaque(nPX->GetUnchecked(0, ny, nz));
-                            else if (nz < 0 && nNZ) shouldDiscardFace = IsOpaque(nNZ->GetUnchecked(nx, ny, CZ - 1));
-                            else if (nz >= CZ && nPZ) shouldDiscardFace = IsOpaque(nPZ->GetUnchecked(nx, ny, 0));
+                            if (nx < 0 && nNX) shouldRenderFace = !IsOpaque(nNX->GetUnchecked(CX - 1, ny, nz));
+                            else if (nx >= CX && nPX) shouldRenderFace = !IsOpaque(nPX->GetUnchecked(0, ny, nz));
+                            else if (nz < 0 && nNZ) shouldRenderFace = !IsOpaque(nNZ->GetUnchecked(nx, ny, CZ - 1));
+                            else if (nz >= CZ && nPZ) shouldRenderFace = !IsOpaque(nPZ->GetUnchecked(nx, ny, 0));
                         }
 
-                        if (!shouldDiscardFace)
+                        if (shouldRenderFace)
                             AddFace(outVertices, worldPos, glm::ivec3{ x, y, z }, (Face)face, blockType, chunk, nPX, nNX, nPZ, nNZ, nPX_PZ, nPX_NZ, nNX_PZ, nNX_NZ);
                     }
                 }

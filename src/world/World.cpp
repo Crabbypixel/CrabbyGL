@@ -15,8 +15,8 @@
 World::World()
 {
     chunks.reserve(1000);
-    //WorldGen::SetSeed(1337);   // MUST be first
     m_saveWorker = std::thread(&World::SaveWorkerLoop, this);
+    //WorldGen::SetSeed(1337);   // MUST be first
 }
 
 // ───── Coord helpers ─────────────────────────────────────────────────
@@ -420,8 +420,8 @@ void World::SyncRenderer()
             job.nNX = getNeighbor(chunkPos + glm::ivec2{ -1,  0 });
             job.nPZ = getNeighbor(chunkPos + glm::ivec2{ 0,  1 });
             job.nNZ = getNeighbor(chunkPos + glm::ivec2{ 0, -1 });
-            job.nPX_PZ = getNeighbor(chunkPos + glm::ivec2{ 1,  1 });                  // (+X, +Z)
-            job.nPX_NZ = getNeighbor(chunkPos + glm::ivec2{ 1, -1 });                  // (+X, -Z)
+            job.nPX_PZ = getNeighbor(chunkPos + glm::ivec2{ 1,  1 });                   // (+X, +Z)
+            job.nPX_NZ = getNeighbor(chunkPos + glm::ivec2{ 1, -1 });                   // (+X, -Z)
             job.nNX_PZ = getNeighbor(chunkPos + glm::ivec2{ -1,  1 });                  // (-X, +Z)
             job.nNX_NZ = getNeighbor(chunkPos + glm::ivec2{ -1, -1 });                  // (-X, -Z)
             m_meshQueue.push(job);

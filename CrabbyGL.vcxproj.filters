@@ -1495,11 +1495,8 @@
     <None Include="externals\glm\gtx\wrap.inl">
       <Filter>Header Files</Filter>
     </None>
-    <None Include="assets\shaders\Cube.glsl" />
     <None Include="assets\shaders\Framebuffer.glsl" />
     <None Include="assets\shaders\Line.glsl" />
-    <None Include="assets\shaders\SimpleLightingShader.glsl" />
-    <None Include="assets\shaders\TextureLighting.glsl" />
     <None Include="assets\shaders\Crosshair.glsl" />
     <None Include="assets\shaders\ChunkDebug.glsl" />
     <None Include="assets\shaders\ChunkMesh.glsl" />
@@ -1507,10 +1504,16 @@
     <None Include=".gitignore" />
     <None Include="imgui.ini" />
     <None Include="libraries\glfw3.dll" />
+    <None Include="CrabbyGL.exe" />
   </ItemGroup>
   <ItemGroup>
     <Library Include="libraries\glfw3.lib" />
     <Library Include="libraries\libglfw3.a" />
     <Library Include="libraries\libglfw3dll.a" />
+  </ItemGroup>
+  <ItemGroup>
+    <Image Include="assets\CrabbyGL.png">
+      <Filter>Resource Files</Filter>
+    </Image>
   </ItemGroup>
 </Project>

@@ -211,6 +211,140 @@ public:
 		// Render scene to depth cubemap
 		glEnable(GL_DEPTH_TEST);
 
+		// Get user controls
+		UserControls(dt);
+
+		// ───── Physics ───────────────────────────────────────────────
+		if (!bIsPaused)
+		{
+			player.Update(
+				dt,
+				camera.front,
+				GetKey('W').bHeld,
+				GetKey('S').bHeld,
+				GetKey('A').bHeld,
+				GetKey('D').bHeld,
+				GetKey(GLFW_KEY_SPACE).bHeld,
+				GetKey(GLFW_KEY_LEFT_SHIFT).bHeld,
+				GetKey(GLFW_KEY_LEFT_CONTROL).bHeld,
+				world
+			);
+
+			// Camera tracks player head
+			camera.position = player.EyePos();
+		}
+
+		// Toggle rendering chunk borders
+		if (GetKey('G').bPressed)
+			chunkDebug.visible = !chunkDebug.visible;
+
+		RaycastHit m_currentHit = RaycastDDA(camera.position, camera.front, world);
+		glm::ivec3 raycastPlacePos = m_currentHit.blockPos + m_currentHit.normal;
+		glm::ivec3 playerPos = { (int)floor(player.pos.x), (int)floor(player.pos.y), (int)floor(player.pos.z) };
+
+		// Select block
+		if (GetMouseButton(Mouse::MIDDLE).bPressed && m_currentHit.hit)
+			selectedBlock = world.GetBlock(m_currentHit.blockPos.x, m_currentHit.blockPos.y, m_currentHit.blockPos.z);
+
+		// Break block
+		if (GetMouseButton(Mouse::LEFT).bPressed && m_currentHit.hit)
+			world.BreakBlock(m_currentHit);
+
+		// Place block
+		if (GetMouseButton(Mouse::RIGHT).bPressed && (playerPos != raycastPlacePos) && (glm::ivec3(playerPos.x, playerPos.y + 1, playerPos.z) != raycastPlacePos) && m_currentHit.hit)
+			world.PlaceBlock(m_currentHit, selectedBlock);
+
+		// ───── Rendering ───────────────────────────────────────────────
+		// Update chunk streaming state based on player position:
+		// - Enqueue new chunks for generation within view distance
+		// - Identify chunks outside unload distance for removal
+		// - Maintains streaming window around the player
+		world.UpdateChunkStreaming(player.pos);
+		
+		// Promote fully generated chunks from staging into the main world: 
+		// - Transfers ownership into `chunks` map (main thread)
+		// - Ensures chunks become visible/usable only after complete generation
+		world.CommitGeneratedChunks();
+		
+		// Synchronize CPU-side world state with GPU rendering:
+		// - Enqueue dirty chunks for meshing
+		// - Upload completed mesh data to GPU buffers
+		// - Remove meshes for unloaded chunks
+		world.SyncRenderer();
+
+		// Check for any errors
+		Debug(dt, world);
+
+		// Highlight targeted block
+		chunkMeshShader.use();
+		if (m_currentHit.hit)
+		{
+			chunkMeshShader.setBool("u_isSelected", true);
+			chunkMeshShader.setIvec3("u_selectedBlock", m_currentHit.blockPos);
+		}
+		else
+			chunkMeshShader.setBool("u_isSelected", false);
+
+		chunkMeshShader.setBool("u_isAOEnabled", isAOEnabled);
+
+		world.DrawAll(matProjection, camera.getLookAt());
+
+		chunkDebug.DrawChunkBoundary(camera.position);
+
+		// Coordinate axis
+		RenderAxis();
+
+		// Crosshair
+		RenderCrosshair();
+
+		// Bind back to the default framebuffer & draw quad keeping the texture rendered in the custom framebuffer bounded
+		glBindFramebuffer(GL_FRAMEBUFFER, 0);
+		glDisable(GL_DEPTH_TEST);
+		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
+		glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+
+		quadVAO.bind();
+		framebufferShader.use();
+		framebufferShader.setInt("screenTexture", 6);
+		glActiveTexture(GL_TEXTURE6);
+		glBindTexture(GL_TEXTURE_2D, textureColorBuffer);
+
+		glDrawArrays(GL_TRIANGLES, 0, 6);
+
+		// ───── ImGui ───────────────────────────────────────────────
+		glm::ivec2 playerChunk = World::ChunkCoord(player.pos.x, player.pos.z);
+		ImGui::Begin("Debug Console");
+		ImGui::Text("Hello World!");
+		ImGui::Text("Player Position: %d %d %d", (int)camera.position.x, (int)camera.position.y, (int)camera.position.z);
+		ImGui::Text("Currently at chunk: %d %d", playerChunk.x, playerChunk.y);
+
+		ImGui::Text("Selected Block: %s", GetDef(selectedBlock).name);
+		ImGui::Text("Raycast place position: %d %d %d", raycastPlacePos.x, raycastPlacePos.y, raycastPlacePos.z);
+		ImGui::Text("AO (H to toggle): %s", isAOEnabled ? "Yes" : "No");
+		ImGui::Text("Chunk borders (G to toggle): %s", chunkDebug.visible ? "Enabled" : "Disabled");
+
+		static int teleportX = 0;
+		static int teleportY = 0;
+		static int teleportZ = 0;
+
+		ImGui::InputInt("X", &teleportX);
+		ImGui::InputInt("Y", &teleportY);
+		ImGui::InputInt("Z", &teleportZ);
+
+		if (ImGui::Button("Teleport"))
+		{
+			player.pos = glm::vec3(teleportX, teleportY, teleportZ);
+		}
+
+		ImGui::End();
+		ImGui::Render();
+		ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+
+		return true;
+	}
+
+	void UserControls(float dt)
+	{
 		// Fly toggle
 		if (GetKey(GLFW_KEY_SPACE).bPressed)
 		{
@@ -249,134 +383,9 @@ public:
 			}
 		}
 
+		// Toggle Ambient Occlusion
 		if (GetKey('H').bPressed)
 			isAOEnabled = !isAOEnabled;
-
-
-		if (!bIsPaused)
-		{
-			player.Update(
-				dt,
-				camera.front,
-				GetKey('W').bHeld,
-				GetKey('S').bHeld,
-				GetKey('A').bHeld,
-				GetKey('D').bHeld,
-				GetKey(GLFW_KEY_SPACE).bHeld,
-				GetKey(GLFW_KEY_LEFT_SHIFT).bHeld,
-				GetKey(GLFW_KEY_LEFT_CONTROL).bHeld,
-				world
-			);
-
-			// Camera tracks player head
-			camera.position = player.EyePos();
-		}
-
-		RaycastHit m_currentHit = RaycastDDA(camera.position, camera.front, world);
-		glm::ivec3 raycastPlacePos = m_currentHit.blockPos + m_currentHit.normal;
-		glm::ivec3 playerPos = { (int)floor(player.pos.x), (int)floor(player.pos.y), (int)floor(player.pos.z) };
-
-		// Select block
-		if (GetMouseButton(Mouse::MIDDLE).bPressed && m_currentHit.hit)
-			selectedBlock = world.GetBlock(m_currentHit.blockPos.x, m_currentHit.blockPos.y, m_currentHit.blockPos.z);
-
-		// Break block
-		if (GetMouseButton(Mouse::LEFT).bPressed && m_currentHit.hit)
-			world.BreakBlock(m_currentHit);
-
-		// Place block
-		if (GetMouseButton(Mouse::RIGHT).bPressed && (playerPos != raycastPlacePos) && (glm::ivec3(playerPos.x, playerPos.y + 1, playerPos.z) != raycastPlacePos) && m_currentHit.hit)
-			world.PlaceBlock(m_currentHit, selectedBlock);
-
-		// Update chunk streaming state based on player position:
-		// - Enqueue new chunks for generation within view distance
-		// - Identify chunks outside unload distance for removal
-		// - Maintains streaming window around the player
-		world.UpdateChunkStreaming(player.pos);
-		
-		// Promote fully generated chunks from staging into the main world: 
-		// - Transfers ownership into `chunks` map (main thread)
-		// - Ensures chunks become visible/usable only after complete generation
-		world.CommitGeneratedChunks();
-		
-		// Synchronize CPU-side world state with GPU rendering:
-		// - Enqueue dirty chunks for meshing
-		// - Upload completed mesh data to GPU buffers
-		// - Remove meshes for unloaded chunks
-		world.SyncRenderer();
-
-		// Check for any errors
-		Debug(dt, world);
-
-		// Highlight targeted block
-		chunkMeshShader.use();
-		if (m_currentHit.hit)
-		{
-			chunkMeshShader.setBool("u_isSelected", true);
-			chunkMeshShader.setIvec3("u_selectedBlock", m_currentHit.blockPos);
-		}
-		else
-			chunkMeshShader.setBool("u_isSelected", false);
-
-		chunkMeshShader.setBool("u_isAOEnabled", isAOEnabled);
-
-		world.DrawAll(matProjection, camera.getLookAt());
-
-		// Draw chunk borders
-		if (GetKey('G').bPressed)
-			chunkDebug.visible = !chunkDebug.visible;
-		chunkDebug.DrawChunkBoundary(camera.position);
-
-		// Coordinate axis
-		RenderAxis();
-
-		// Crosshair
-		RenderCrosshair();
-
-		// Bind back to the default framebuffer & draw quad keeping the texture rendered in the custom framebuffer bounded
-		glBindFramebuffer(GL_FRAMEBUFFER, 0);
-		glDisable(GL_DEPTH_TEST);
-		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
-		glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
-
-		quadVAO.bind();
-		framebufferShader.use();
-		framebufferShader.setInt("screenTexture", 6);
-		glActiveTexture(GL_TEXTURE6);
-		glBindTexture(GL_TEXTURE_2D, textureColorBuffer);
-
-		glDrawArrays(GL_TRIANGLES, 0, 6);
-
-		// ImGui Window
-		glm::ivec2 playerChunk = World::ChunkCoord(player.pos.x, player.pos.z);
-		ImGui::Begin("Debug Console");
-		ImGui::Text("Hello World!");
-		ImGui::Text("Player Position: %d %d %d", (int)camera.position.x, (int)camera.position.y, (int)camera.position.z);
-		ImGui::Text("Currently at chunk: %d %d", playerChunk.x, playerChunk.y);
-
-		ImGui::Text("Selected Block: %s", GetDef(selectedBlock).name);
-		ImGui::Text("Raycast place position: %d %d %d", raycastPlacePos.x, raycastPlacePos.y, raycastPlacePos.z);
-		ImGui::Text("AO (H to toggle): %s", isAOEnabled ? "Yes" : "No");
-		ImGui::Text("Chunk borders (G to toggle): %s", chunkDebug.visible ? "Enabled" : "Disabled");
-
-		static int teleportX = 0;
-		static int teleportY = 0;
-		static int teleportZ = 0;
-
-		ImGui::InputInt("X", &teleportX);
-		ImGui::InputInt("Y", &teleportY);
-		ImGui::InputInt("Z", &teleportZ);
-
-		if (ImGui::Button("Teleport"))
-		{
-			player.pos = glm::vec3(teleportX, teleportY, teleportZ);
-		}
-
-		ImGui::End();
-		ImGui::Render();
-		ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
-
-		return true;
 	}
 
 	void InitShaders()

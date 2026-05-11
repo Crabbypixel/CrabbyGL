@@ -66,7 +66,7 @@ float FaceBrightness(vec3 normal) {
     if (normal.y >  0.5f) return 1.3f;   // top    — full sky
     if (normal.y < -0.5f) return 0.50f;     // bottom — never sees sky
     if (abs(normal.x) > 0.5f) return sides;     // X sides
-    return sides;                              // Z sides
+    return sides;                               // Z sides
 }
 
 void main() {
