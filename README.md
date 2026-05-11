@@ -20,7 +20,7 @@ The goal: understand how Minecraft actually works by building it piece by piece.
 
 ## Demo
 
-![Demo](https://github.com/Crabbypixel/CrabbyGL/blob/master/assets/CrabbyGL.png?raw=true)
+![Demo](https://github.com/Crabbypixel/CrabbyGL/blob/main/assets/CrabbyGL.png?raw=true)
 
 ---
 
