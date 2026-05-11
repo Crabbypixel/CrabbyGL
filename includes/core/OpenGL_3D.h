@@ -4,17 +4,17 @@
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
 
-#include <string>
-#include <atomic>
-
 // GLM (needed for matProjection)
 #include <glm/glm.hpp>
 
 #include "core/Camera.h"
 
+#include <string>
+#include <atomic>
+
 // Constants
-#define MAX_KEYS GLFW_KEY_LAST
-#define MAX_MOUSE_BUTTONS 3
+static constexpr int MAX_KEYS = GLFW_KEY_LAST;
+static constexpr int MAX_MOUSE_BUTTONS = 3;
 constexpr float pi = 3.14159f;
 
 class OpenGL_3D
@@ -30,15 +30,15 @@ private:
 	// Arrays to store key states
 	short m_keyNewState[MAX_KEYS] = { 0 };
 	short m_keyOldState[MAX_KEYS] = { 0 };
-	short m_mouseOldState[MAX_MOUSE_BUTTONS];
-	short m_mouseNewState[MAX_MOUSE_BUTTONS];
+	short m_mouseOldState[MAX_MOUSE_BUTTONS] = { 0 };
+	short m_mouseNewState[MAX_MOUSE_BUTTONS] = { 0 };
 
 	struct sKeyState
 	{
 		bool bPressed;
 		bool bReleased;
 		bool bHeld;
-	} m_keys[MAX_KEYS], m_mouse[MAX_MOUSE_BUTTONS];
+	} m_keys[MAX_KEYS] = {}, m_mouse[MAX_MOUSE_BUTTONS] = {};
 
 	// Mouse variables
 	float m_mousePosX;

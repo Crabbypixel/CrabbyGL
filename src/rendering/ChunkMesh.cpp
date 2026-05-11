@@ -1,4 +1,7 @@
 #include "rendering/ChunkMesh.h"
+#include "rendering/Shader.h"
+
+#include <glm/glm.hpp>
 
 void ChunkMesh::Build(const std::vector<Vertex>& vertices)
 {

@@ -1,6 +1,6 @@
 #pragma once
-#include "world/Chunk.h"
-#include "rendering/ChunkMesh.h"
+class Chunk;
+class ChunkMesh;
 
 class ChunkMeshBuilder
 {
@@ -13,11 +13,11 @@ public:
         const Chunk* nPZ, const Chunk* nNZ,
         const Chunk* nPX_PZ, const Chunk* nPX_NZ,
         const Chunk* nNX_PZ, const Chunk* nNX_NZ,
-        std::vector<ChunkMesh::Vertex>& outVertices
+        std::vector<Vertex>& outVertices
     );
 
 private:
-    static enum Face {
+    enum Face {
         TOP = 0,
         BOTTOM = 1,
         POS_X = 2,
@@ -27,7 +27,7 @@ private:
     };
 
     static void AddFace(
-        std::vector<ChunkMesh::Vertex>& verts,
+        std::vector<Vertex>& verts,
         const glm::ivec3& pos,
         const glm::ivec3& chunkLocalPos,
         Face face,
@@ -44,5 +44,10 @@ private:
         const Chunk* nPZ, const Chunk* nNZ,
         const Chunk* nPX_PZ, const Chunk* nPX_NZ,
         const Chunk* nNX_PZ, const Chunk* nNX_NZ
+    );
+
+    static void EmitCross(std::vector<Vertex>& verts,
+        const glm::ivec3& worldPos,
+        BlockType type
     );
 };

@@ -1,16 +1,22 @@
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb/stb_image.h"
 
-#include "world/World.h"
-
 #define STB_PERLIN_IMPLEMENTATION
 #include "stb/stb_perlin.h"
+
+#include "rendering/ChunkMesh.h"
+#include "world/Chunk.h"
+#include "world/Raycast.h"
+#include "world/World.h"
+#include "world/BlockRegistry.h"
+#include "world/ChunkMeshBuilder.h"
+#include "rendering/Shader.h"
 
 World::World()
 {
     chunks.reserve(1000);
-    //WorldGen::SetSeed(1337);   // MUST be first
     m_saveWorker = std::thread(&World::SaveWorkerLoop, this);
+    //WorldGen::SetSeed(1337);   // MUST be first
 }
 
 // ───── Coord helpers ─────────────────────────────────────────────────
@@ -49,7 +55,7 @@ const Chunk* World::GetChunk(int worldX, int worldZ) const
 // ───── Block access ──────────────────────────────────────────────────
 bool World::IsSolid(int worldX, int worldY, int worldZ) const
 {
-    return GetBlock(worldX, worldY, worldZ) != BlockType::AIR;
+    return ::IsSolid(GetBlock(worldX, worldY, worldZ));
 }
 
 BlockType World::GetBlock(int worldX, int worldY, int worldZ) const
@@ -62,7 +68,7 @@ BlockType World::GetBlock(int worldX, int worldY, int worldZ) const
         return BlockType::AIR;
 
     auto l = ChunkLocalCoord(worldX, worldY, worldZ);
-    return chunk->Get(l.x, l.y, l.z);
+    return chunk->GetUnchecked(l.x, l.y, l.z);
 }
 
 void World::SetBlock(int worldX, int worldY, int worldZ, BlockType type)
@@ -143,7 +149,7 @@ void World::FillChunkData(Chunk& chunk, glm::ivec2 coord)
             chunk.blocks[x][0][z] = BlockType::BEDROCK;
             for (int y = 1; y < base; y++) chunk.blocks[x][y][z] = BlockType::STONE;
             for (int y = base; y < height; y++) chunk.blocks[x][y][z] = BlockType::DIRT;
-            chunk.blocks[x][height][z] = BlockType::GRASS;
+            chunk.blocks[x][height][z] = BlockType::GRASS_BLOCK;
 
             if (cx * CX + x == 0 || cz * CZ + z == 0)
                 chunk.blocks[x][height + 1][z] = BlockType::BRICK;
@@ -331,17 +337,19 @@ void World::UnloadChunks()
 // ───── Raycast CRUD ──────────────────────────────────────────────────
 bool World::PlaceBlock(const RaycastHit& hit, BlockType type)
 {
+    if (!hit.hit)
+        return false;
+
+	// Prevent placing beside non-solid blocks (cross face blocks)
+    if(GetDef(GetBlock(hit.blockPos.x, hit.blockPos.y, hit.blockPos.z)).flags & BLOCK_CROSS)
+		return false;
+
     glm::ivec3 target = hit.blockPos + hit.normal;
 
     if (IsSolid(target.x, target.y, target.z))
         return false;
 
     SetBlock(target.x, target.y, target.z, type);
-
-    // Mark this chunk as dirty (as we updated the chunk)
-    Chunk* c = GetChunk(target.x, target.z);
-    if (c)
-        c->dirty = true;
 
     MarkNeighborChunksDirty(hit.blockPos.x, hit.blockPos.y, hit.blockPos.z);
 
@@ -353,15 +361,10 @@ bool World::BreakBlock(const RaycastHit& hit)
     if (!hit.hit)
         return false;
 
-    if (!IsSolid(hit.blockPos.x, hit.blockPos.y, hit.blockPos.z))
-        return false;
+    const BlockType& blockType = GetBlock(hit.blockPos.x, hit.blockPos.y, hit.blockPos.z);
+    auto flags = GetDef(blockType).flags;
 
     SetBlock(hit.blockPos.x, hit.blockPos.y, hit.blockPos.z, BlockType::AIR);
-
-    // Mark this chunk as dirty (as we updated the chunk)
-    Chunk* c = GetChunk(hit.blockPos.x, hit.blockPos.z);
-    if (c)
-        c->dirty = true;
 
     MarkNeighborChunksDirty(hit.blockPos.x, hit.blockPos.y, hit.blockPos.z);
 
@@ -417,8 +420,8 @@ void World::SyncRenderer()
             job.nNX = getNeighbor(chunkPos + glm::ivec2{ -1,  0 });
             job.nPZ = getNeighbor(chunkPos + glm::ivec2{ 0,  1 });
             job.nNZ = getNeighbor(chunkPos + glm::ivec2{ 0, -1 });
-            job.nPX_PZ = getNeighbor(chunkPos + glm::ivec2{ 1,  1 });                  // (+X, +Z)
-            job.nPX_NZ = getNeighbor(chunkPos + glm::ivec2{ 1, -1 });                  // (+X, -Z)
+            job.nPX_PZ = getNeighbor(chunkPos + glm::ivec2{ 1,  1 });                   // (+X, +Z)
+            job.nPX_NZ = getNeighbor(chunkPos + glm::ivec2{ 1, -1 });                   // (+X, -Z)
             job.nNX_PZ = getNeighbor(chunkPos + glm::ivec2{ -1,  1 });                  // (-X, +Z)
             job.nNX_NZ = getNeighbor(chunkPos + glm::ivec2{ -1, -1 });                  // (-X, -Z)
             m_meshQueue.push(job);
@@ -430,7 +433,7 @@ void World::SyncRenderer()
 
     // Phase 2: Drain mesh staging & GPU upload
     // Move the meshes from the staging region to local main thread memory
-    std::unordered_map<glm::ivec2, std::vector<ChunkMesh::Vertex>, IVec2Hash> ready;
+    std::unordered_map<glm::ivec2, std::vector<Vertex>, IVec2Hash> ready;
     {
         std::lock_guard<std::mutex> lock(m_meshStagingMutex);
         ready.swap(m_meshStaging);
@@ -839,7 +842,7 @@ void World::SaveWorkerLoop()
 
 void World::MeshWorkerLoop()
 {
-    std::vector<ChunkMesh::Vertex> verts;
+    std::vector<Vertex> verts;
     verts.reserve(CX * CY * CZ * 3);
 
     while (true)

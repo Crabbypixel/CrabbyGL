@@ -1,10 +1,5 @@
 #pragma once
-
 #include <glm/glm.hpp>
-#include <glm/gtc/matrix_transform.hpp>
-#include <glm/gtc/type_ptr.hpp>
-
-#include "rendering/Shader.h"
 
 class Camera
 {
@@ -50,6 +45,4 @@ public:
 	void ProcessMouse(float fMousePosX, float fMousePosY, int screenWidth, int screenHeight, bool bFirstMouse);
 
 	void SetCameraPos(glm::vec3 vPos);
-
-	void UpdateView(Shader shader, const std::string& viewMat4ID);
 };

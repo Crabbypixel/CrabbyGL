@@ -1,5 +1,8 @@
 #include "world/Chunk.h"
 
+#include <vector>
+#include <mutex>
+
 bool Chunk::InBounds(int x, int y, int z)
 {
 	return (x >= 0 && x < CX) && (y >= 0 && y < CY) && (z >= 0 && z < CZ);

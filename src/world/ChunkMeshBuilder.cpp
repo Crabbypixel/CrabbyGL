@@ -1,69 +1,36 @@
+#include <glm/glm.hpp>
+
+#include "world/BlockRegistry.h"
+#include "world/Chunk.h"
+#include "rendering/ChunkMesh.h"
 #include "world/ChunkMeshBuilder.h"
 #include "world/World.h"
-#include <glm/glm.hpp>
 
 // UV rect per face
 struct UVRect { glm::vec2 min, max; };
 
 // Atlas constants
-static constexpr float TW = 16.0f / 256.0f;   // 0.0625 — tile width
-static constexpr float TH = 16.0f / 256.0f;   // 0.0625 — tile height
-static constexpr float TV0 = 1.0f - TH;       // 0.9375 — v bottom of tile row
-static constexpr float TV1 = 1.0f;            // v top
+static constexpr float TILE_WIDTH = 16.0f;
+static constexpr float TILE_HEIGHT = 16.0f;
+static constexpr float TEXTURE_MAP_WIDTH = 256.0f;
+static constexpr float TEXTURE_MAP_HEIGHT = 256.0f;
+static constexpr float SCREEN_TILE_WIDTH = TILE_WIDTH / TEXTURE_MAP_WIDTH;      // 16/256 = 0.0625 — tile width
+static constexpr float SCREEN_TILE_HEIGHT = TILE_HEIGHT / TEXTURE_MAP_HEIGHT;   // 16/256 = 0.0625 — tile height
 
 // Get the position of texture block based on block type
 static UVRect Tile(int i)
 {
-    return { { i * TW, TV0 }, { (i + 1) * TW, TV1 } };
-}
+    const int SIZE = 16;
+    int col = i % SIZE;
+    int row = i / SIZE;
 
-// Default grass tint
-static const glm::vec3 GRASS_TINT = { 0.55f, 0.78f, 0.28f };
-//static const glm::vec3 GRASS_TINT = { 0.72f, 0.74f, 0.30f };
+    float u0 = col * SCREEN_TILE_WIDTH;
+    float u1 = (col + 1) * SCREEN_TILE_WIDTH;
 
-// Tile indices - block type
-static constexpr int TEXTURE_DIRT = 0;
-static constexpr int TEXTURE_GRASS_TOP = 1;
-static constexpr int TEXTURE_GRASS_SIDE_OVERLAY = 2;
-static constexpr int TEXTURE_STONE = 3;
-static constexpr int TEXTURE_BEDROCK = 4;
-static constexpr int TEXTURE_BRICK = 5;
-static constexpr int TEXTURE_TREE_LOG_SIDES = 6;
-static constexpr int TEXTURE_TREE_LOG_TOP = 7;
-static constexpr int TEXTURE_TREE_LEAVES = 8;
+    float v0 = 1.0f - (row + 1) * SCREEN_TILE_HEIGHT;
+    float v1 = 1.0f - row * SCREEN_TILE_HEIGHT;
 
-// Face order: +Y -Y +X -X +Z -Z
-static UVRect GetBlockFaceUV(BlockType type, int face)
-{
-    switch (type)
-    {
-    case BlockType::GRASS:
-        if (face == 0) return Tile(TEXTURE_GRASS_TOP);    // +Y
-        if (face == 1) return Tile(TEXTURE_DIRT);         // -Y
-        return Tile(TEXTURE_DIRT);          // sides
-
-    case BlockType::DIRT:
-        return Tile(TEXTURE_DIRT);
-
-    case BlockType::STONE:
-        return Tile(TEXTURE_STONE);
-
-    case BlockType::BEDROCK:
-        return Tile(TEXTURE_BEDROCK);
-
-    case BlockType::BRICK:
-        return Tile(TEXTURE_BRICK);
-
-    case BlockType::TREE_LOG:
-        if (face == 0 || face == 1) return Tile(TEXTURE_TREE_LOG_TOP);      // +Y & -Y
-        return Tile(TEXTURE_TREE_LOG_SIDES);                                // +X, -X, +Z, -Z
-
-    case BlockType::TREE_LEAVES:
-        return Tile(TEXTURE_TREE_LEAVES);
-
-    default:
-        return Tile(TEXTURE_DIRT);
-    }
+    return { { u0, v0 }, { u1, v1 } };
 }
 
 // 6 faces: +Y -Y +X -X +Z -Z
@@ -107,7 +74,7 @@ static const glm::ivec3 FACE_VERTS[6][4] = {
     {{1,0,0},{0,0,0},{0,1,0},{1,1,0}}
 };
 
-// Quad -> 2 tris (indices into 4-vert quad)
+// Quad -> 2 tris (convert indices into 4-vert quad)
 static const int TRI_IDX[6] = { 0,1,2, 0,2,3 };
 
 static const int GetAOState(int side1, int side2, int corner) {
@@ -119,44 +86,91 @@ static const int GetAOState(int side1, int side2, int corner) {
 
 // We cannot access World's IsSolid(...) so we implement a similar function here
 // (x, y, z) are local chunk pos, may be -1 or CX/CZ for AO neighbor samples
+// Use GetUnchecked whenever possible so as to avoid redundant bounds checks
 bool ChunkMeshBuilder::IsSolidLocal(const Chunk& chunk, int x, int y, int z, const Chunk* nPX, const Chunk* nNX, const Chunk* nPZ, const Chunk* nNZ, const Chunk* nPX_PZ, const Chunk* nPX_NZ, const Chunk* nNX_PZ, const Chunk* nNX_NZ)
 {
     if (y < 0 || y >= CY)
         return false;
 
     if (x >= 0 && x < CX && z >= 0 && z < CZ)
-        return chunk.GetUnchecked(x, y, z) != BlockType::AIR;
+        return IsOpaque(chunk.GetUnchecked(x, y, z));
 
-    // Side blocks
+    // Side chunks
     if (nPX && x >= CX && z >= 0 && z < CZ)
-        return nPX->GetUnchecked(0, y, z) != BlockType::AIR;                    // RIGHT
+        return IsOpaque(nPX->GetUnchecked(0, y, z));                    // RIGHT
     else if (nNX && x < 0 && z >= 0 && z < CZ)
-        return nNX->GetUnchecked(CX - 1, y, z) != BlockType::AIR;               // LEFT
+        return IsOpaque(nNX->GetUnchecked(CX - 1, y, z));               // LEFT
     else if (nPZ && z >= CZ && x >= 0 && x < CX)
-        return nPZ->GetUnchecked(x, y, 0) != BlockType::AIR;                    // FORWARD
+        return IsOpaque(nPZ->GetUnchecked(x, y, 0));                    // FORWARD
     else if (nNZ && z < 0 && x >= 0 && x < CX)
-        return nNZ->GetUnchecked(x, y, CZ - 1) != BlockType::AIR;               // BACK
+        return IsOpaque(nNZ->GetUnchecked(x, y, CZ - 1));               // BACK
 
-    // Corner blocks
+    // Corner chunks
     else if (nPX_PZ && x >= CX && z >= CZ)
-        return nPX_PZ->GetUnchecked(0, y, 0) != BlockType::AIR;                 // FORWARD-RIGHT
+        return IsOpaque(nPX_PZ->GetUnchecked(0, y, 0));                 // FORWARD-RIGHT
     else if (nPX_NZ && x >= CX && z < 0)
-        return nPX_NZ->GetUnchecked(0, y, CZ - 1) != BlockType::AIR;            // BACK-RIGHT
+        return IsOpaque(nPX_NZ->GetUnchecked(0, y, CZ - 1));            // BACK-RIGHT
     else if (nNX_PZ && x < 0 && z >= CZ)
-        return nNX_PZ->GetUnchecked(CX - 1, y, 0) != BlockType::AIR;            // FORWARD-LEFT
+        return IsOpaque(nNX_PZ->GetUnchecked(CX - 1, y, 0));            // FORWARD-LEFT
     else if (nNX_NZ && x < 0 && z < 0)
-        return nNX_NZ->GetUnchecked(CX - 1, y, CZ - 1) != BlockType::AIR;       // BACK-LEFT
+        return IsOpaque(nNX_NZ->GetUnchecked(CX - 1, y, CZ - 1));       // BACK-LEFT
     else
         return false;
 }
 
-void ChunkMeshBuilder::AddFace(std::vector<ChunkMesh::Vertex>& verts, const glm::ivec3& worldPos, const glm::ivec3& chunkLocalPos, Face face, BlockType type, const Chunk& chunk, const Chunk* nPX, const Chunk* nNX, const Chunk* nPZ, const Chunk* nNZ, const Chunk* nPX_PZ, const Chunk* nPX_NZ, const Chunk* nNX_PZ, const Chunk* nNX_NZ)
+void ChunkMeshBuilder::EmitCross(std::vector<Vertex>& verts, const glm::ivec3& worldPos, BlockType type)
 {
+    BlockDef crossItem = GetDef(type);
+    UVRect uv = Tile(crossItem.faces[0]);
+    glm::vec3 tint = crossItem.tint;
 
-    bool isGrassSide = (type == BlockType::GRASS && face > 1);  // Only sides
+    // Map quad corners to atlas sub-region
+    glm::vec2 uvs[4] = {
+        { uv.min.x, uv.min.y },   // v0 bottom-left
+        { uv.max.x, uv.min.y },   // v1 bottom-right
+        { uv.max.x, uv.max.y },   // v2 top-right
+        { uv.min.x, uv.max.y },   // v3 top-left
+    };
 
-    const UVRect baseRect = isGrassSide ? Tile(TEXTURE_DIRT) : GetBlockFaceUV(type, face);
-    const UVRect overlayRect = isGrassSide ? Tile(TEXTURE_GRASS_SIDE_OVERLAY) : Tile(0);
+    glm::vec2 noOverlay[4] = { {0, 0} };
+
+    static const glm::ivec3 CROSS_VERTS1[4] = { {0,0,1},{1,0,0},{1,1,0},{0,1,1} };
+    static const glm::ivec3 CROSS_VERTS2[4] = { {0,0,0},{1,0,1},{1,1,1},{0,1,0} };
+    static const glm::ivec3 DUMMY_NORMAL = { 0, 1, 0 };  // lighting unused for cross
+
+    // Forward + reversed winding -> double-sided
+    constexpr int FWD[6] = { 0,1,2, 0,2,3 };
+    constexpr int REV[6] = { 0,2,1, 0,3,2 };
+
+    auto emit = [&](const glm::ivec3 quad[4], const int idx[6]) {
+        for (int i = 0; i < 6; i++)
+            verts.emplace_back(Vertex{
+                worldPos + quad[idx[i]],
+                uvs[idx[i]],
+                noOverlay[idx[i]],
+                DUMMY_NORMAL,
+                worldPos,
+                tint,
+                0.0f,   // no overlay
+                0.6f    // ao = full bright
+                });
+        };
+
+    emit(CROSS_VERTS1, FWD);  emit(CROSS_VERTS2, REV);
+    emit(CROSS_VERTS1, FWD);  emit(CROSS_VERTS2, REV);
+}
+
+void ChunkMeshBuilder::AddFace(std::vector<Vertex>& verts, const glm::ivec3& worldPos, const glm::ivec3& chunkLocalPos, Face face, BlockType type, const Chunk& chunk, const Chunk* nPX, const Chunk* nNX, const Chunk* nPZ, const Chunk* nNZ, const Chunk* nPX_PZ, const Chunk* nPX_NZ, const Chunk* nNX_PZ, const Chunk* nNX_NZ)
+{
+    const BlockDef& blockInfo = GetDef(type);
+
+    // Overlay logic (only for side faces like grass)
+    bool useOverlay = blockInfo.useOverlay && face > 1;
+
+    // Base texture
+    const UVRect baseRect = Tile(blockInfo.faces[face]);
+    // Overlay texture
+    const UVRect overlayRect = useOverlay ? Tile(blockInfo.overlay) : UVRect{ {0,0},{0,0} };
 
     // Map quad corners to atlas sub-region
     glm::vec2 baseUVs[4] = {
@@ -174,7 +188,7 @@ void ChunkMeshBuilder::AddFace(std::vector<ChunkMesh::Vertex>& verts, const glm:
     };
 
     // Ambient Occlusion
-    float ao[4];
+    float ao[4] = {};
 
     glm::ivec3 U = TANGENT_U[face];
     glm::ivec3 V = TANGENT_V[face];
@@ -216,20 +230,21 @@ void ChunkMeshBuilder::AddFace(std::vector<ChunkMesh::Vertex>& verts, const glm:
 
     for (int i : tri)
     {
-        verts.emplace_back(ChunkMesh::Vertex{
+        verts.emplace_back(Vertex{
             worldPos + FACE_VERTS[face][i],
             baseUVs[i],                      // <- atlas sub-region now
             overlayUVs[i],
             NORMALS[face],
             worldPos,
-            (type == BlockType::GRASS && face != Face::BOTTOM) ? GRASS_TINT : glm::vec3(1.0f),
-            isGrassSide ? 1.0f : 0.0f,
+            blockInfo.tint,
+            useOverlay ? 1.0f : 0.0f,
             ao[i] / 3.0f
             });
     }
 }
 
-void ChunkMeshBuilder::Build(const Chunk& chunk, const Chunk* nPX, const Chunk* nNX, const Chunk* nPZ, const Chunk* nNZ, const Chunk* nPX_PZ, const Chunk* nPX_NZ, const Chunk* nNX_PZ, const Chunk* nNX_NZ, std::vector<ChunkMesh::Vertex>& outVertices)
+// Builds mesh for chunks
+void ChunkMeshBuilder::Build(const Chunk& chunk, const Chunk* nPX, const Chunk* nNX, const Chunk* nPZ, const Chunk* nNZ, const Chunk* nPX_PZ, const Chunk* nPX_NZ, const Chunk* nNX_PZ, const Chunk* nNX_NZ, std::vector<Vertex>& outVertices)
 {
     std::shared_lock lock(chunk.chunkMutex);
     std::shared_lock lockPX = nPX ? std::shared_lock(nPX->chunkMutex) : std::shared_lock<std::shared_mutex>{};
@@ -240,8 +255,8 @@ void ChunkMeshBuilder::Build(const Chunk& chunk, const Chunk* nPX, const Chunk* 
     outVertices.clear();
 
     // Chunk world coordinates (not global world coordinates)
-    int wx0 = chunk.chunkPos.x * CX;
-    int wz0 = chunk.chunkPos.y * CZ;
+    int chunk_wx0 = chunk.chunkPos.x * CX;
+    int chunk_wz0 = chunk.chunkPos.y * CZ;
 
     // Iterate over every block
     for (int x = 0; x < CX; x++)
@@ -250,40 +265,116 @@ void ChunkMeshBuilder::Build(const Chunk& chunk, const Chunk* nPX, const Chunk* 
         {
             for (int z = 0; z < CZ; z++)
             {
-                BlockType blockType = chunk.Get(x, y, z);
+                BlockType blockType = chunk.GetUnchecked(x, y, z);
                 if (blockType == BlockType::AIR)        // If air, continue
                     continue;
 
-                // Local world coordinates
-                glm::ivec3 worldPos = glm::vec3(wx0 + x, y, wz0 + z);
-
-                // Check all six faces
-                for (int face = 0; face < 6; face++)
+                // Cross item
+                else if (GetDef(blockType).flags & BLOCK_CROSS)
                 {
-                    int nx = x + NORMALS[face].x;
-                    int ny = y + NORMALS[face].y;
-                    int nz = z + NORMALS[face].z;
+                    // Local world coordinates
+                    glm::ivec3 worldPos = glm::ivec3(chunk_wx0 + x, y, chunk_wz0 + z);
+                    EmitCross(outVertices, worldPos, blockType);
+                    continue;
+                }
 
-                    bool isNeighborSolid = false;
+                // For rendering faces of translucent objects
+                else if (IsTranslucent(blockType))
+                {
+                    // Local world coordinates
+                    glm::ivec3 worldPos = glm::ivec3(chunk_wx0 + x, y, chunk_wz0 + z);
 
-                    if (Chunk::InBounds(nx, ny, nz))
+                    // Check all six faces
+                    for (int face = 0; face < 6; face++)
                     {
-                        // Neighbor is inside this chunk — safe direct access
-                        isNeighborSolid = chunk.GetUnchecked(nx, ny, nz) != BlockType::AIR;
+                        int nx = x + NORMALS[face].x;
+                        int ny = y + NORMALS[face].y;
+                        int nz = z + NORMALS[face].z;
+
+                        bool shoundRenderFace = true;
+
+                        if (Chunk::InBounds(nx, ny, nz))
+                        {
+                            // Neighbor is inside this chunk — safe direct access
+                            auto neighbor = chunk.GetUnchecked(nx, ny, nz);
+
+                            bool isTranslucent = IsTranslucent(neighbor);
+                            bool isSolid = IsSolid(neighbor);
+
+                            // Render the face if the neighbor is solid, or if it is translucent of the same type.
+                            // Do NOT render if the neighbor is translucent and a different type (e.g., glass vs leaves).
+                            shoundRenderFace = !((isSolid || isTranslucent) && !(isTranslucent && neighbor != blockType));
+                        }
+                        else
+                        {
+                            BlockType neighbor;
+                            bool hasNeighbor = true;
+
+                            // Fetch neighbor from adjacent chunk
+                            if (nx < 0 && nNX)
+                                neighbor = nNX->GetUnchecked(CX - 1, ny, nz);
+                            else if (nx >= CX && nPX)
+                                neighbor = nPX->GetUnchecked(0, ny, nz);
+                            else if (nz < 0 && nNZ)
+                                neighbor = nNZ->GetUnchecked(nx, ny, CZ - 1);
+                            else if (nz >= CZ && nPZ)
+                                neighbor = nPZ->GetUnchecked(nx, ny, 0);
+                            else
+                                hasNeighbor = false;
+
+                            // Do the same here
+                            if (hasNeighbor)
+                            {
+                                bool isTranslucent = IsTranslucent(neighbor);
+                                bool isSolid = IsSolid(neighbor);
+
+                                shoundRenderFace = !((isSolid || isTranslucent) &&
+                                    !(isTranslucent && neighbor != blockType));
+                            }
+                            else
+                            {
+                                // No neighbor chunk -> face is exposed
+                                shoundRenderFace = false;
+                            }
+                        }
+
+                        if (shoundRenderFace)
+                            AddFace(outVertices, worldPos, glm::ivec3{ x, y, z }, (Face)face, blockType, chunk, nPX, nNX, nPZ, nNZ, nPX_PZ, nPX_NZ, nNX_PZ, nNX_NZ);
                     }
-                    else
+                }
+
+                // For rendering faces of opaque objects
+                else
+                {
+                    // Local world coordinates
+                    glm::ivec3 worldPos = glm::vec3(chunk_wx0 + x, y, chunk_wz0 + z);
+
+                    // Check all six faces
+                    for (int face = 0; face < 6; face++)
                     {
-                        // Out of chunk bounds — query neighbor chunk
-                        if (nx < 0 && nNX) isNeighborSolid = nNX->GetUnchecked(CX - 1, ny, nz) != BlockType::AIR;
-                        else if (nx >= CX && nPX) isNeighborSolid = nPX->GetUnchecked(0, ny, nz) != BlockType::AIR;
-                        else if (nz < 0 && nNZ) isNeighborSolid = nNZ->GetUnchecked(nx, ny, CZ - 1) != BlockType::AIR;
-                        else if (nz >= CZ && nPZ) isNeighborSolid = nPZ->GetUnchecked(nx, ny, 0) != BlockType::AIR;
+                        int nx = x + NORMALS[face].x;
+                        int ny = y + NORMALS[face].y;
+                        int nz = z + NORMALS[face].z;
 
-                        // null neighbor -> isNeighborSolid stays false -> face renders (correct — exposed to unloaded chunk)
+                        bool shouldRenderFace = true;
+
+                        if (Chunk::InBounds(nx, ny, nz))
+                        {
+                            // Neighbor is inside this chunk — safe direct access
+							shouldRenderFace = !IsOpaque(chunk.GetUnchecked(nx, ny, nz));
+                        }
+                        else
+                        {
+                            // Out of chunk bounds — query neighbor chunk
+                            if (nx < 0 && nNX) shouldRenderFace = !IsOpaque(nNX->GetUnchecked(CX - 1, ny, nz));
+                            else if (nx >= CX && nPX) shouldRenderFace = !IsOpaque(nPX->GetUnchecked(0, ny, nz));
+                            else if (nz < 0 && nNZ) shouldRenderFace = !IsOpaque(nNZ->GetUnchecked(nx, ny, CZ - 1));
+                            else if (nz >= CZ && nPZ) shouldRenderFace = !IsOpaque(nPZ->GetUnchecked(nx, ny, 0));
+                        }
+
+                        if (shouldRenderFace)
+                            AddFace(outVertices, worldPos, glm::ivec3{ x, y, z }, (Face)face, blockType, chunk, nPX, nNX, nPZ, nNZ, nPX_PZ, nPX_NZ, nNX_PZ, nNX_NZ);
                     }
-
-                    if (!isNeighborSolid)
-                        AddFace(outVertices, worldPos, glm::ivec3{x, y, z}, (Face)face, blockType, chunk, nPX, nNX, nPZ, nNZ, nPX_PZ, nPX_NZ, nNX_PZ, nNX_NZ);
                 }
             }
         }

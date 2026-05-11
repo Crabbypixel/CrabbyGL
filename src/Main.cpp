@@ -4,12 +4,6 @@
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
 
-#include "imgui_includes.h"
-#include "imgui_internal.h"
-
-#include "models/SimpleModel.h"
-#include "models/AssimpModelLoader.h"
-
 #include "core/Camera.h"
 #include "core/OpenGL_3D.h"
 
@@ -18,8 +12,17 @@
 
 #include "world/Raycast.h"
 #include "world/World.h"
+#include "world/Chunk.h"
+#include "world/BlockRegistry.h"
 
 #include "player/Player.h"
+
+#include "rendering/VertexArray.h"
+#include "rendering/VertexBuffer.h"
+#include "rendering/BufferLayout.h"
+
+#include "imgui/imgui_includes.h"
+#include "imgui/imgui_internal.h"
 
 #include <iostream>
 #include <iomanip>
@@ -68,13 +71,19 @@ private:
 	float fPhysicsAccumulatedTime = 0.0f;
 	float fDebugTimer = 0.0f;
 
+	// Fly
+	const float DOUBLE_TAP_WINDOW = 0.3f;
+	float spaceTimer = 0.0f;
+	bool waitingForSecondTap = false;
+
+	BlockType selectedBlock = BlockType::AIR;
+
 	bool isAOEnabled = true;
-	bool isLinearAO = false;
 
 public:
 	bool Setup() override
 	{
-		player.pos = glm::vec3(24.0f, 200.0f, 56.0f);
+		player.pos = glm::vec3(20.0f, 39.0f, 78.0f);
 		camera.init(glm::vec3(24.0f, 37.0f, 56.0f), glm::vec3(0.0f, 0.0f, -1.0f), ScreenWidth(), ScreenHeight());
 
 		// Axes
@@ -156,7 +165,6 @@ public:
 			// UBOs to unnecessarily avoid settings uniforms in shaders repeatedly
 			// Bind "Matrices" uniform to binding index 0 in every shader
 			glUniformBlockBinding(axesShader.getID(), glGetUniformBlockIndex(axesShader.getID(), "Matrices"), 0);
-			//glUniformBlockBinding(blockShader.getID(), glGetUniformBlockIndex(blockShader.getID(), "Matrices"), 0);
 			glUniformBlockBinding(chunkMeshShader.getID(), glGetUniformBlockIndex(chunkMeshShader.getID(), "Matrices"), 0);
 
 			ErrorLog();
@@ -181,7 +189,6 @@ public:
 
 		// Enable transparency
 		glEnable(GL_BLEND);
-		//glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
 		return true;
 	}
@@ -199,25 +206,14 @@ public:
 		// Clear colorbuffer, depthbuffer and stencilbuffer
 		glClearColor(0.227f, 0.757f, 1.0f, 1.0f);
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
-		
+
 		// Render scene to depth cubemap
 		glEnable(GL_DEPTH_TEST);
 
-		if (GetKey(GLFW_KEY_TAB).bPressed)
-		{
-			player.canFly = !player.canFly;
-		}
+		// Get user controls
+		UserControls(dt);
 
-		if (GetKey('T').bPressed)
-		{
-			isAOEnabled = !isAOEnabled;
-		}
-
-		if (GetKey('Y').bPressed)
-		{
-			isLinearAO = !isLinearAO;
-		}
-
+		// ───── Physics ───────────────────────────────────────────────
 		if (!bIsPaused)
 		{
 			player.Update(
@@ -237,34 +233,34 @@ public:
 			camera.position = player.EyePos();
 		}
 
-		// Add physics - later
+		// Toggle rendering chunk borders
+		if (GetKey('G').bPressed)
+			chunkDebug.visible = !chunkDebug.visible;
+
 		RaycastHit m_currentHit = RaycastDDA(camera.position, camera.front, world);
 		glm::ivec3 raycastPlacePos = m_currentHit.blockPos + m_currentHit.normal;
 		glm::ivec3 playerPos = { (int)floor(player.pos.x), (int)floor(player.pos.y), (int)floor(player.pos.z) };
 
+		// Select block
+		if (GetMouseButton(Mouse::MIDDLE).bPressed && m_currentHit.hit)
+			selectedBlock = world.GetBlock(m_currentHit.blockPos.x, m_currentHit.blockPos.y, m_currentHit.blockPos.z);
+
 		// Break block
-		if (GetMouseButton(Mouse::LEFT).bPressed)
-		{
-			auto hit = RaycastDDA(camera.position, camera.front, world);
-			if (world.BreakBlock(hit)) {}
-				//world.SyncRenderer();
-		}
+		if (GetMouseButton(Mouse::LEFT).bPressed && m_currentHit.hit)
+			world.BreakBlock(m_currentHit);
 
 		// Place block
-		if (GetMouseButton(Mouse::RIGHT).bPressed && (playerPos != raycastPlacePos) && (glm::ivec3(playerPos.x, playerPos.y + 1, playerPos.z) != raycastPlacePos))
-		{
-			auto hit = RaycastDDA(camera.position, camera.front, world);
-			if (world.PlaceBlock(hit, BlockType::TREE_LEAVES)) {}
-				//world.SyncRenderer();
-		}
+		if (GetMouseButton(Mouse::RIGHT).bPressed && (playerPos != raycastPlacePos) && (glm::ivec3(playerPos.x, playerPos.y + 1, playerPos.z) != raycastPlacePos) && m_currentHit.hit)
+			world.PlaceBlock(m_currentHit, selectedBlock);
 
+		// ───── Rendering ───────────────────────────────────────────────
 		// Update chunk streaming state based on player position:
 		// - Enqueue new chunks for generation within view distance
 		// - Identify chunks outside unload distance for removal
 		// - Maintains streaming window around the player
 		world.UpdateChunkStreaming(player.pos);
 		
-		// Promote fully generated chunks from staging into the main world:
+		// Promote fully generated chunks from staging into the main world: 
 		// - Transfers ownership into `chunks` map (main thread)
 		// - Ensures chunks become visible/usable only after complete generation
 		world.CommitGeneratedChunks();
@@ -286,33 +282,12 @@ public:
 			chunkMeshShader.setIvec3("u_selectedBlock", m_currentHit.blockPos);
 		}
 		else
-		{
 			chunkMeshShader.setBool("u_isSelected", false);
-		}
 
-		if (isAOEnabled)
-		{
-			chunkMeshShader.setBool("u_isAOEnabled", true);
-		}
-		else
-		{
-			chunkMeshShader.setBool("u_isAOEnabled", false);
-		}
-
-		if (isLinearAO)
-		{
-			chunkMeshShader.setBool("u_isLinearAO", true);
-		}
-		else
-		{
-			chunkMeshShader.setBool("u_isLinearAO", false);
-		}
+		chunkMeshShader.setBool("u_isAOEnabled", isAOEnabled);
 
 		world.DrawAll(matProjection, camera.getLookAt());
 
-		// Draw chunk borders
-		if (GetKey('G').bPressed)
-			chunkDebug.visible = !chunkDebug.visible;
 		chunkDebug.DrawChunkBoundary(camera.position);
 
 		// Coordinate axis
@@ -335,16 +310,17 @@ public:
 
 		glDrawArrays(GL_TRIANGLES, 0, 6);
 
-		// ImGui Window
-		ImGui::Begin("Debug Console");
-		ImGui::Text("Welcome!!");
+		// ───── ImGui ───────────────────────────────────────────────
 		glm::ivec2 playerChunk = World::ChunkCoord(player.pos.x, player.pos.z);
+		ImGui::Begin("Debug Console");
+		ImGui::Text("Hello World!");
+		ImGui::Text("Player Position: %d %d %d", (int)camera.position.x, (int)camera.position.y, (int)camera.position.z);
 		ImGui::Text("Currently at chunk: %d %d", playerChunk.x, playerChunk.y);
 
-		ImGui::Text("Player Position: %d %d %d", (int)camera.position.x, (int)camera.position.y, (int)camera.position.z);
+		ImGui::Text("Selected Block: %s", GetDef(selectedBlock).name);
 		ImGui::Text("Raycast place position: %d %d %d", raycastPlacePos.x, raycastPlacePos.y, raycastPlacePos.z);
-		ImGui::Text("Ambient Occlusion: %s", isAOEnabled ? "true" : "false");
-		ImGui::Text("Quadratic AO: %s", !(isAOEnabled && isLinearAO) ? "true" : "false");
+		ImGui::Text("AO (H to toggle): %s", isAOEnabled ? "Yes" : "No");
+		ImGui::Text("Chunk borders (G to toggle): %s", chunkDebug.visible ? "Enabled" : "Disabled");
 
 		static int teleportX = 0;
 		static int teleportY = 0;
@@ -366,6 +342,51 @@ public:
 		return true;
 	}
 
+	void UserControls(float dt)
+	{
+		// Fly toggle
+		if (GetKey(GLFW_KEY_SPACE).bPressed)
+		{
+			if (waitingForSecondTap)
+			{
+				if (spaceTimer <= DOUBLE_TAP_WINDOW)
+				{
+					// DOUBLE TAP
+					player.canFly = !player.canFly;
+
+					waitingForSecondTap = false;
+					spaceTimer = DOUBLE_TAP_WINDOW + 1.0f; // invalidate
+				}
+				else
+				{
+					// Too late -> restart as first tap
+					spaceTimer = 0.0f;
+				}
+			}
+			else
+			{
+				// First tap
+				waitingForSecondTap = true;
+				spaceTimer = 0.0f;
+			}
+		}
+
+		// Fly toggle - timer update
+		if (waitingForSecondTap)
+		{
+			spaceTimer += dt;
+
+			if (spaceTimer > DOUBLE_TAP_WINDOW)
+			{
+				waitingForSecondTap = false;
+			}
+		}
+
+		// Toggle Ambient Occlusion
+		if (GetKey('H').bPressed)
+			isAOEnabled = !isAOEnabled;
+	}
+
 	void InitShaders()
 	{
 		chunkMeshShader.use();
@@ -381,7 +402,7 @@ public:
 
 		if (fDebugTimer >= 0.5f)
 		{
-			std::cout << "Chunks loaded: " << world.chunks.size() << '\n';
+			//std::cout << "Chunks loaded: " << world.chunks.size() << '\n';
 			fDebugTimer = 0.0f;
 		}
 	}

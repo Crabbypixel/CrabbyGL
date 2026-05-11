@@ -1,5 +1,9 @@
 #include "world/Raycast.h"
 #include "world/World.h"
+#include "world/BlockRegistry.h"
+
+#include <vector>
+#include <limits>
 
 RaycastHit RaycastDDA(const glm::vec3& origin, const glm::vec3& direction, const World& world, float maxDistance)
 {
@@ -38,7 +42,10 @@ RaycastHit RaycastDDA(const glm::vec3& origin, const glm::vec3& direction, const
 
 	while (t <= maxDistance)
 	{
-		if (world.IsSolid(currentBlock.x, currentBlock.y, currentBlock.z))
+		const BlockType& blockType = world.GetBlock(currentBlock.x, currentBlock.y, currentBlock.z);
+		const BlockDef& def = GetDef(blockType);
+
+		if (def.flags & (BLOCK_SOLID | BLOCK_CROSS))
 		{
 			result.hit = true;
 			result.blockPos = currentBlock;

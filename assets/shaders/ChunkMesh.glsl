@@ -58,7 +58,6 @@ uniform vec3 u_diffuse;
 uniform bool  u_isSelected;
 uniform ivec3 u_selectedBlock;
 uniform bool u_isAOEnabled;
-uniform bool u_isLinearAO;
 
 out vec4 FragColor;
 
@@ -67,7 +66,7 @@ float FaceBrightness(vec3 normal) {
     if (normal.y >  0.5f) return 1.3f;   // top    — full sky
     if (normal.y < -0.5f) return 0.50f;     // bottom — never sees sky
     if (abs(normal.x) > 0.5f) return sides;     // X sides
-    return sides;                              // Z sides
+    return sides;                               // Z sides
 }
 
 void main() {
@@ -98,21 +97,15 @@ void main() {
     // Highlight selected block
     if(u_isSelected)
         if(ivec3(fBlockOrigin) == u_selectedBlock)
-            base.rgb /= 0.75f;
+            base.rgb /= 0.85f;
 
     FragColor = vec4(base.rgb * lighting, base.a);
 
     if(u_isAOEnabled)
     {
-        if(u_isLinearAO)
-        {
-            FragColor.rgb *= mix(0.7f, 1.0f, f_ao);
-        }
-        else
-        {   
-            float ao_curved = f_ao * f_ao;   // square darkens corners more naturally
-            FragColor.rgb *= mix(0.7f, 1.0f, ao_curved);
-        }
+
+        float ao_curved = f_ao * f_ao;   // square darkens corners more naturally
+        FragColor.rgb *= mix(0.7f, 1.0f, ao_curved);
     }
 
     //FragColor.rgb = pow(FragColor.rgb, vec3(1.0f / 2.2f));
