@@ -16,7 +16,6 @@ World::World()
 {
     chunks.reserve(1000);
     m_saveWorker = std::thread(&World::SaveWorkerLoop, this);
-    //WorldGen::SetSeed(1337);   // MUST be first
 }
 
 // ───── Coord helpers ─────────────────────────────────────────────────
@@ -103,28 +102,12 @@ float World::GetTerrainHeight(int wx, int wz)
 }
 
 // Invoked by worker
-//void World::FillChunkData(Chunk& chunk, glm::ivec2 coord)
-//{
-//    if (LoadChunkFromDisk(chunk, coord))
-//    {
-//        chunk.modified = false;
-//        return;
-//    }
-//
-//    chunk.chunkPos = coord;
-//
-//    WorldGen::Generate(chunk, coord);
-//
-//    chunk.dirty = true;
-//    chunk.modified = false;
-//}
-
-//// ORIGINAL
 void World::FillChunkData(Chunk& chunk, glm::ivec2 coord)
 {
-    // Try disk first
+    // Try loading from disk first
     if (LoadChunkFromDisk(chunk, coord))
     {
+        chunk.dirty = true;
         chunk.modified = false;
         return;
     }
@@ -164,115 +147,18 @@ void World::FillChunkData(Chunk& chunk, glm::ivec2 coord)
     chunk.modified = false;
 }
 
-//void World::FillChunkData(Chunk& chunk, glm::ivec2 coord)
-//{
-//    if (LoadChunkFromDisk(chunk, coord)) { chunk.modified = false; return; }
-//
-//    chunk.chunkPos = coord;
-//    int cx = coord.x, cz = coord.y;
-//
-//    // Noise scales — tune these
-//    constexpr float H_SCALE = 0.005f;   // horizontal frequency
-//    constexpr float V_SCALE = 0.010f;   // vertical frequency (tighter = more layered)
-//    constexpr float SEA_LEVEL = 64.0f;
-//    constexpr float V_BIAS = 0.025f;  // how fast density drops with height
-//
-//    for (int x = 0; x < CX; x++)
-//        for (int z = 0; z < CZ; z++)
-//        {
-//            int wx = cx * CX + x;
-//            int wz = cz * CZ + z;
-//
-//            // Bedrock
-//            chunk.blocks[x][0][z] = BlockType::BEDROCK;
-//
-//            // Surface tracking for grass placement
-//            int surfaceY = -1;
-//
-//            for (int y = CY - 1; y >= 1; y--)
-//            {
-//                float fx = wx * H_SCALE;
-//                float fy = y * V_SCALE;
-//                float fz = wz * H_SCALE;
-//
-//                // Low terrain noise
-//                float low = stb_perlin_noise3(fx, fy, fz, 0, 0, 0);
-//                low += stb_perlin_noise3(fx * 2.0f, fy * 2.0f, fz * 2.0f, 0, 0, 0) * 0.5f;
-//                low += stb_perlin_noise3(fx * 4.0f, fy * 4.0f, fz * 4.0f, 0, 0, 0) * 0.25f;
-//                low /= 1.75f;
-//
-//                // High terrain noise (different offset = different pattern)
-//                float high = stb_perlin_noise3(fx + 100.0f, fy, fz + 100.0f, 0, 0, 0);
-//                high += stb_perlin_noise3(fx * 2.0f + 100.0f, fy * 2.0f, fz * 2.0f + 100.0f, 0, 0, 0) * 0.5f;
-//                high /= 1.5f;
-//
-//                // Selector — blends between low and high
-//                float sel = stb_perlin_noise3(fx * 0.5f, fy * 0.5f, fz * 0.5f, 0, 0, 0);
-//                sel = (sel + 1.0f) * 0.5f;   // 0..1
-//                sel = sel * sel;               // bias toward low terrain (flat majority)
-//
-//                float density = low + sel * (high - low);
-//
-//                // Y bias — pulls density down with height, creates natural ceiling
-//                density -= (y - SEA_LEVEL) * V_BIAS;
-//
-//                if (density > 0.0f)
-//                {
-//                    // Determine block type — will be patched to DIRT/GRASS after
-//                    chunk.blocks[x][y][z] = BlockType::STONE;
-//                    if (surfaceY < 0) surfaceY = y;   // first solid from top
-//                }
-//                else
-//                {
-//                    chunk.blocks[x][y][z] = BlockType::AIR;
-//                }
-//            }
-//
-//            // Surface pass — replace top layers with dirt + grass
-//            if (surfaceY > 0)
-//            {
-//                chunk.blocks[x][surfaceY][z] = BlockType::GRASS;
-//                for (int d = 1; d <= 3 && surfaceY - d >= 1; d++)
-//                    if (chunk.blocks[x][surfaceY - d][z] == BlockType::STONE)
-//                        chunk.blocks[x][surfaceY - d][z] = BlockType::DIRT;
-//            }
-//
-//            // Cave carve — inside density loop is better but this works
-//            for (int y = 1; y < CY - 4; y++)
-//            {
-//                if (chunk.blocks[x][y][z] == BlockType::AIR) continue;
-//                float cave = stb_perlin_noise3(wx * 0.05f, y * 0.08f, wz * 0.05f, 0, 0, 0);
-//                if (cave > 0.35f)
-//                    chunk.blocks[x][y][z] = BlockType::AIR;
-//            }
-//        }
-//
-//    chunk.dirty = true;
-//    chunk.modified = false;
-//}
-
-//void World::FillChunkData(Chunk& chunk, glm::ivec2 coord)
-//{
-//    if (LoadChunkFromDisk(chunk, coord)) { chunk.modified = false; return; }
-//
-//    chunk.chunkPos = coord;
-//    WorldGen::Generate(chunk, coord);
-//
-//    chunk.dirty = true;
-//    chunk.modified = false;
-//}
-
 // ───── File IO ──────────────────────────────────────────────────
 std::string World::ChunkFilePath(glm::ivec2 coord)
 {
     return "saves/" + std::to_string(coord.x) + "_" + std::to_string(coord.y) + ".bin";
 }
 
-void World::SaveChunk(const Chunk& chunk)
+void World::SaveChunkToDisk(const Chunk& chunk)
 {
     std::filesystem::create_directories("saves");
     auto path = ChunkFilePath(chunk.chunkPos);
 
+    // TODO: Write this in C++
     FILE* f = nullptr;
     fopen_s(&f, path.c_str(), "wb");
 
@@ -283,6 +169,7 @@ void World::SaveChunk(const Chunk& chunk)
 
     if (bytesWritten != sizeof(chunk.blocks))
         std::cout << "Error writing to chunk " << path.c_str() << ".\n";
+
     fclose(f);
 }
 
@@ -290,6 +177,7 @@ bool World::LoadChunkFromDisk(Chunk& chunk, glm::ivec2& coord)
 {
     auto path = ChunkFilePath(coord);
 
+    // TODO: Write this in C++
     FILE* f = nullptr;
     fopen_s(&f, path.c_str(), "rb");
     if (!f)
@@ -303,7 +191,6 @@ bool World::LoadChunkFromDisk(Chunk& chunk, glm::ivec2& coord)
     fclose(f);
 
     chunk.chunkPos = coord;
-    chunk.dirty = true;
 
     return true;
 }
@@ -315,7 +202,7 @@ void World::UnloadChunks()
     {
         if (chunk->modified)
         {
-            SaveChunk(*chunk);
+            SaveChunkToDisk(*chunk);
             chunk->modified = false;
         }
     }
@@ -331,7 +218,6 @@ void World::UnloadChunks()
     m_chunkMeshes.clear();
 
     std::cout << "World saved and unloaded.\n";
-
 }
 
 // ───── Raycast CRUD ──────────────────────────────────────────────────
@@ -346,11 +232,32 @@ bool World::PlaceBlock(const RaycastHit& hit, BlockType type)
 
     glm::ivec3 target = hit.blockPos + hit.normal;
 
+	// No placing inside solid blocks
     if (IsSolid(target.x, target.y, target.z))
         return false;
 
-    SetBlock(target.x, target.y, target.z, type);
+    // TODO - ACTIVE DEVELOPMENT
+	// Log blocks have directional variants based on placement face
+    if (type == BlockType::TREE_LOG || type == BlockType::TREE_LOG_X || type == BlockType::TREE_LOG_Z)
+    {
+        if (hit.normal.x != 0)
+        {
+            type = BlockType::TREE_LOG_X;
+			std::cout << "log x\n"; 
+        }
+        else if (hit.normal.z != 0)
+        {
+            type = BlockType::TREE_LOG_Z;
+			std::cout << "log z\n";
+        }
+        else
+        {
+            type = BlockType::TREE_LOG;   // default Y orientation for top/bottom face placement
+            std::cout << "log y\n";
+        }
+    }
 
+    SetBlock(target.x, target.y, target.z, type);
     MarkNeighborChunksDirty(hit.blockPos.x, hit.blockPos.y, hit.blockPos.z);
 
     return true;
@@ -365,7 +272,6 @@ bool World::BreakBlock(const RaycastHit& hit)
     auto flags = GetDef(blockType).flags;
 
     SetBlock(hit.blockPos.x, hit.blockPos.y, hit.blockPos.z, BlockType::AIR);
-
     MarkNeighborChunksDirty(hit.blockPos.x, hit.blockPos.y, hit.blockPos.z);
 
     return true;
@@ -377,10 +283,30 @@ void World::MarkNeighborChunksDirty(int wx, int wy, int wz)
     int lx = localPos.x;
     int lz = localPos.z;
 
-    if (lx == 0) { Chunk* c = GetChunk(wx - 1, wz); if (c) c->dirty = true; }
-    if (lx == CX - 1) { Chunk* c = GetChunk(wx + 1, wz); if (c) c->dirty = true; }
-    if (lz == 0) { Chunk* c = GetChunk(wx, wz - 1); if (c) c->dirty = true; }
-    if (lz == CZ - 1) { Chunk* c = GetChunk(wx, wz + 1); if (c) c->dirty = true; }
+    if (lx == 0)
+    { 
+        Chunk* c = GetChunk(wx - 1, wz);
+        if (c)
+            c->dirty = true; 
+    }
+    if (lx == CX - 1) 
+    { 
+        Chunk* c = GetChunk(wx + 1, wz); 
+        if (c)
+            c->dirty = true;
+    }
+    if (lz == 0) 
+    { 
+        Chunk* c = GetChunk(wx, wz - 1); 
+        if (c)
+            c->dirty = true;
+    }
+    if (lz == CZ - 1) 
+    {   
+        Chunk* c = GetChunk(wx, wz + 1);
+        if (c)
+            c->dirty = true;
+    }
 }
 
 // ───── Sync ──────────────────────────────────────────────────────────
@@ -389,7 +315,7 @@ void World::SyncRenderer()
     auto getNeighbor = [&](glm::ivec2 c) -> Chunk* {
         auto it = chunks.find(c);
         return it != chunks.end() ? it->second.get() : nullptr;
-        };
+    };
 
     static const glm::ivec2 ND[4] = { {1,0},{-1,0},{0,1},{0,-1} };
 
@@ -444,9 +370,7 @@ void World::SyncRenderer()
     {
         auto it = m_chunkMeshes.find(coord);
         if (it != m_chunkMeshes.end())
-        {
             it->second.Build(verts);
-        }
     }
 }
 
@@ -477,11 +401,10 @@ void World::LoadAtlasTexture(const char* path)
     glTexImage2D(GL_TEXTURE_2D, 0, fmt, w, h, 0, fmt, GL_UNSIGNED_BYTE, data);
     glGenerateMipmap(GL_TEXTURE_2D);
 
-    // Nearest-neighbor — keeps pixel art crisp
+    // Nearest-neighbor keeps pixel art crisp
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST_MIPMAP_NEAREST);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, 2);
-    //glTexParameter f(GL_TEXTURE_2D, GL_TEXTURE_LOD_BIAS, -1.0f);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 
@@ -510,13 +433,15 @@ void World::DrawAll(const glm::mat4& proj, const glm::mat4& view)
         glm::vec3 maxP = { chunkPos.x * CX + CX, CY, chunkPos.y * CZ + CZ };
 
         // Implement frustum culling
-        if (!m_frustum.ContainsAABB(minP, maxP)) continue;
+        if (!m_frustum.ContainsAABB(minP, maxP)) 
+            continue;
 
         mesh.Draw();
     }
 }
 
 // ───── Frustum Culling ───────────────────────────────────────────────
+// Calculate planes
 void Frustum::Extract(const glm::mat4& vp)
 {
     planes[0] = glm::vec4(vp[0][3] + vp[0][0], vp[1][3] + vp[1][0], vp[2][3] + vp[2][0], vp[3][3] + vp[3][0]); // left
@@ -538,9 +463,11 @@ bool Frustum::ContainsAABB(const glm::vec3& minP, const glm::vec3& maxP) const
             plane.y >= 0 ? maxP.y : minP.y,
             plane.z >= 0 ? maxP.z : minP.z
         };
+
         if (glm::dot(glm::vec3(plane), pv) + plane.w < 0.0f)
             return false;
     }
+
     return true;
 }
 
@@ -552,7 +479,7 @@ void World::UpdateChunkStreaming(const glm::vec3& playerPos)
     if (playerChunkCoord == m_lastPlayerChunk)
     {
         bool hasAllChunksLoaded = true;
-        std::lock_guard<std::mutex> lk(m_chunkLoadQueuedMutex);
+        std::lock_guard<std::mutex> lock(m_chunkLoadQueuedMutex);
         {
             for (int dx = -m_viewDist; dx <= m_viewDist && hasAllChunksLoaded; dx++)
             {
@@ -593,19 +520,19 @@ void World::UpdateChunkStreaming(const glm::vec3& playerPos)
     // Actually unload
     for (auto& chunkCoord : chunksToUnload)
     {
-        // Guard check - if chunkCoord is also present in meshRefCount, don't unload
+        // Guard check: if chunkCoord is also present in meshRefCount, don't unload
         {
             std::lock_guard<std::mutex> lock(m_meshRefMutex);
             if (m_meshRefCount.count(chunkCoord))
-                continue;       // Deferred - retry this chunk coord next time when worker is done
+                continue;               // Deferred, retry this chunk coord next time when worker is done
         }
 
-        // Else, proceed with unloading (unload only if chunk is modified)
+        // Else, proceed with unloading (only modified chunks)
         auto it = chunks.find(chunkCoord);
         if (it != chunks.end() && it->second->modified)
         {
             // Move the chunk to the unloading queue, save worker thread will unload
-            std::lock_guard<std::mutex> lk(m_saveMutex);
+            std::lock_guard<std::mutex> lock(m_saveMutex);
             m_saveQueue.push(std::move(it->second));
             m_saveCV.notify_all();
         }
@@ -633,16 +560,10 @@ void World::UpdateChunkStreaming(const glm::vec3& playerPos)
         }
     }
 
-    // Prioritize chunks close to the player - sort the list from nearest to load first then at the end
-    std::sort(chunksToLoad.begin(), chunksToLoad.end(), [&](const glm::ivec2& a, const glm::ivec2& b) {
-        glm::ivec2 da = a - playerChunkCoord, db = b - playerChunkCoord;
-        return da.x * da.x + da.y * da.y < db.x * db.x + db.y * db.y;
-        });
-
     // Actually load
     {
-        std::lock_guard<std::mutex> lkQ(m_genChunkLoadQueueMutex);
-        std::lock_guard<std::mutex> lkS(m_chunkLoadQueuedMutex);
+        std::lock_guard<std::mutex> lockQ(m_genChunkLoadQueueMutex);
+        std::lock_guard<std::mutex> lockS(m_chunkLoadQueuedMutex);
 
         for (auto& chunkCoord : chunksToLoad)
         {
@@ -672,7 +593,7 @@ void World::CommitGeneratedChunks()
     // to local main thread memory - directly accessing staging region leads to data races
     std::unordered_map<glm::ivec2, std::unique_ptr<Chunk>, IVec2Hash> queued;
     {
-        std::lock_guard<std::mutex> lk(m_chunkLoadStagingMutex);
+        std::lock_guard<std::mutex> lock(m_chunkLoadStagingMutex);
         queued.swap(m_chunkLoadStaging);
     }
 
@@ -728,7 +649,7 @@ void World::CommitGeneratedChunks()
         * Removal must be delayed until AFTER successful promotion on the main thread.
         */
         {
-            std::lock_guard<std::mutex> lk(m_chunkLoadQueuedMutex);
+            std::lock_guard<std::mutex> lock(m_chunkLoadQueuedMutex);
             m_chunkLoadQueued.erase(coord);
         }
     }
@@ -755,26 +676,19 @@ void World::StopAllWorkers()
 
     // Join the save worker
     if (m_saveWorker.joinable())
-    {
         m_saveWorker.join();
-        std::cout << "Save worker joined.\n";
-    }
 
     // Join mesh workers
     for (auto& t : m_meshWorkers)
-    {
         if (t.joinable())
             t.join();
-    }
 
     m_meshWorkers.clear();
 
     // Join chunk load workers
     for (auto& t : m_chunkLoadWorkers)
-    {
         if (t.joinable())
             t.join();
-    }
 
     m_chunkLoadWorkers.clear();
 }
@@ -786,8 +700,8 @@ void World::ChunkLoadWorkerLoop()
         // Get the coord of the chunk to be loaded safely
         glm::ivec2 coord;
         {
-            std::unique_lock<std::mutex> lk(m_genChunkLoadQueueMutex);
-            m_genChunkLoadQueueCV.wait(lk, [&] {         // Wakeup when queue is NOT empty or when shutdown triggered
+            std::unique_lock<std::mutex> lock(m_genChunkLoadQueueMutex);
+            m_genChunkLoadQueueCV.wait(lock, [&] {         // Wakeup when queue is NOT empty or when shutdown triggered
                 return !m_genChunkLoadQueue.empty() || m_shutdown;
                 });
 
@@ -807,8 +721,8 @@ void World::ChunkLoadWorkerLoop()
 
         // Move the chunk to staged section and remove the coord from queue
         {
-            std::lock_guard<std::mutex> lk(m_chunkLoadStagingMutex);
-            m_chunkLoadStaging[coord] = std::move(chunk);        // Move semantics, O(1) operation
+            std::lock_guard<std::mutex> lock(m_chunkLoadStagingMutex);
+			m_chunkLoadStaging[coord] = std::move(chunk);        // Constant-time operation, just moving the unique_ptr
         }
     }
 }
@@ -821,22 +735,20 @@ void World::SaveWorkerLoop()
 
         // Safely get the chunk from the save queue
         {
-            std::unique_lock<std::mutex> lk(m_saveMutex);
-            m_saveCV.wait(lk, [&] {
+            std::unique_lock<std::mutex> lock(m_saveMutex);
+            m_saveCV.wait(lock, [&] {                       // Wakeup when queue is NOT empty or when shutdown triggered
                 return !m_saveQueue.empty() || m_shutdown;
-                });
+            });
 
             if (m_shutdown && m_saveQueue.empty())
                 break;
-
-            std::cout << "Saving...\n";
 
             chunk = std::move(m_saveQueue.front());
             m_saveQueue.pop();
         }
 
         // Save the chunk to disk
-        SaveChunk(*chunk);
+        SaveChunkToDisk(*chunk);
     }
 }
 
@@ -849,20 +761,20 @@ void World::MeshWorkerLoop()
     {
         // Contains information about chunk coord, pointers to 
         // current chunk and all its 4 neighbors 
-        // (no need to access map - reduced hashing)
+        // (no need to access map, this results in reduced hashing)
         MeshJob job;
 
         {
             std::unique_lock<std::mutex> lock(m_meshQueueMutex);
             m_meshQueueCV.wait(lock, [&] {          // Wait until mesh queue is empty or shutdown is NOT triggered
                 return !m_meshQueue.empty() || m_shutdown;
-                });
+            });
 
             if (m_shutdown && m_meshQueue.empty())
                 break;
 
             // Pop out a mesh job from the queue
-            // for further processing - generate mesh
+            // for further processing: generate mesh
             job = m_meshQueue.front();
             m_meshQueue.pop();
         }
@@ -878,17 +790,17 @@ void World::MeshWorkerLoop()
                     job.nPZ, job.nNZ,
                     job.nPX_PZ, job.nPX_NZ,
                     job.nNX_PZ, job.nNX_NZ,
-                    verts);
+                    verts
+                );
         }
 
         // Push verts to staging
         {
             std::lock_guard<std::mutex> lock(m_meshStagingMutex);
-            //m_meshStaging[job.coord] = (verts);
             m_meshStaging[job.coord] = std::move(verts);
         }
 
-        // Decrement refcounts - so that the chunk can be unloaded (unguard now)
+        // Decrement refcounts, so that the chunk can be unloaded (unguard now)
         {
             static const glm::ivec2 ND[4] = { {1,0},{-1,0},{0,1},{0,-1} };
             std::lock_guard<std::mutex> lock(m_meshRefMutex);

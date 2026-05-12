@@ -1022,18 +1022,6 @@
     <ClInclude Include="externals\imgui\imgui_includes.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="includes\physics\Sphere.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="includes\physics\Cuboid.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="includes\physics\PhysicsEngine.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="includes\physics\Object.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="includes\rendering\Texture2D.h">
       <Filter>Header Files</Filter>
     </ClInclude>

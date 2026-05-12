@@ -33,7 +33,9 @@ enum class BlockType : uint8_t
 	/*20*/	DANDELION,
 	/*21*/	BROWN_MUSHROOM,
 	/*22*/	RED_MUSHROOM,
-	/*23*/  GRASS
+	/*23*/  GRASS,
+	/*24*/  TREE_LOG_X,
+	/*25*/  TREE_LOG_Z
 };
 
 struct BlockInstance

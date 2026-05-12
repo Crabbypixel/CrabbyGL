@@ -67,8 +67,6 @@ private:
 	const float tickSpeed = 0.05f;
 
 	// Other variables
-	float fAccumulator = 0.0f;
-	float fPhysicsAccumulatedTime = 0.0f;
 	float fDebugTimer = 0.0f;
 
 	// Fly
@@ -398,6 +396,7 @@ public:
 	void Debug(float dt, const World& world)
 	{
 		// Prints on the screen every 500ms
+		// Nothing as of now - be happy!
 		fDebugTimer += dt;
 
 		if (fDebugTimer >= 0.5f)

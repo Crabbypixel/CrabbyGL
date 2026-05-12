@@ -475,10 +475,6 @@
     <ClInclude Include="externals\stb\stb_perlin.h" />
     <ClInclude Include="externals\stb\stb_image.h" />
     <ClInclude Include="includes\debug\ChunkDebug.h" />
-    <ClInclude Include="includes\physics\Cuboid.h" />
-    <ClInclude Include="includes\physics\Object.h" />
-    <ClInclude Include="includes\physics\PhysicsEngine.h" />
-    <ClInclude Include="includes\physics\Sphere.h" />
     <ClInclude Include="includes\player\Player.h" />
     <ClInclude Include="includes\rendering\BufferLayout.h" />
     <ClInclude Include="includes\rendering\ChunkMesh.h" />

@@ -123,7 +123,7 @@ private:
 
     // Streaming / disk
     static std::string ChunkFilePath(glm::ivec2 coord);
-    static void SaveChunk(const Chunk& chunk);
+    static void SaveChunkToDisk(const Chunk& chunk);
     static bool LoadChunkFromDisk(Chunk& chunk, glm::ivec2& coord);
 
     // Streaming state
