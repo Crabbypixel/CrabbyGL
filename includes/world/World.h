@@ -116,7 +116,7 @@ private:
     Shader* m_chunkShader = nullptr;
 
     // Chunk updates
-    void MarkNeighborChunksDirty(int wx, int wy, int wz);
+    void MarkAdjacentChunksDirty(int wx, int wy, int wz);
 
     // Returns height at location using Perlin noise
     static float GetTerrainHeight(int wx, int wz);
@@ -126,57 +126,56 @@ private:
     static void SaveChunkToDisk(const Chunk& chunk);
     static bool LoadChunkFromDisk(Chunk& chunk, glm::ivec2& coord);
 
-    // Streaming state
     int m_viewDist = 8;
     int m_unloadDist = 12;
     glm::ivec2 m_lastPlayerChunk = { INT_MAX, INT_MAX };
 
-    // Multithreading
+	// Global atomic shutdown flag for workers to exit
     std::atomic<bool> m_shutdown{ false };
+
+    // Pure CPU task: worker-safe, no data races
+    void FillChunkData(Chunk& chunk, glm::ivec2 coord);
+    void ChunkLoadWorkerLoop();
 
     // ──────── Load workers ────────
     std::vector<std::thread> m_chunkLoadWorkers;
 
-    // Job queue - main thread pushes coords to load, workers pop
-    std::queue<glm::ivec2> m_genChunkLoadQueue;
-    std::mutex m_genChunkLoadQueueMutex;
-    std::condition_variable m_genChunkLoadQueueCV;
+    // Job queue: main thread pushes coords to load, workers pop
+    std::queue<glm::ivec2> m_chunkLoadJobQueue;
+    std::mutex m_chunkLoadJobMutex;
+    std::condition_variable m_chunkLoadJobCV;
 
-    // Staging - workers push, main promotes
-    std::unordered_map<glm::ivec2, std::unique_ptr<Chunk>, IVec2Hash> m_chunkLoadStaging;
-    std::mutex m_chunkLoadStagingMutex;
+    // Staging: workers push, main promotes
+    std::unordered_map<glm::ivec2, std::unique_ptr<Chunk>, IVec2Hash> m_generatedChunkStaging;
+    std::mutex m_generatedChunkStagingMutex;
 
-    // In-flight set - prevents duplicate queuing
-    std::unordered_set<glm::ivec2, IVec2Hash> m_chunkLoadQueued;
-    std::mutex m_chunkLoadQueuedMutex;
-
-    // Pure CPU task - worker-safe, no data races
-    void FillChunkData(Chunk& chunk, glm::ivec2 coord);
-    void ChunkLoadWorkerLoop();
-
-    // ──────── Save worker ────────
-    // Save IO threading
-    std::queue<std::unique_ptr<Chunk>> m_saveQueue;
-    std::mutex m_saveMutex;
-    std::condition_variable m_saveCV;
-    std::thread m_saveWorker;
-    void SaveWorkerLoop();
+	// Prevents duplicate load scheduling: main thread only, guarded by m_chunkLoadQueuedMutex
+    std::unordered_set<glm::ivec2, IVec2Hash> m_chunkLoadReservations;
+    std::mutex m_chunkLoadReservationsMutex;
 
     // ──────── Mesh worker ────────
-    // Staging region
+    // Staging region, completed meshes gets stored here by worker threads
     std::unordered_map<glm::ivec2, std::vector<Vertex>, IVec2Hash> m_meshStaging;
     std::mutex m_meshStagingMutex;
 
     // Mesh job queue
-    std::queue<MeshJob> m_meshQueue;
-    std::mutex m_meshQueueMutex;
-    std::condition_variable m_meshQueueCV;
+    std::queue<MeshJob> m_meshJobQueue;
+    std::mutex m_meshJobMutex;
+    std::condition_variable m_meshJobCV;
 
-    // In-flight mesh coord set - main thread must NOT unload these
-    std::unordered_map<glm::ivec2, int, IVec2Hash> m_meshRefCount;
-    std::mutex m_meshRefMutex;
+	// Main thread reference counting for mesh jobs to prevent unloading chunks while they are being meshed
+    std::unordered_map<glm::ivec2, int, IVec2Hash> m_chunkMeshUsageGuards;
+    std::mutex m_chunkMeshUsageGuardMutex;
 
     // Mesh workers
     std::vector<std::thread> m_meshWorkers;
     void MeshWorkerLoop();
+
+    // ──────── Save worker ────────
+    // Save IO threading
+    std::queue<std::unique_ptr<Chunk>> m_chunkSaveQueue;
+    std::mutex m_chunkSaveMutex;
+    std::condition_variable m_chunkSaveCV;
+    std::thread m_chunkSaveWorker;
+    void SaveWorkerLoop();
 };

@@ -3,7 +3,7 @@
 
 #include <glm/glm.hpp>
 
-void ChunkMesh::Build(const std::vector<Vertex>& vertices)
+void ChunkMesh::Upload(const std::vector<Vertex>& vertices)
 {
     vertexCount = (int)vertices.size();
     if (vertexCount == 0) { valid = false; return; }

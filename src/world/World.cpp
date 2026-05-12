@@ -15,7 +15,7 @@
 World::World()
 {
     chunks.reserve(1000);
-    m_saveWorker = std::thread(&World::SaveWorkerLoop, this);
+    m_chunkSaveWorker = std::thread(&World::SaveWorkerLoop, this);
 }
 
 // ───── Coord helpers ─────────────────────────────────────────────────
@@ -258,7 +258,7 @@ bool World::PlaceBlock(const RaycastHit& hit, BlockType type)
     }
 
     SetBlock(target.x, target.y, target.z, type);
-    MarkNeighborChunksDirty(hit.blockPos.x, hit.blockPos.y, hit.blockPos.z);
+    MarkAdjacentChunksDirty(hit.blockPos.x, hit.blockPos.y, hit.blockPos.z);
 
     return true;
 }
@@ -272,12 +272,12 @@ bool World::BreakBlock(const RaycastHit& hit)
     auto flags = GetDef(blockType).flags;
 
     SetBlock(hit.blockPos.x, hit.blockPos.y, hit.blockPos.z, BlockType::AIR);
-    MarkNeighborChunksDirty(hit.blockPos.x, hit.blockPos.y, hit.blockPos.z);
+    MarkAdjacentChunksDirty(hit.blockPos.x, hit.blockPos.y, hit.blockPos.z);
 
     return true;
 }
 
-void World::MarkNeighborChunksDirty(int wx, int wy, int wz)
+void World::MarkAdjacentChunksDirty(int wx, int wy, int wz)
 {
     glm::vec3 localPos = ChunkLocalCoord(wx, wy, wz);
     int lx = localPos.x;
@@ -312,17 +312,17 @@ void World::MarkNeighborChunksDirty(int wx, int wy, int wz)
 // ───── Sync ──────────────────────────────────────────────────────────
 void World::SyncRenderer()
 {
-    auto getNeighbor = [&](glm::ivec2 c) -> Chunk* {
+    static const glm::ivec2 ND[4] = { {1,0},{-1,0},{0,1},{0,-1} };
+
+    auto getChunkFromChunkCoords = [&](glm::ivec2 c) -> Chunk* {
         auto it = chunks.find(c);
         return it != chunks.end() ? it->second.get() : nullptr;
     };
 
-    static const glm::ivec2 ND[4] = { {1,0},{-1,0},{0,1},{0,-1} };
-
     // Phase 1: Enqueue dirty chunks to mesh workers
     {
-        std::lock_guard<std::mutex> lockQ(m_meshQueueMutex);
-        std::lock_guard<std::mutex> lockR(m_meshRefMutex);
+        std::lock_guard<std::mutex> lockQ(m_meshJobMutex);
+        std::lock_guard<std::mutex> lockR(m_chunkMeshUsageGuardMutex);
 
         for (auto& [chunkPos, chunk] : chunks)
         {
@@ -331,46 +331,47 @@ void World::SyncRenderer()
                 continue;
 
             // Skip if already present
-            if (m_meshRefCount.count(chunkPos))
+            if (m_chunkMeshUsageGuards.count(chunkPos))
                 continue;
 
-            // Protect coord (+ 4 neighbors) from unload/deletion later by the main thread
-            m_meshRefCount[chunkPos]++;
+            // Protect coord (and +4 neighbors) from unload/deletion later by the main thread
+            m_chunkMeshUsageGuards[chunkPos]++;
             for (auto& nd : ND)
-                m_meshRefCount[chunkPos + nd]++;    // We check if this coord is present in worker thread, no need to check now
+                m_chunkMeshUsageGuards[chunkPos + nd]++;    // We check if this coord is present in worker thread, no need to check now
 
+			// Do this to ensure the worker thread can access the chunk data without worrying about concurrent deletion by the main thread
+			// This is used in ChunkMeshBuilder when it accesses neighbor chunk data for Ambient Occlusion (and later greedy meshing)
             MeshJob job;
             job.coord = chunkPos;
             job.chunk = chunk.get();
-            job.nPX = getNeighbor(chunkPos + glm::ivec2{ 1,  0 });
-            job.nNX = getNeighbor(chunkPos + glm::ivec2{ -1,  0 });
-            job.nPZ = getNeighbor(chunkPos + glm::ivec2{ 0,  1 });
-            job.nNZ = getNeighbor(chunkPos + glm::ivec2{ 0, -1 });
-            job.nPX_PZ = getNeighbor(chunkPos + glm::ivec2{ 1,  1 });                   // (+X, +Z)
-            job.nPX_NZ = getNeighbor(chunkPos + glm::ivec2{ 1, -1 });                   // (+X, -Z)
-            job.nNX_PZ = getNeighbor(chunkPos + glm::ivec2{ -1,  1 });                  // (-X, +Z)
-            job.nNX_NZ = getNeighbor(chunkPos + glm::ivec2{ -1, -1 });                  // (-X, -Z)
-            m_meshQueue.push(job);
+            job.nPX = getChunkFromChunkCoords(chunkPos + glm::ivec2{ 1,  0 });
+            job.nNX = getChunkFromChunkCoords(chunkPos + glm::ivec2{ -1,  0 });
+            job.nPZ = getChunkFromChunkCoords(chunkPos + glm::ivec2{ 0,  1 });
+            job.nNZ = getChunkFromChunkCoords(chunkPos + glm::ivec2{ 0, -1 });
+            job.nPX_PZ = getChunkFromChunkCoords(chunkPos + glm::ivec2{ 1,  1 });                   // (+X, +Z)
+            job.nPX_NZ = getChunkFromChunkCoords(chunkPos + glm::ivec2{ 1, -1 });                   // (+X, -Z)
+            job.nNX_PZ = getChunkFromChunkCoords(chunkPos + glm::ivec2{ -1,  1 });                  // (-X, +Z)
+            job.nNX_NZ = getChunkFromChunkCoords(chunkPos + glm::ivec2{ -1, -1 });                  // (-X, -Z)
 
+            m_meshJobQueue.push(job);
             chunk->dirty = false;
         }
     }
-    m_meshQueueCV.notify_all();
+    m_meshJobCV.notify_all();
 
-    // Phase 2: Drain mesh staging & GPU upload
-    // Move the meshes from the staging region to local main thread memory
+    // Phase 2: Drain mesh staging, move the meshes from the staging region to local main thread memory
     std::unordered_map<glm::ivec2, std::vector<Vertex>, IVec2Hash> ready;
     {
         std::lock_guard<std::mutex> lock(m_meshStagingMutex);
         ready.swap(m_meshStaging);
     }
 
-    // Actually upload meshes to the GPU
+    // Phase 3: Upload meshes to the GPU
     for (auto& [coord, verts] : ready)
     {
         auto it = m_chunkMeshes.find(coord);
         if (it != m_chunkMeshes.end())
-            it->second.Build(verts);
+            it->second.Upload(verts);
     }
 }
 
@@ -476,10 +477,11 @@ void World::UpdateChunkStreaming(const glm::vec3& playerPos)
 {
     glm::ivec2 playerChunkCoord = ChunkCoord(playerPos.x, playerPos.z);
 
+	// If the player is still in the same chunk as last update, check if all chunks in the view distance are loaded
     if (playerChunkCoord == m_lastPlayerChunk)
     {
         bool hasAllChunksLoaded = true;
-        std::lock_guard<std::mutex> lock(m_chunkLoadQueuedMutex);
+        std::lock_guard<std::mutex> lock(m_chunkLoadReservationsMutex);
         {
             for (int dx = -m_viewDist; dx <= m_viewDist && hasAllChunksLoaded; dx++)
             {
@@ -492,7 +494,7 @@ void World::UpdateChunkStreaming(const glm::vec3& playerPos)
 
                     // If player chunk is NOT found in both core chunk data or queued data for loading -> not loaded
                     // Else, proceed with load/unload below
-                    if (!chunks.count(c) && !m_chunkLoadQueued.count(c))
+                    if (!chunks.count(c) && !m_chunkLoadReservations.count(c))
                         hasAllChunksLoaded = false;
                 }
             }
@@ -513,6 +515,7 @@ void World::UpdateChunkStreaming(const glm::vec3& playerPos)
     {
         glm::ivec2 d = chunkCoord - playerChunkCoord;
 
+		// If chunk is outside the unload distance, mark for unload
         if (d.x * d.x + d.y * d.y > m_unloadDist * m_unloadDist)
             chunksToUnload.push_back(chunkCoord);
     }
@@ -520,21 +523,21 @@ void World::UpdateChunkStreaming(const glm::vec3& playerPos)
     // Actually unload
     for (auto& chunkCoord : chunksToUnload)
     {
-        // Guard check: if chunkCoord is also present in meshRefCount, don't unload
+        // Guard check: if chunkCoord is also present in meshQueue, don't unload
         {
-            std::lock_guard<std::mutex> lock(m_meshRefMutex);
-            if (m_meshRefCount.count(chunkCoord))
-                continue;               // Deferred, retry this chunk coord next time when worker is done
+            std::lock_guard<std::mutex> lock(m_chunkMeshUsageGuardMutex);
+            if (m_chunkMeshUsageGuards.count(chunkCoord))
+                continue;               // Deferred, retry unloading this chunk next time when worker is done
         }
 
         // Else, proceed with unloading (only modified chunks)
         auto it = chunks.find(chunkCoord);
         if (it != chunks.end() && it->second->modified)
         {
-            // Move the chunk to the unloading queue, save worker thread will unload
-            std::lock_guard<std::mutex> lock(m_saveMutex);
-            m_saveQueue.push(std::move(it->second));
-            m_saveCV.notify_all();
+            // Move the chunk to the save queue where the save worker thread will unload
+            std::lock_guard<std::mutex> lock(m_chunkSaveMutex);
+            m_chunkSaveQueue.push(std::move(it->second));
+            m_chunkSaveCV.notify_all();
         }
 
         // Remove chunk from memory
@@ -549,12 +552,14 @@ void World::UpdateChunkStreaming(const glm::vec3& playerPos)
     {
         for (int dz = -m_viewDist; dz <= m_viewDist; dz++)
         {
+			// If chunk is outside the view distance, skip
             if (dx * dx + dz * dz > m_viewDist * m_viewDist)
                 continue;
 
+			// Candidate chunk coord to load
             glm::ivec2 chunkCoord = { playerChunkCoord.x + dx, playerChunkCoord.y + dz };
 
-            // If chunk coord isn't present, load it
+            // If chunk coord isn't present, push to load list.
             if (!chunks.count(chunkCoord))
                 chunksToLoad.push_back(chunkCoord);
         }
@@ -562,18 +567,18 @@ void World::UpdateChunkStreaming(const glm::vec3& playerPos)
 
     // Actually load
     {
-        std::lock_guard<std::mutex> lockQ(m_genChunkLoadQueueMutex);
-        std::lock_guard<std::mutex> lockS(m_chunkLoadQueuedMutex);
+        std::lock_guard<std::mutex> lockQ(m_chunkLoadJobMutex);
+        std::lock_guard<std::mutex> lockS(m_chunkLoadReservationsMutex);
 
         for (auto& chunkCoord : chunksToLoad)
         {
             // If chunks is already queued for loading then skip
-            if (m_chunkLoadQueued.count(chunkCoord))
+            if (m_chunkLoadReservations.count(chunkCoord))
                 continue;
 
             // Queue the coord of the to-be-loaded chunk
-            m_genChunkLoadQueue.push(chunkCoord);
-            m_chunkLoadQueued.insert(chunkCoord);
+            m_chunkLoadJobQueue.push(chunkCoord);
+            m_chunkLoadReservations.insert(chunkCoord);
 
             // Mark neighboring chunks dirty because faces at chunk borders depend on adjacent chunk data
             // When a chunk changes, neighbors may need to rebuild meshes for correct face culling
@@ -584,7 +589,7 @@ void World::UpdateChunkStreaming(const glm::vec3& playerPos)
             it = chunks.find(chunkCoord + glm::ivec2{ 0,-1 }); if (it != chunks.end()) it->second->dirty = true;
         }
     }
-    m_genChunkLoadQueueCV.notify_all();
+    m_chunkLoadJobCV.notify_all();
 }
 
 void World::CommitGeneratedChunks()
@@ -593,8 +598,8 @@ void World::CommitGeneratedChunks()
     // to local main thread memory - directly accessing staging region leads to data races
     std::unordered_map<glm::ivec2, std::unique_ptr<Chunk>, IVec2Hash> queued;
     {
-        std::lock_guard<std::mutex> lock(m_chunkLoadStagingMutex);
-        queued.swap(m_chunkLoadStaging);
+        std::lock_guard<std::mutex> lock(m_generatedChunkStagingMutex);
+        queued.swap(m_generatedChunkStaging);
     }
 
     // Actually move to the core chunk data
@@ -649,13 +654,14 @@ void World::CommitGeneratedChunks()
         * Removal must be delayed until AFTER successful promotion on the main thread.
         */
         {
-            std::lock_guard<std::mutex> lock(m_chunkLoadQueuedMutex);
-            m_chunkLoadQueued.erase(coord);
+            std::lock_guard<std::mutex> lock(m_chunkLoadReservationsMutex);
+            m_chunkLoadReservations.erase(coord);
         }
     }
 }
 
 // ───── Multithreading ───────────────────────────────────────────────
+// Start and Stop workers
 void World::StartChunkLoadWorkers(int count)
 {
     m_shutdown = false;
@@ -663,6 +669,11 @@ void World::StartChunkLoadWorkers(int count)
         m_chunkLoadWorkers.emplace_back([this] { ChunkLoadWorkerLoop(); });
 }
 
+void World::StartMeshWorkers(int count = 2)
+{
+    for (int i = 0; i < count; i++)
+        m_meshWorkers.emplace_back([this] { MeshWorkerLoop(); });
+}
 
 void World::StopAllWorkers()
 {
@@ -670,13 +681,13 @@ void World::StopAllWorkers()
     m_shutdown = true;
 
     // Wake all sleeping workers so they exit
-    m_genChunkLoadQueueCV.notify_all();
-    m_saveCV.notify_all();
-    m_meshQueueCV.notify_all();
+    m_chunkLoadJobCV.notify_all();
+    m_chunkSaveCV.notify_all();
+    m_meshJobCV.notify_all();
 
     // Join the save worker
-    if (m_saveWorker.joinable())
-        m_saveWorker.join();
+    if (m_chunkSaveWorker.joinable())
+        m_chunkSaveWorker.join();
 
     // Join mesh workers
     for (auto& t : m_meshWorkers)
@@ -693,6 +704,7 @@ void World::StopAllWorkers()
     m_chunkLoadWorkers.clear();
 }
 
+// Worker loops
 void World::ChunkLoadWorkerLoop()
 {
     while (true)
@@ -700,16 +712,16 @@ void World::ChunkLoadWorkerLoop()
         // Get the coord of the chunk to be loaded safely
         glm::ivec2 coord;
         {
-            std::unique_lock<std::mutex> lock(m_genChunkLoadQueueMutex);
-            m_genChunkLoadQueueCV.wait(lock, [&] {         // Wakeup when queue is NOT empty or when shutdown triggered
-                return !m_genChunkLoadQueue.empty() || m_shutdown;
-                });
+            std::unique_lock<std::mutex> lock(m_chunkLoadJobMutex);
+            m_chunkLoadJobCV.wait(lock, [&] {         // Wakeup when queue is NOT empty or when shutdown triggered
+                return !m_chunkLoadJobQueue.empty() || m_shutdown;
+            });
 
-            if (m_shutdown && m_genChunkLoadQueue.empty())
+            if (m_shutdown && m_chunkLoadJobQueue.empty())
                 break;
 
-            coord = m_genChunkLoadQueue.front();
-            m_genChunkLoadQueue.pop();
+            coord = m_chunkLoadJobQueue.front();
+            m_chunkLoadJobQueue.pop();
         }
 
         // Fill into worker-local chunk
@@ -721,34 +733,9 @@ void World::ChunkLoadWorkerLoop()
 
         // Move the chunk to staged section and remove the coord from queue
         {
-            std::lock_guard<std::mutex> lock(m_chunkLoadStagingMutex);
-			m_chunkLoadStaging[coord] = std::move(chunk);        // Constant-time operation, just moving the unique_ptr
+            std::lock_guard<std::mutex> lock(m_generatedChunkStagingMutex);
+            m_generatedChunkStaging[coord] = std::move(chunk);        // Constant-time operation, just moving the unique_ptr
         }
-    }
-}
-
-void World::SaveWorkerLoop()
-{
-    while (true)
-    {
-        std::unique_ptr<Chunk> chunk;
-
-        // Safely get the chunk from the save queue
-        {
-            std::unique_lock<std::mutex> lock(m_saveMutex);
-            m_saveCV.wait(lock, [&] {                       // Wakeup when queue is NOT empty or when shutdown triggered
-                return !m_saveQueue.empty() || m_shutdown;
-            });
-
-            if (m_shutdown && m_saveQueue.empty())
-                break;
-
-            chunk = std::move(m_saveQueue.front());
-            m_saveQueue.pop();
-        }
-
-        // Save the chunk to disk
-        SaveChunkToDisk(*chunk);
     }
 }
 
@@ -765,18 +752,18 @@ void World::MeshWorkerLoop()
         MeshJob job;
 
         {
-            std::unique_lock<std::mutex> lock(m_meshQueueMutex);
-            m_meshQueueCV.wait(lock, [&] {          // Wait until mesh queue is empty or shutdown is NOT triggered
-                return !m_meshQueue.empty() || m_shutdown;
+            std::unique_lock<std::mutex> lock(m_meshJobMutex);
+            m_meshJobCV.wait(lock, [&] {          // Wait until mesh queue is empty or shutdown is NOT triggered
+                return !m_meshJobQueue.empty() || m_shutdown;
             });
 
-            if (m_shutdown && m_meshQueue.empty())
+            if (m_shutdown && m_meshJobQueue.empty())
                 break;
 
             // Pop out a mesh job from the queue
             // for further processing: generate mesh
-            job = m_meshQueue.front();
-            m_meshQueue.pop();
+            job = m_meshJobQueue.front();
+            m_meshJobQueue.pop();
         }
 
         // Now coord is owned, build the vertices
@@ -803,31 +790,50 @@ void World::MeshWorkerLoop()
         // Decrement refcounts, so that the chunk can be unloaded (unguard now)
         {
             static const glm::ivec2 ND[4] = { {1,0},{-1,0},{0,1},{0,-1} };
-            std::lock_guard<std::mutex> lock(m_meshRefMutex);
+            std::lock_guard<std::mutex> lock(m_chunkMeshUsageGuardMutex);
 
             // Decrement coord itself
-            m_meshRefCount[job.coord]--;
-            if (m_meshRefCount[job.coord] == 0)
-                m_meshRefCount.erase(job.coord);
+            m_chunkMeshUsageGuards[job.coord]--;
+            if (m_chunkMeshUsageGuards[job.coord] == 0)
+                m_chunkMeshUsageGuards.erase(job.coord);
 
             // Decrement neighbors
             for (auto& nd : ND)
             {
                 glm::ivec2 nb = job.coord + nd;
-                auto it = m_meshRefCount.find(nb);
-                if (it != m_meshRefCount.end())
+                auto it = m_chunkMeshUsageGuards.find(nb);
+                if (it != m_chunkMeshUsageGuards.end())
                 {
                     (it->second)--;
                     if (it->second <= 0)
-                        m_meshRefCount.erase(it->first);
+                        m_chunkMeshUsageGuards.erase(it->first);
                 }
             }
         }
     }
 }
 
-void World::StartMeshWorkers(int count = 2)
+void World::SaveWorkerLoop()
 {
-    for (int i = 0; i < count; i++)
-        m_meshWorkers.emplace_back([this] { MeshWorkerLoop(); });
+    while (true)
+    {
+        std::unique_ptr<Chunk> chunk;
+
+        // Safely get the chunk from the save queue
+        {
+            std::unique_lock<std::mutex> lock(m_chunkSaveMutex);
+            m_chunkSaveCV.wait(lock, [&] {                       // Wakeup when queue is NOT empty or when shutdown triggered
+                return !m_chunkSaveQueue.empty() || m_shutdown;
+            });
+
+            if (m_shutdown && m_chunkSaveQueue.empty())
+                break;
+
+            chunk = std::move(m_chunkSaveQueue.front());
+            m_chunkSaveQueue.pop();
+        }
+
+        // Save the chunk to disk
+        SaveChunkToDisk(*chunk);
+    }
 }

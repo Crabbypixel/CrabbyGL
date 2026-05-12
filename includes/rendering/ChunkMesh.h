@@ -7,7 +7,7 @@
 class ChunkMesh
 {
 public:
-    void Build(const std::vector<Vertex>& vertices);
+    void Upload(const std::vector<Vertex>& vertices);
     void Draw() const;
     void Destroy();
 
