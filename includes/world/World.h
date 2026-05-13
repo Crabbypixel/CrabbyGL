@@ -58,10 +58,10 @@ struct MeshJob
     Chunk* nPZ = nullptr;       // +Z neighbor
     Chunk* nNZ = nullptr;       // -Z neighbor
 
-    Chunk* nPX_PZ = nullptr;    // (+X, +Z)
-    Chunk* nPX_NZ = nullptr;    // (+X, -Z)
-    Chunk* nNX_PZ = nullptr;    // (-X, +Z)
-    Chunk* nNX_NZ = nullptr;    // (-X, -Z)
+    Chunk* nPX_PZ = nullptr;    // (+X, +Z) neighbor
+    Chunk* nPX_NZ = nullptr;    // (+X, -Z) neighbor
+    Chunk* nNX_PZ = nullptr;    // (-X, +Z) neighbor
+    Chunk* nNX_NZ = nullptr;    // (-X, -Z) neighbor
 };
 
 class World
@@ -167,7 +167,7 @@ private:
     std::mutex m_meshJobMutex;
     std::condition_variable m_meshJobCV;
 
-    // Staging region, completed meshes gets stored here by worker threads
+    // Staging: workers push generated meshes, main promotes
     std::unordered_map<glm::ivec2, std::vector<Vertex>, IVec2Hash> m_meshStaging;
     std::mutex m_meshStagingMutex;
 
