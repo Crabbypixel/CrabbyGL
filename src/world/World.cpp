@@ -312,7 +312,10 @@ void World::MarkAdjacentChunksDirty(int wx, int wy, int wz)
 // ───── Sync ──────────────────────────────────────────────────────────
 void World::SyncRenderer()
 {
-    static const glm::ivec2 ND[4] = { {1,0},{-1,0},{0,1},{0,-1} };
+    static const glm::ivec2 ALL_NEIGHBORS[8] = { 
+		{1, 0}, {-1, 0}, {0, 1}, {0, -1} 		// Cross neighbors
+		{1, 1}, {1, -1}, {-1, 1}, {-1, -1}		// Diagonal neighbors
+	};
 
     auto getChunkFromChunkCoords = [&](glm::ivec2 c) -> Chunk* {
         auto it = chunks.find(c);
@@ -336,8 +339,8 @@ void World::SyncRenderer()
 
             // Protect coord (and +4 neighbors) from unload/deletion later by the main thread
             m_chunkMeshUsageGuards[chunkPos]++;
-            for (auto& nd : ND)
-                m_chunkMeshUsageGuards[chunkPos + nd]++;    // We check if this coord is present in worker thread, no need to check now
+            for (auto& neighborPos : ALL_NEIGHBORS)
+                m_chunkMeshUsageGuards[chunkPos + neighborPos]++;    // We check if this coord is present in worker thread, no need to check now
 
 			// Do this to ensure the worker thread can access the chunk data without worrying about concurrent deletion by the main thread
 			// This is used in ChunkMeshBuilder when it accesses neighbor chunk data for Ambient Occlusion (and later greedy meshing)
