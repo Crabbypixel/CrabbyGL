@@ -749,8 +749,9 @@ void World::MeshWorkerLoop()
         // Contains information about chunk coord, pointers to 
         // current chunk and all its 4 neighbors 
         // (no need to access map, this results in reduced hashing)
-        MeshJob job;
 
+		// 1) Obtain chunk to mesh
+        MeshJob job;
         {
             std::unique_lock<std::mutex> lock(m_meshJobMutex);
             m_meshJobCV.wait(lock, [&] {          // Wait until mesh queue is empty or shutdown is NOT triggered
@@ -766,7 +767,7 @@ void World::MeshWorkerLoop()
             m_meshJobQueue.pop();
         }
 
-        // Now coord is owned, build the vertices
+        // 2) Now chunk coord is owned, build the vertices
         {
             verts.clear();
 
@@ -781,13 +782,13 @@ void World::MeshWorkerLoop()
                 );
         }
 
-        // Push verts to staging
+        // 3) Push verts to staging
         {
             std::lock_guard<std::mutex> lock(m_meshStagingMutex);
             m_meshStaging[job.coord] = std::move(verts);
         }
 
-        // Decrement refcounts, so that the chunk can be unloaded (unguard now)
+        // 4) Decrement refcounts, so that the chunk can be unloaded (unguard now)
         {
             static const glm::ivec2 ND[4] = { {1,0},{-1,0},{0,1},{0,-1} };
             std::lock_guard<std::mutex> lock(m_chunkMeshUsageGuardMutex);
