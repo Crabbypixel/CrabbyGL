@@ -67,7 +67,7 @@ struct MeshJob
 class World
 {
 public:
-    // Core data
+    // Core chunk data
     std::unordered_map<glm::ivec2, std::unique_ptr<Chunk>, IVec2Hash> chunks;
 
     // Constructor
