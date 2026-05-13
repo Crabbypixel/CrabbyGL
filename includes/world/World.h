@@ -73,37 +73,40 @@ public:
     // Constructor
     World();
 
-    // Block access
+    // Load shader and texture file
+    void SetChunkShader(Shader& shader);
+    void LoadAtlasTexture(const char* path);
+
+    // Block & Chunk access
     BlockType GetBlock(int worldX, int worldY, int worldZ) const;
     void SetBlock(int worldX, int worldY, int worldZ, BlockType type);
     bool IsSolid(int worldX, int worldY, int worldZ) const;
+    static glm::ivec2 ChunkCoord(float worldX, float worldZ);
+    static glm::ivec3 ChunkLocalCoord(int worldX, int worldY, int worldZ);
 
     // Player interaction
     bool PlaceBlock(const RaycastHit& hit, BlockType type);
     bool BreakBlock(const RaycastHit& hit);
 
-    // Rendering
-    void SyncRenderer();
-    void SetChunkShader(Shader& shader);
-    void LoadAtlasTexture(const char* path);
-    void DrawAll(const glm::mat4& proj, const glm::mat4& view);
-
     // Streaming
     void UpdateChunkStreaming(const glm::vec3& playerPos);
 
-    // Save chunks
+	// Called on each frame, main thread only
+    void CommitGeneratedChunks();
+
+	// Upload vertices to the GPU
+    void SyncRenderer();
+
+	// Draw all generated meshes
+    void DrawAll(const glm::mat4& proj, const glm::mat4& view);
+
+	// Unload chunks
     void UnloadChunks();
 
-    // Helpers
-    static glm::ivec2 ChunkCoord(float worldX, float worldZ);
-    static glm::ivec3 ChunkLocalCoord(int worldX, int worldY, int worldZ);
-
-    void CommitGeneratedChunks();  // called on each frame, main thread only
-
-    // Workers
+    // Worker thread loops
     void StartChunkLoadWorkers(int count);
-    void StopAllWorkers();
     void StartMeshWorkers(int count);
+    void StopAllWorkers();
 
 private:
     // Internal chunk access
