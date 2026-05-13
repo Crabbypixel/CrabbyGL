@@ -70,8 +70,8 @@ public:
     // Core chunk data
     std::unordered_map<glm::ivec2, std::unique_ptr<Chunk>, IVec2Hash> chunks;
 
-    // Constructor
-    World();
+    World();				// Constructor
+    void UnloadChunks();	// Unload chunks
 
     // Load shader and texture file
     void SetChunkShader(Shader& shader);
@@ -88,20 +88,17 @@ public:
     bool PlaceBlock(const RaycastHit& hit, BlockType type);
     bool BreakBlock(const RaycastHit& hit);
 
-    // Streaming
+    // 1) Generate and unload chunks by sending jobs to chunk job threads
     void UpdateChunkStreaming(const glm::vec3& playerPos);
 
-	// Called on each frame, main thread only
+	// 2) Move the loaded chunks from staging region to core chunk data & mark the chunks "dirty" for meshing
     void CommitGeneratedChunks();
 
-	// Upload vertices to the GPU
+	// 3) Generate meshes (by mesh job threads), stage, push to local and upload to GPU
     void SyncRenderer();
 
-	// Draw all generated meshes
+	// 4) Draw all generated meshes - final call
     void DrawAll(const glm::mat4& proj, const glm::mat4& view);
-
-	// Unload chunks
-    void UnloadChunks();
 
     // Worker thread loops
     void StartChunkLoadWorkers(int count);
