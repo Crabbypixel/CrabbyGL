@@ -107,6 +107,7 @@ public:
 
 private:
     // Global world variables - meshes for all loaded chunks, chunk shader and atlas texture index
+	// Each chunk (chunk coord) has a corresponding chunk mesh
     std::unordered_map<glm::ivec2, ChunkMesh, IVec2Hash> m_chunkMeshes;
     Shader* m_chunkShader = nullptr;
     unsigned int m_atlasTexture = 0;
