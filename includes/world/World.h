@@ -51,8 +51,8 @@ struct MeshJob
 
     // Pointers for chunks neighboring the current chunk
     // This prevents this class to access the thread & time critical World object
-    // Decouples the mesh worker from the world state
-	// Also removes unnecessary duplicate map lookups 
+    // This also decouples the mesh worker from the world state 
+    // and removes unnecessary duplicate map lookups 
     Chunk* nPX = nullptr;       // +X neighbor
     Chunk* nNX = nullptr;       // -X neighbor
     Chunk* nPZ = nullptr;       // +Z neighbor

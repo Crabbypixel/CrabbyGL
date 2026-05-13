@@ -12,6 +12,19 @@
 #include "world/ChunkMeshBuilder.h"
 #include "rendering/Shader.h"
 
+static constexpr glm::ivec2 GUARDED_NEIGHBORS[] =
+{
+    { 1,  0 },
+    {-1,  0 },
+    { 0,  1 },
+    { 0, -1 },
+
+    { 1,  1 },
+    { 1, -1 },
+    {-1,  1 },
+    {-1, -1 }
+};
+
 World::World()
 {
     chunks.reserve(1000);
@@ -312,11 +325,6 @@ void World::MarkAdjacentChunksDirty(int wx, int wy, int wz)
 // ───── Sync ──────────────────────────────────────────────────────────
 void World::SyncRenderer()
 {
-    static const glm::ivec2 ALL_NEIGHBORS[8] = { 
-		{1, 0}, {-1, 0}, {0, 1}, {0, -1} 		// Cross neighbors
-		{1, 1}, {1, -1}, {-1, 1}, {-1, -1}		// Diagonal neighbors
-	};
-
     auto getChunkFromChunkCoords = [&](glm::ivec2 c) -> Chunk* {
         auto it = chunks.find(c);
         return it != chunks.end() ? it->second.get() : nullptr;
@@ -339,7 +347,7 @@ void World::SyncRenderer()
 
             // Protect coord (and +4 neighbors) from unload/deletion later by the main thread
             m_chunkMeshUsageGuards[chunkPos]++;
-            for (auto& neighborPos : ALL_NEIGHBORS)
+            for (auto& neighborPos : GUARDED_NEIGHBORS)
                 m_chunkMeshUsageGuards[chunkPos + neighborPos]++;    // We check if this coord is present in worker thread, no need to check now
 
 			// Do this to ensure the worker thread can access the chunk data without worrying about concurrent deletion by the main thread
@@ -586,10 +594,10 @@ void World::UpdateChunkStreaming(const glm::vec3& playerPos)
             // Mark neighboring chunks dirty because faces at chunk borders depend on adjacent chunk data
             // When a chunk changes, neighbors may need to rebuild meshes for correct face culling
             // Hence mark them dirty so the renderer will re-build the neighbor chunk meshes
-            auto it = chunks.find(chunkCoord + glm::ivec2{ 1,0 }); if (it != chunks.end()) it->second->dirty = true;
-            it = chunks.find(chunkCoord + glm::ivec2{ 0,1 }); if (it != chunks.end()) it->second->dirty = true;
-            it = chunks.find(chunkCoord + glm::ivec2{ -1,0 }); if (it != chunks.end()) it->second->dirty = true;
-            it = chunks.find(chunkCoord + glm::ivec2{ 0,-1 }); if (it != chunks.end()) it->second->dirty = true;
+            auto it = chunks.find(chunkCoord + glm::ivec2{ 1, 0 }); if (it != chunks.end()) it->second->dirty = true;
+                 it = chunks.find(chunkCoord + glm::ivec2{ 0, 1 }); if (it != chunks.end()) it->second->dirty = true;
+                 it = chunks.find(chunkCoord + glm::ivec2{-1, 0 }); if (it != chunks.end()) it->second->dirty = true;
+                 it = chunks.find(chunkCoord + glm::ivec2{ 0,-1 }); if (it != chunks.end()) it->second->dirty = true;
         }
     }
     m_chunkLoadJobCV.notify_all();
@@ -614,48 +622,21 @@ void World::CommitGeneratedChunks()
         chunks[coord]->dirty = true;
 
         /*
-        * THIS IS VERY IMPORTANT AS - IT HAS RESULTED IN A SERIOUS BUG
-        * !!! Queue cleanup must happen ONLY on the main thread after promotion.
-        *
-        * Context:
-        * - m_chunkLoadQueued tracks chunk coords that are currently scheduled or in-flight.
-        * - Gen workers:
-        *     1) generate chunk data
-        *     2) push result -> m_chunkLoadStaging (unique_ptr<Chunk>)
-        *     3) DO NOT erase from m_chunkLoadQueued
-        *
-        * Why NOT erase in worker thread?
-        * There exists a critical race window:
-        *
-        *   Worker thread:
-        *     push to staging
-        *     erase coord from m_chunkLoadQueued   <- (BAD if done here)
-        *
-        *   Main thread (same frame):
-        *     chunks.count(coord) == 0      (not promoted yet)
-        *     m_chunkLoadQueued.count(coord) == 0
-        *     → re-enqueues SAME coord
-        *
-        * Result:
-        * - Same chunk generated twice
-        * - Two unique_ptr<Chunk> created for same coord
-        * - One overwrites the other during promotion
-        * - Leads to use-after-free / dangling pointer / undefined behavior
-        *
-        * Correct ordering (this block enforces it):
-        *   Worker:   generate -> push to staging (coord remains in queued set)
-        *   Main:     promote staging -> insert into `chunks`
-        *             THEN erase coord from m_chunkLoadQueued  <- SAFE POINT
-        *
-        * Guarantee:
-        * - coord remains "reserved" until it is fully visible in `chunks`
-        * - prevents duplicate generation
-        * - closes the race window between staging and promotion
-        *
-        * Summary:
-        * m_chunkLoadQueued is not just a queue — it is a "reservation set".
-        * Removal must be delayed until AFTER successful promotion on the main thread.
-        */
+         * Release the reservation AFTER promotion, not before.
+         *
+         * m_chunkLoadReservations prevents the main thread from re-scheduling
+         * a coord that is already in-flight (queued or sitting in staging).
+         *
+         * If the worker erased the reservation inside the thread itself, a race opens:
+         *   Worker  -> pushes to staging, erases reservation
+         *   Main    -> sees coord absent from chunks AND reservations
+		 *           -> re-schedules same coord -> double generation -> Undefined Behavior
+         *
+         * Safe ordering:
+         *   Worker  -> generate -> push to staging  (reservation held)
+         *   Main    -> promote staging -> insert into chunks
+         *           -> THEN erase reservation here  <- earliest safe point
+         */
         {
             std::lock_guard<std::mutex> lock(m_chunkLoadReservationsMutex);
             m_chunkLoadReservations.erase(coord);
@@ -785,7 +766,7 @@ void World::MeshWorkerLoop()
                 );
         }
 
-        // 3) Push verts to staging
+        // 3) Push vertices to staging
         {
             std::lock_guard<std::mutex> lock(m_meshStagingMutex);
             m_meshStaging[job.coord] = std::move(verts);
@@ -793,7 +774,6 @@ void World::MeshWorkerLoop()
 
         // 4) Decrement refcounts, so that the chunk can be unloaded (unguard now)
         {
-            static const glm::ivec2 ND[4] = { {1,0},{-1,0},{0,1},{0,-1} };
             std::lock_guard<std::mutex> lock(m_chunkMeshUsageGuardMutex);
 
             // Decrement coord itself
@@ -802,9 +782,9 @@ void World::MeshWorkerLoop()
                 m_chunkMeshUsageGuards.erase(job.coord);
 
             // Decrement neighbors
-            for (auto& nd : ND)
+            for (auto& neighborPos : GUARDED_NEIGHBORS)
             {
-                glm::ivec2 nb = job.coord + nd;
+                glm::ivec2 nb = job.coord + neighborPos;
                 auto it = m_chunkMeshUsageGuards.find(nb);
                 if (it != m_chunkMeshUsageGuards.end())
                 {
