@@ -161,7 +161,7 @@ private:
 	// Called by worker thread to fill chunk - fetch from disk or generate terrain (if new chunk)
     void FillChunkData(Chunk& chunk, glm::ivec2 coord);
 
-    // ──────── Mesh worker ────────
+    // ──────── Mesh workers ────────
     // Mesh Job queue: main thread pushes coords to mesh, workers pop
     std::queue<MeshJob> m_meshJobQueue;
     std::mutex m_meshJobMutex;
