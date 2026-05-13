@@ -160,7 +160,7 @@ private:
     void FillChunkData(Chunk& chunk, glm::ivec2 coord);
 
     // ──────── Mesh workers ────────
-    // Mesh Job queue: main thread pushes coords to mesh, workers pop
+    // Mesh Job queue: main thread pushes "dirty" chunks to mesh, workers pop
     std::queue<MeshJob> m_meshJobQueue;
     std::mutex m_meshJobMutex;
     std::condition_variable m_meshJobCV;
