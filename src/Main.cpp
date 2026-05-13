@@ -17,6 +17,8 @@
 
 #include "player/Player.h"
 
+#include "physics/WorldPhysics.h"
+
 #include "rendering/VertexArray.h"
 #include "rendering/VertexBuffer.h"
 #include "rendering/BufferLayout.h"
@@ -68,6 +70,9 @@ private:
 
 	// Other variables
 	float fDebugTimer = 0.0f;
+
+	// Physics
+	WorldPhysics worldPhysics;
 
 	// Fly
 	const float DOUBLE_TAP_WINDOW = 0.3f;
@@ -245,11 +250,23 @@ public:
 
 		// Break block
 		if (GetMouseButton(Mouse::LEFT).bPressed && m_currentHit.hit)
-			world.BreakBlock(m_currentHit);
+		{
+			bool isBlockBreakValid = world.BreakBlock(m_currentHit);
+			
+			if(isBlockBreakValid)
+				worldPhysics.NotifyBlockChanged(m_currentHit.blockPos.x, m_currentHit.blockPos.y, m_currentHit.blockPos.z);
+		}
 
 		// Place block
 		if (GetMouseButton(Mouse::RIGHT).bPressed && (playerPos != raycastPlacePos) && (glm::ivec3(playerPos.x, playerPos.y + 1, playerPos.z) != raycastPlacePos) && m_currentHit.hit)
-			world.PlaceBlock(m_currentHit, selectedBlock);
+		{
+			bool isBlockPlaceValid = world.PlaceBlock(m_currentHit, selectedBlock);
+
+			if(isBlockPlaceValid)
+				worldPhysics.NotifyBlockChanged(raycastPlacePos.x, raycastPlacePos.y, raycastPlacePos.z);
+		}
+
+		worldPhysics.Update(dt, world);
 
 		// ───── Rendering ───────────────────────────────────────────────
 		// Update chunk streaming state based on player position:

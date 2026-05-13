@@ -153,6 +153,7 @@
     <ClCompile Include="externals\imgui\imgui_tables.cpp" />
     <ClCompile Include="externals\imgui\imgui_widgets.cpp" />
     <ClCompile Include="src\debug\ChunkDebug.cpp" />
+    <ClCompile Include="src\physics\WorldPhysics.cpp" />
     <ClCompile Include="src\player\Player.cpp" />
     <ClCompile Include="src\rendering\ChunkMesh.cpp" />
     <ClCompile Include="src\world\BlockRegistry.cpp" />
@@ -475,6 +476,7 @@
     <ClInclude Include="externals\stb\stb_perlin.h" />
     <ClInclude Include="externals\stb\stb_image.h" />
     <ClInclude Include="includes\debug\ChunkDebug.h" />
+    <ClInclude Include="includes\physics\WorldPhysics.h" />
     <ClInclude Include="includes\player\Player.h" />
     <ClInclude Include="includes\rendering\BufferLayout.h" />
     <ClInclude Include="includes\rendering\ChunkMesh.h" />
