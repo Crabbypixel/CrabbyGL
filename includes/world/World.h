@@ -147,7 +147,7 @@ private:
     std::unordered_map<glm::ivec2, std::unique_ptr<Chunk>, IVec2Hash> m_generatedChunkStaging;
     std::mutex m_generatedChunkStagingMutex;
 
-	// Prevents duplicate load scheduling: main thread only, guarded by m_chunkLoadQueuedMutex
+	// Prevents duplicate load scheduling: main thread only, guarded by m_chunkLoadReservationsMutex
     std::unordered_set<glm::ivec2, IVec2Hash> m_chunkLoadReservations;
     std::mutex m_chunkLoadReservationsMutex;
 
