@@ -135,11 +135,8 @@ private:
 
     // Pure CPU task: worker-safe, no data races
     void FillChunkData(Chunk& chunk, glm::ivec2 coord);
-    void ChunkLoadWorkerLoop();
 
     // ──────── Load workers ────────
-    std::vector<std::thread> m_chunkLoadWorkers;
-
     // Job queue: main thread pushes coords to load, workers pop
     std::queue<glm::ivec2> m_chunkLoadJobQueue;
     std::mutex m_chunkLoadJobMutex;
@@ -152,6 +149,10 @@ private:
 	// Prevents duplicate load scheduling: main thread only, guarded by m_chunkLoadQueuedMutex
     std::unordered_set<glm::ivec2, IVec2Hash> m_chunkLoadReservations;
     std::mutex m_chunkLoadReservationsMutex;
+
+	// Chunk workers
+    std::vector<std::thread> m_chunkLoadWorkers;
+    void ChunkLoadWorkerLoop();
 
     // ──────── Mesh worker ────────
     // Staging region, completed meshes gets stored here by worker threads
