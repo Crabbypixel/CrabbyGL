@@ -122,6 +122,9 @@ private:
     int m_unloadDist = 12;		// Chunk unload boundary
     glm::ivec2 m_lastPlayerChunk = { INT_MAX, INT_MAX };	// Previous frame player chunk pos
 
+	// Global atomic shutdown flag for workers to exit
+    std::atomic<bool> m_shutdown{ false };
+
     // Internal chunk access
     Chunk* GetChunk(int worldX, int worldZ);
     const Chunk* GetChunk(int worldX, int worldZ) const;
@@ -136,9 +139,6 @@ private:
     static std::string ChunkFilePath(glm::ivec2 coord);
     static void SaveChunkToDisk(const Chunk& chunk);
     static bool LoadChunkFromDisk(Chunk& chunk, glm::ivec2& coord);
-
-	// Global atomic shutdown flag for workers to exit
-    std::atomic<bool> m_shutdown{ false };
 
     // ──────── Load workers ────────
     // Job queue: main thread pushes coords to load, workers pop
