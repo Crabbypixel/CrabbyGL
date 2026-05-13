@@ -216,6 +216,17 @@ public:
 		// Get user controls
 		UserControls(dt);
 
+		if (GetKey('U').bPressed)
+		{
+			for (int i = 200; i < 220; i++)
+			{
+				for (int j = 200; j < 220; j++)
+				{
+					world.SetBlock(i, 150, j, BlockType::SAND);
+				}
+			}
+		}
+
 		// ───── Physics ───────────────────────────────────────────────
 		if (!bIsPaused)
 		{

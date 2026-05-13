@@ -54,6 +54,10 @@ void WorldPhysics::Tick(World& world)
 		// and mark the block below the new position dirty for future gravity updates.
 		m_nextDirtyBlocks.insert({ pos.x, pos.y + 1, pos.z });
 		m_nextDirtyBlocks.insert({ pos.x, pos.y - 1, pos.z });
+		m_nextDirtyBlocks.insert({ pos.x + 1, pos.y, pos.z });
+		m_nextDirtyBlocks.insert({ pos.x - 1, pos.y, pos.z });
+		m_nextDirtyBlocks.insert({ pos.x, pos.y, pos.z + 1 });
+		m_nextDirtyBlocks.insert({ pos.x, pos.y, pos.z - 1 });
 	}
 
 	std::swap(m_dirtyBlocks, m_nextDirtyBlocks);
