@@ -141,7 +141,7 @@ private:
     static bool LoadChunkFromDisk(Chunk& chunk, glm::ivec2& coord);
 
     // ──────── Load workers ────────
-    // Job queue: main thread pushes coords to load, workers pop
+    // Chunk Job queue: main thread pushes coords to load, workers pop
     std::queue<glm::ivec2> m_chunkLoadJobQueue;
     std::mutex m_chunkLoadJobMutex;
     std::condition_variable m_chunkLoadJobCV;
@@ -162,14 +162,14 @@ private:
     void FillChunkData(Chunk& chunk, glm::ivec2 coord);
 
     // ──────── Mesh worker ────────
-    // Staging region, completed meshes gets stored here by worker threads
-    std::unordered_map<glm::ivec2, std::vector<Vertex>, IVec2Hash> m_meshStaging;
-    std::mutex m_meshStagingMutex;
-
-    // Mesh job queue
+    // Mesh Job queue: main thread pushes coords to mesh, workers pop
     std::queue<MeshJob> m_meshJobQueue;
     std::mutex m_meshJobMutex;
     std::condition_variable m_meshJobCV;
+
+    // Staging region, completed meshes gets stored here by worker threads
+    std::unordered_map<glm::ivec2, std::vector<Vertex>, IVec2Hash> m_meshStaging;
+    std::mutex m_meshStagingMutex;
 
 	// Main thread reference counting for mesh jobs to prevent unloading chunks while they are being meshed
     std::unordered_map<glm::ivec2, int, IVec2Hash> m_chunkMeshUsageGuards;
