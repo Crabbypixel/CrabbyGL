@@ -147,7 +147,7 @@ private:
     std::unordered_map<glm::ivec2, std::unique_ptr<Chunk>, IVec2Hash> m_generatedChunkStaging;
     std::mutex m_generatedChunkStagingMutex;
 
-	// Prevents duplicate load scheduling: main thread only, guarded by m_chunkLoadReservationsMutex
+	// Prevents duplicate load scheduling: main thread only
     std::unordered_set<glm::ivec2, IVec2Hash> m_chunkLoadReservations;
     std::mutex m_chunkLoadReservationsMutex;
 
@@ -168,7 +168,7 @@ private:
     std::unordered_map<glm::ivec2, std::vector<Vertex>, IVec2Hash> m_meshStaging;
     std::mutex m_meshStagingMutex;
 
-	// Main thread reference counting for mesh jobs to prevent unloading chunks while they are being meshed
+	// List of chunks to not unload while being meshed
     std::unordered_map<glm::ivec2, int, IVec2Hash> m_chunkMeshUsageGuards;
     std::mutex m_chunkMeshUsageGuardMutex;
 
