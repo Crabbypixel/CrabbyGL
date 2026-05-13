@@ -77,12 +77,12 @@ public:
     void SetChunkShader(Shader& shader);
     void LoadAtlasTexture(const char* path);
 
-    // Block & Chunk access
+    // Block access & Chunk coord functions
     BlockType GetBlock(int worldX, int worldY, int worldZ) const;
     void SetBlock(int worldX, int worldY, int worldZ, BlockType type);
-    bool IsSolid(int worldX, int worldY, int worldZ) const;
     static glm::ivec2 ChunkCoord(float worldX, float worldZ);
     static glm::ivec3 ChunkLocalCoord(int worldX, int worldY, int worldZ);
+    bool IsSolid(int worldX, int worldY, int worldZ) const;
 
     // Player interaction
     bool PlaceBlock(const RaycastHit& hit, BlockType type);
@@ -109,36 +109,36 @@ public:
     void StopAllWorkers();
 
 private:
+    // Global world variables - meshes for all loaded chunks, chunk shader and atlas texture index
+    std::unordered_map<glm::ivec2, ChunkMesh, IVec2Hash> m_chunkMeshes;
+    Shader* m_chunkShader = nullptr;
+    unsigned int m_atlasTexture = 0;
+
+	// Frustum planes for Frustum Culling
+	Frustum m_frustum;
+
+	// World-player variables
+    int m_viewDist = 8;			// Chunk load boundary
+    int m_unloadDist = 12;		// Chunk unload boundary
+    glm::ivec2 m_lastPlayerChunk = { INT_MAX, INT_MAX };	// Previous frame player chunk pos
+
     // Internal chunk access
     Chunk* GetChunk(int worldX, int worldZ);
     const Chunk* GetChunk(int worldX, int worldZ) const;
 
-    // Rendering data
-    unsigned int m_atlasTexture = 0;
-    Frustum m_frustum;
-    std::unordered_map<glm::ivec2, ChunkMesh, IVec2Hash> m_chunkMeshes;
-    Shader* m_chunkShader = nullptr;
-
-    // Chunk updates
+    // Mark the adjacent chunk dirty if the world coord passed is at a chunk boundary 
     void MarkAdjacentChunksDirty(int wx, int wy, int wz);
 
     // Returns height at location using Perlin noise
     static float GetTerrainHeight(int wx, int wz);
 
-    // Streaming / disk
+    // Chunk streaming functions
     static std::string ChunkFilePath(glm::ivec2 coord);
     static void SaveChunkToDisk(const Chunk& chunk);
     static bool LoadChunkFromDisk(Chunk& chunk, glm::ivec2& coord);
 
-    int m_viewDist = 8;
-    int m_unloadDist = 12;
-    glm::ivec2 m_lastPlayerChunk = { INT_MAX, INT_MAX };
-
 	// Global atomic shutdown flag for workers to exit
     std::atomic<bool> m_shutdown{ false };
-
-    // Pure CPU task: worker-safe, no data races
-    void FillChunkData(Chunk& chunk, glm::ivec2 coord);
 
     // ──────── Load workers ────────
     // Job queue: main thread pushes coords to load, workers pop
@@ -157,6 +157,9 @@ private:
 	// Chunk workers
     std::vector<std::thread> m_chunkLoadWorkers;
     void ChunkLoadWorkerLoop();
+
+	// Called by worker thread to fill chunk - fetch from disk or generate terrain (if new chunk)
+    void FillChunkData(Chunk& chunk, glm::ivec2 coord);
 
     // ──────── Mesh worker ────────
     // Staging region, completed meshes gets stored here by worker threads
@@ -177,10 +180,12 @@ private:
     void MeshWorkerLoop();
 
     // ──────── Save worker ────────
-    // Save IO threading
+	// Queue holds pointers to chunk to be saved to disk
     std::queue<std::unique_ptr<Chunk>> m_chunkSaveQueue;
     std::mutex m_chunkSaveMutex;
     std::condition_variable m_chunkSaveCV;
+
+	// Use a single thread for saving chunks to disk
     std::thread m_chunkSaveWorker;
     void SaveWorkerLoop();
 };
