@@ -93,6 +93,9 @@
     <ClCompile Include="src\physics\WorldPhysics.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="src\rendering\UIRenderer.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="externals\glad\glad.h">
@@ -1073,6 +1076,9 @@
     <ClInclude Include="includes\physics\WorldPhysics.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="includes\rendering\UIRenderer.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <None Include="externals\glm\detail\func_common.inl">
@@ -1499,6 +1505,7 @@
     <None Include="imgui.ini" />
     <None Include="libraries\glfw3.dll" />
     <None Include="CrabbyGL.exe" />
+    <None Include="assets\shaders\Hotbar.glsl" />
   </ItemGroup>
   <ItemGroup>
     <Library Include="libraries\glfw3.lib" />

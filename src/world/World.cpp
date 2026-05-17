@@ -391,7 +391,7 @@ void World::SetChunkShader(Shader& shader)
 {
     m_chunkShader = &shader;
     shader.use();
-    shader.setInt("u_atlas", 2);   // single sampler, slot 2
+    shader.setInt("u_atlas", 1);   // single sampler, slot 1
 }
 
 void World::LoadAtlasTexture(const char* path)
@@ -433,7 +433,7 @@ void World::DrawAll(const glm::mat4& proj, const glm::mat4& view)
     m_chunkShader->use();
 
     // Bind textures once — shared across all chunk draw calls
-    glActiveTexture(GL_TEXTURE2); glBindTexture(GL_TEXTURE_2D, m_atlasTexture);
+    glActiveTexture(GL_TEXTURE1); glBindTexture(GL_TEXTURE_2D, m_atlasTexture);
 
     // Extract frustum planes
     m_frustum.Extract(proj * view);

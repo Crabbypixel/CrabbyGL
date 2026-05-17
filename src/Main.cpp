@@ -23,6 +23,8 @@
 #include "rendering/VertexBuffer.h"
 #include "rendering/BufferLayout.h"
 
+#include "rendering/UIRenderer.h"
+
 #include "imgui/imgui_includes.h"
 #include "imgui/imgui_internal.h"
 
@@ -73,6 +75,9 @@ private:
 
 	// Physics
 	WorldPhysics worldPhysics;
+
+	// Hotbar
+	UIRenderer UIRenderer;
 
 	// Fly
 	const float DOUBLE_TAP_WINDOW = 0.3f;
@@ -181,6 +186,9 @@ public:
 			glBindBufferBase(GL_UNIFORM_BUFFER, 0, uboMatrices);
 			// ──────────────────────────────────────────────────────────────
 		}
+
+		// Initalize hotbar UI
+		UIRenderer.Init(ScreenWidth(), ScreenHeight());
 
 		// Initialize ImGui
 		IMGUI_CHECKVERSION();
@@ -322,6 +330,9 @@ public:
 		// Crosshair
 		RenderCrosshair();
 
+		// Hotbar
+		UIRenderer.DrawHotbar();
+
 		// Bind back to the default framebuffer & draw quad keeping the texture rendered in the custom framebuffer bounded
 		glBindFramebuffer(GL_FRAMEBUFFER, 0);
 		glDisable(GL_DEPTH_TEST);
@@ -330,8 +341,8 @@ public:
 
 		quadVAO.bind();
 		framebufferShader.use();
-		framebufferShader.setInt("screenTexture", 6);
-		glActiveTexture(GL_TEXTURE6);
+		framebufferShader.setInt("screenTexture", 0);
+		glActiveTexture(GL_TEXTURE0);
 		glBindTexture(GL_TEXTURE_2D, textureColorBuffer);
 
 		glDrawArrays(GL_TRIANGLES, 0, 6);
@@ -411,6 +422,12 @@ public:
 		// Toggle Ambient Occlusion
 		if (GetKey('H').bPressed)
 			isAOEnabled = !isAOEnabled;
+
+		// Toggle player inventory
+		if (GetKey('E').bPressed)
+		{
+
+		}
 	}
 
 	void InitShaders()
@@ -429,7 +446,6 @@ public:
 
 		if (fDebugTimer >= 0.5f)
 		{
-			//std::cout << "Chunks loaded: " << world.chunks.size() << '\n';
 			fDebugTimer = 0.0f;
 		}
 	}
@@ -518,7 +534,7 @@ public:
 int main()
 {
 	Window window;
-	window.ConstructWindow(1600, 900, "OpenGL");
+	window.ConstructWindow(800, 450, "OpenGL");
 	window.Start();
 
 	std::cout << "Goodbye!" << std::endl;
