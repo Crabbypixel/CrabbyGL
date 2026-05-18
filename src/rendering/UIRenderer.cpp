@@ -43,13 +43,13 @@ void UIRenderer::Init(int screenWidth, int screenHeight)
 	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, m_hotbarEBO);
 	glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(hotbarIndices), hotbarIndices, GL_STATIC_DRAW);
 
-	// position attribute
+	// Position - 3 floats
 	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)0);
 	glEnableVertexAttribArray(0);
-	// color attribute
+	// Color - 3 floats
 	glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)(3 * sizeof(float)));
 	glEnableVertexAttribArray(1);
-	// texture coord attribute
+	// Texture Coords - 2 floats
 	glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)(6 * sizeof(float)));
 	glEnableVertexAttribArray(2);
 
