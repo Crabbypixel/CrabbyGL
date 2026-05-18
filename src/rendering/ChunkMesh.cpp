@@ -48,7 +48,9 @@ void ChunkMesh::Upload(const std::vector<Vertex>& vertices)
 
 void ChunkMesh::Draw() const
 {
-    if (!valid || vertexCount == 0) return;
+    if (!valid || vertexCount == 0)
+        return;
+    
     glBindVertexArray(m_VAO);
     glDrawArrays(GL_TRIANGLES, 0, vertexCount);
     glBindVertexArray(0);
