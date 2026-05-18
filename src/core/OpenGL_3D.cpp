@@ -222,7 +222,6 @@ void OpenGL_3D::ConstructWindow(int width, int height, std::string windowName)
 
 	// Disable cursor
 	glfwSetCursorPos(window, m_width / 2.0f, m_height / 2.0f);
-	//glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
 
 	// Disable V-Sync (to achieve 60+ fps)
 	// Comment this out to get 60 fps (max)
@@ -238,11 +237,6 @@ void OpenGL_3D::ConstructWindow(int width, int height, std::string windowName)
 	// Enable z-buffer
 	glEnable(GL_DEPTH_TEST);          // Enable depth testing
 	glDepthFunc(GL_LESS);
-
-	// Enable face-culling
-	//glEnable(GL_CULL_FACE);         // Enable face culling
-	//glCullFace(GL_BACK);            // Cull back faces
-	//glFrontFace(GL_CCW);            // Define front faces as counter-clockwise
 
 	// Enable multi-sampling (usually enabled, good to enable it ourselves anyways)
 	glEnable(GL_MULTISAMPLE);
@@ -281,11 +275,11 @@ void OpenGL_3D::Start()
 		// Set cursor mode
 		glfwSetInputMode(window, GLFW_CURSOR, (bIsPaused ? GLFW_CURSOR_NORMAL : GLFW_CURSOR_DISABLED));
 
+		// Initiate shutdown when window is closed
 		if (glfwWindowShouldClose(window))
 			m_bIsRunning = false;
 
-		//glfwPollEvents();
-		glfwWaitEvents();
+		glfwPollEvents();
 	}
 
 	// Wait until the renderer thread exits
