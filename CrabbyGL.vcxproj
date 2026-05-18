@@ -658,6 +658,9 @@
   </ItemGroup>
   <ItemGroup>
     <Image Include="assets\CrabbyGL.png" />
+    <Image Include="assets\textures\hotbar.png" />
+    <Image Include="assets\textures\hotbar_selector.png" />
+    <Image Include="assets\textures\textures.png" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
