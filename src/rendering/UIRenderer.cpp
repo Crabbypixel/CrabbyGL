@@ -17,9 +17,9 @@ void UIRenderer::Init(int screenWidth, int screenHeight)
 	float hotbarVertices[] =
 	{
 		x + w, y + h, 0.0f,   1,1,1,   1,1,
-		x + w, y,   0.0f,   1,1,1,   1,0,
-		x,   y,   0.0f,   1,1,1,   0,0,
-		x,   y + h, 0.0f,   1,1,1,   0,1
+		x + w, y,     0.0f,   1,1,1,   1,0,
+		x,     y,     0.0f,   1,1,1,   0,0,
+		x,     y + h, 0.0f,   1,1,1,   0,1
 	};
 
 	unsigned int hotbarIndices[] = {
@@ -99,4 +99,5 @@ UIRenderer::~UIRenderer()
 	glDeleteVertexArrays(1, &m_hotbarVAO);
 	glDeleteBuffers(1, &m_hotbarVBO);
 	glDeleteBuffers(1, &m_hotbarEBO);
+	glDeleteTextures(1, &hotbarTexture);
 }
