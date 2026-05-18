@@ -153,7 +153,7 @@ void ChunkMeshBuilder::EmitCross(std::vector<Vertex>& verts, const glm::ivec3& w
                 tint,
                 0.0f,   // no overlay
                 0.6f    // ao = full bright
-                });
+            });
         };
 
     emit(CROSS_VERTS1, FWD);  emit(CROSS_VERTS2, REV);
@@ -239,9 +239,10 @@ void ChunkMeshBuilder::AddFace(std::vector<Vertex>& verts, const glm::ivec3& wor
             blockInfo.tint,
             useOverlay ? 1.0f : 0.0f,
             ao[i] / 3.0f
-            });
+        });
     }
 }
+
 
 // Builds mesh for chunks
 void ChunkMeshBuilder::Build(const Chunk& chunk, const Chunk* nPX, const Chunk* nNX, const Chunk* nPZ, const Chunk* nNZ, const Chunk* nPX_PZ, const Chunk* nPX_NZ, const Chunk* nNX_PZ, const Chunk* nNX_NZ, std::vector<Vertex>& outVertices)

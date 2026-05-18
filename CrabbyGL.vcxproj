@@ -153,8 +153,10 @@
     <ClCompile Include="externals\imgui\imgui_tables.cpp" />
     <ClCompile Include="externals\imgui\imgui_widgets.cpp" />
     <ClCompile Include="src\debug\ChunkDebug.cpp" />
+    <ClCompile Include="src\physics\WorldPhysics.cpp" />
     <ClCompile Include="src\player\Player.cpp" />
     <ClCompile Include="src\rendering\ChunkMesh.cpp" />
+    <ClCompile Include="src\rendering\UIRenderer.cpp" />
     <ClCompile Include="src\world\BlockRegistry.cpp" />
     <ClCompile Include="src\world\Chunk.cpp" />
     <ClCompile Include="src\world\ChunkMeshBuilder.cpp" />
@@ -475,11 +477,13 @@
     <ClInclude Include="externals\stb\stb_perlin.h" />
     <ClInclude Include="externals\stb\stb_image.h" />
     <ClInclude Include="includes\debug\ChunkDebug.h" />
+    <ClInclude Include="includes\physics\WorldPhysics.h" />
     <ClInclude Include="includes\player\Player.h" />
     <ClInclude Include="includes\rendering\BufferLayout.h" />
     <ClInclude Include="includes\rendering\ChunkMesh.h" />
     <ClInclude Include="includes\rendering\IndexBuffer.h" />
     <ClInclude Include="includes\rendering\Texture2D.h" />
+    <ClInclude Include="includes\rendering\UIRenderer.h" />
     <ClInclude Include="includes\utils\Random.h" />
     <ClInclude Include="includes\rendering\Shader.h" />
     <ClInclude Include="includes\rendering\VertexArray.h" />
@@ -501,6 +505,7 @@
     <None Include="assets\shaders\ChunkDebug.glsl" />
     <None Include="assets\shaders\ChunkMesh.glsl" />
     <None Include="assets\shaders\Crosshair.glsl" />
+    <None Include="assets\shaders\Hotbar.glsl" />
     <None Include="assimp-vc143-mtd.dll" />
     <None Include="CrabbyGL.exe" />
     <None Include="externals\glm\detail\func_common.inl" />

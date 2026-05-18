@@ -17,9 +17,13 @@
 
 #include "player/Player.h"
 
+#include "physics/WorldPhysics.h"
+
 #include "rendering/VertexArray.h"
 #include "rendering/VertexBuffer.h"
 #include "rendering/BufferLayout.h"
+
+#include "rendering/UIRenderer.h"
 
 #include "imgui/imgui_includes.h"
 #include "imgui/imgui_internal.h"
@@ -68,6 +72,12 @@ private:
 
 	// Other variables
 	float fDebugTimer = 0.0f;
+
+	// Physics
+	WorldPhysics worldPhysics;
+
+	// Hotbar
+	UIRenderer UIRenderer;
 
 	// Fly
 	const float DOUBLE_TAP_WINDOW = 0.3f;
@@ -177,6 +187,9 @@ public:
 			// ──────────────────────────────────────────────────────────────
 		}
 
+		// Initalize hotbar UI
+		UIRenderer.Init(ScreenWidth(), ScreenHeight());
+
 		// Initialize ImGui
 		IMGUI_CHECKVERSION();
 		ImGui::CreateContext();
@@ -210,6 +223,17 @@ public:
 
 		// Get user controls
 		UserControls(dt);
+
+		if (GetKey('U').bPressed)
+		{
+			for (int i = 200; i < 220; i++)
+			{
+				for (int j = 200; j < 220; j++)
+				{
+					world.SetBlock(i, 150, j, BlockType::SAND);
+				}
+			}
+		}
 
 		// ───── Physics ───────────────────────────────────────────────
 		if (!bIsPaused)
@@ -245,11 +269,23 @@ public:
 
 		// Break block
 		if (GetMouseButton(Mouse::LEFT).bPressed && m_currentHit.hit)
-			world.BreakBlock(m_currentHit);
+		{
+			bool isBlockBreakValid = world.BreakBlock(m_currentHit);
+			
+			if(isBlockBreakValid)
+				worldPhysics.NotifyBlockChanged(m_currentHit.blockPos.x, m_currentHit.blockPos.y, m_currentHit.blockPos.z);
+		}
 
 		// Place block
 		if (GetMouseButton(Mouse::RIGHT).bPressed && (playerPos != raycastPlacePos) && (glm::ivec3(playerPos.x, playerPos.y + 1, playerPos.z) != raycastPlacePos) && m_currentHit.hit)
-			world.PlaceBlock(m_currentHit, selectedBlock);
+		{
+			bool isBlockPlaceValid = world.PlaceBlock(m_currentHit, selectedBlock);
+
+			if(isBlockPlaceValid)
+				worldPhysics.NotifyBlockChanged(raycastPlacePos.x, raycastPlacePos.y, raycastPlacePos.z);
+		}
+
+		worldPhysics.Update(dt, world);
 
 		// ───── Rendering ───────────────────────────────────────────────
 		// Update chunk streaming state based on player position:
@@ -294,6 +330,9 @@ public:
 		// Crosshair
 		RenderCrosshair();
 
+		// Hotbar
+		UIRenderer.DrawHotbar();
+
 		// Bind back to the default framebuffer & draw quad keeping the texture rendered in the custom framebuffer bounded
 		glBindFramebuffer(GL_FRAMEBUFFER, 0);
 		glDisable(GL_DEPTH_TEST);
@@ -302,8 +341,8 @@ public:
 
 		quadVAO.bind();
 		framebufferShader.use();
-		framebufferShader.setInt("screenTexture", 6);
-		glActiveTexture(GL_TEXTURE6);
+		framebufferShader.setInt("screenTexture", 0);
+		glActiveTexture(GL_TEXTURE0);
 		glBindTexture(GL_TEXTURE_2D, textureColorBuffer);
 
 		glDrawArrays(GL_TRIANGLES, 0, 6);
@@ -383,6 +422,12 @@ public:
 		// Toggle Ambient Occlusion
 		if (GetKey('H').bPressed)
 			isAOEnabled = !isAOEnabled;
+
+		// Toggle player inventory
+		if (GetKey('E').bPressed)
+		{
+
+		}
 	}
 
 	void InitShaders()
@@ -401,7 +446,6 @@ public:
 
 		if (fDebugTimer >= 0.5f)
 		{
-			//std::cout << "Chunks loaded: " << world.chunks.size() << '\n';
 			fDebugTimer = 0.0f;
 		}
 	}
@@ -490,7 +534,7 @@ public:
 int main()
 {
 	Window window;
-	window.ConstructWindow(1600, 900, "OpenGL");
+	window.ConstructWindow(800, 450, "OpenGL");
 	window.Start();
 
 	std::cout << "Goodbye!" << std::endl;
