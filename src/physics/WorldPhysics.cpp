@@ -64,7 +64,7 @@ void WorldPhysics::Tick(World& world)
 	m_nextDirtyBlocks.clear();
 }
 
-bool WorldPhysics::IsGravityBlock(BlockType type)
+bool WorldPhysics::IsGravityBlock(BlockType type) noexcept
 {
 	return type == BlockType::SAND || type == BlockType::GRAVEL;
 }

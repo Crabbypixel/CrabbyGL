@@ -6,6 +6,8 @@ class World;
 class Player
 {
 public:
+    Player() = default;
+
     glm::vec3 pos = glm::vec3(0.0f, 10.0f, 0.0f);  // feet
     glm::vec3 vel = glm::vec3(0.0f);
     bool onGround = false;
@@ -28,10 +30,11 @@ public:
         const World& world
     );
 
-    glm::vec3 EyePos() const { return pos + glm::vec3(0.0f, EYE_OFF, 0.0f); }
+	[[nodiscard]]
+    glm::vec3 EyePos() const noexcept { return pos + glm::vec3(0.0f, EYE_OFF, 0.0f); }
 
 private:
-    void  ResolveX(const World& world);
-    void  ResolveY(const World& world);
-    void  ResolveZ(const World& world);
+    void ResolveX(const World& world);
+    void ResolveY(const World& world);
+    void ResolveZ(const World& world);
 };

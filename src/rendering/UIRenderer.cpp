@@ -16,10 +16,10 @@ void UIRenderer::Init(int screenWidth, int screenHeight)
 
 	float hotbarVertices[] =
 	{
-		x + w, y + h, 0.0f,   1,1,1,   1,1,
-		x + w, y,     0.0f,   1,1,1,   1,0,
-		x,     y,     0.0f,   1,1,1,   0,0,
-		x,     y + h, 0.0f,   1,1,1,   0,1
+		x + w, y + h, 0.0f,   1,1,
+		x + w, y,     0.0f,   1,0,
+		x,     y,     0.0f,   0,0,
+		x,     y + h, 0.0f,   0,1
 	};
 
 	unsigned int hotbarIndices[] = {
@@ -27,14 +27,14 @@ void UIRenderer::Init(int screenWidth, int screenHeight)
 		1, 2, 3    // second triangle
 	};
 
-	
+
 	matProjection = glm::ortho(0.0f, (float)screenWidth, 0.0f, (float)screenHeight, -1.0f, 1.0f);
 
 	// Load
 	glGenVertexArrays(1, &m_hotbarVAO);
 	glGenBuffers(1, &m_hotbarVBO);
 	glGenBuffers(1, &m_hotbarEBO);
-	
+
 	glBindVertexArray(m_hotbarVAO);
 
 	glBindBuffer(GL_ARRAY_BUFFER, m_hotbarVBO);
@@ -43,15 +43,12 @@ void UIRenderer::Init(int screenWidth, int screenHeight)
 	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, m_hotbarEBO);
 	glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(hotbarIndices), hotbarIndices, GL_STATIC_DRAW);
 
-	// Position - 3 floats
-	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)0);
+	// position attribute
+	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void*)0);
 	glEnableVertexAttribArray(0);
-	// Color - 3 floats
-	glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)(3 * sizeof(float)));
+	// texture coord attribute
+	glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void*)(3 * sizeof(float)));
 	glEnableVertexAttribArray(1);
-	// Texture Coords - 2 floats
-	glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)(6 * sizeof(float)));
-	glEnableVertexAttribArray(2);
 
 	// Textures
 	glGenTextures(1, &hotbarTexture);
@@ -59,12 +56,12 @@ void UIRenderer::Init(int screenWidth, int screenHeight)
 
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 
 	// Load and generate the texture
 	int width, height, nrChannels;
-	unsigned char* data = stbi_load("assets/textures/Hotbar.png", &width, &height, &nrChannels, 0);
+	unsigned char* data = stbi_load("assets/textures/hotbar.png", &width, &height, &nrChannels, 0);
 
 	if (data)
 	{
@@ -81,7 +78,7 @@ void UIRenderer::Init(int screenWidth, int screenHeight)
 	hotbarShader.load("assets/shaders/Hotbar.glsl");
 }
 
-void UIRenderer::DrawHotbar()
+void UIRenderer::DrawHotbar() noexcept
 {
 	hotbarShader.use();
 	hotbarShader.setInt("hotbarTexture", 2);
@@ -94,10 +91,9 @@ void UIRenderer::DrawHotbar()
 	glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
 }
 
-UIRenderer::~UIRenderer()
+UIRenderer::~UIRenderer() noexcept
 {
 	glDeleteVertexArrays(1, &m_hotbarVAO);
 	glDeleteBuffers(1, &m_hotbarVBO);
 	glDeleteBuffers(1, &m_hotbarEBO);
-	glDeleteTextures(1, &hotbarTexture);
 }

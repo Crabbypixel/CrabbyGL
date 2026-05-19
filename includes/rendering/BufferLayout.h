@@ -23,14 +23,20 @@ public:
 	BufferLayout() : stride{ 0 }, location{ 0 }
 	{}
 
+	// Non-copyable, non-movable
+	BufferLayout(const BufferLayout&) = delete;
+	BufferLayout(BufferLayout&&) = delete;
+	BufferLayout& operator=(const BufferLayout&) = delete;
+	BufferLayout& operator=(BufferLayout&&) = delete;
+
 	template<typename T>
 	void setBufferLayout(VertexArray& va, VertexBuffer<T>& buffer, IndexBuffer& indexBuffer, int count, BufferType type, bool resetStride = false);
 
 	template<typename T>
 	void setBufferLayout(VertexArray& va, VertexBuffer<T>& buffer, int count, BufferType type);
 
-	//template<typename T>
-	int getLocation() { return location; }
+	[[nodiscard]]
+	int getLocation() const noexcept { return location; }
 
 private:
 	int getSizeFromType(BufferType type);

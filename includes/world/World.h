@@ -28,7 +28,7 @@ struct BlockInstance;
 
 struct IVec2Hash
 {
-    size_t operator()(const glm::ivec2& v) const
+    size_t operator()(const glm::ivec2& v) const noexcept
     {
         size_t h1 = std::hash<int>()(v.x);
         size_t h2 = std::hash<int>()(v.y);
@@ -70,7 +70,14 @@ public:
     // Core chunk data
     std::unordered_map<glm::ivec2, std::unique_ptr<Chunk>, IVec2Hash> chunks;
 
-    World();				// Constructor
+    World(); // Constructor
+
+	// Non-copyable, non-movable as it manages worker threads and has unique ownership of chunks
+	World(const World&) = delete;
+	World(World&&) = delete;
+	World& operator=(const World&) = delete;
+	World& operator=(World&&) = delete;
+
     void UnloadChunks();	// Unload chunks
 
     // Load shader and texture file

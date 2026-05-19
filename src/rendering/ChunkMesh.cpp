@@ -3,7 +3,7 @@
 
 #include <glm/glm.hpp>
 
-void ChunkMesh::Upload(const std::vector<Vertex>& vertices)
+void ChunkMesh::Upload(const std::vector<Vertex>& vertices) noexcept
 {
     vertexCount = (int)vertices.size();
     if (vertexCount == 0) { valid = false; return; }
@@ -56,7 +56,7 @@ void ChunkMesh::Draw() const
     glBindVertexArray(0);
 }
 
-void ChunkMesh::Destroy()
+void ChunkMesh::Destroy() noexcept
 {
     if (m_VAO) { glDeleteVertexArrays(1, &m_VAO); m_VAO = 0; }
     if (m_VBO) { glDeleteBuffers(1, &m_VBO);      m_VBO = 0; }

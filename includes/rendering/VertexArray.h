@@ -10,11 +10,11 @@ private:
 public:
 	VertexArray() = default;
 
-	void generate();
+	void generate() noexcept;
 
-	void bind() const;
+	void bind() const noexcept;
 
-	void unbind() const;
+	void unbind() const noexcept;
 
-	void free() const;
+	~VertexArray() noexcept;
 };

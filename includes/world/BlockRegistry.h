@@ -57,8 +57,8 @@ enum BlockFlags : uint16_t
 	BLOCK_CROSS = 1 << 5
 };
 
-const BlockDef& GetDef(BlockType t);
-bool IsOpaque(BlockType t);
-bool IsTransparent(BlockType t);
-bool IsSolid(BlockType t);
-bool IsTranslucent(BlockType t);
+const BlockDef& GetDef(BlockType t) noexcept;
+bool IsOpaque(BlockType t) noexcept;
+bool IsTransparent(BlockType t) noexcept;
+bool IsSolid(BlockType t) noexcept;
+bool IsTranslucent(BlockType t) noexcept;

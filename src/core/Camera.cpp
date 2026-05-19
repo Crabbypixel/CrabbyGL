@@ -6,7 +6,7 @@
 float Camera::CAMERA_FAST_SPEED = 20.0f;
 float Camera::CAMERA_NORMAL_SPEED = 5.0f;
 
-void Camera::init(glm::vec3 vPos, glm::vec3 vFront, int screenWidth, int screenHeight)
+void Camera::Init(glm::vec3 vPos, glm::vec3 vFront, int screenWidth, int screenHeight)
 {
 	position = vPos;
 	fLastX = screenWidth / 2.0f;

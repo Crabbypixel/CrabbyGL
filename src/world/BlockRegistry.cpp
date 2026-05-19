@@ -35,32 +35,32 @@ const BlockDef BLOCK_DEFS[] =
 /*24*/  { "Log Z", { TREE_LOG_SIDES, TREE_LOG_SIDES, TREE_LOG_SIDES, TREE_LOG_SIDES, TREE_LOG_TOP, TREE_LOG_TOP }, -1, {1,1,1}, BLOCK_OPAQUE | BLOCK_SOLID, 1.5f, false },
 };
 
-const BlockDef& GetDef(BlockType t)
+const BlockDef& GetDef(BlockType t) noexcept
 {
 	return BLOCK_DEFS[(uint8_t)t];
 }
 
-bool IsCross(BlockType t)
+bool IsCross(BlockType t) noexcept
 {
 	return GetDef(t).flags & BLOCK_CROSS;
 }
 
-bool IsOpaque(BlockType t)
+bool IsOpaque(BlockType t) noexcept
 {
 	return GetDef(t).flags & BLOCK_OPAQUE;
 }
 
-bool IsTransparent(BlockType t)
+bool IsTransparent(BlockType t) noexcept
 {
 	return GetDef(t).flags & BLOCK_TRANSPARENT;
 }
 
-bool IsSolid(BlockType t)
+bool IsSolid(BlockType t) noexcept
 {
 	return GetDef(t).flags & BLOCK_SOLID;
 }
 
-bool IsTranslucent(BlockType t)
+bool IsTranslucent(BlockType t) noexcept
 {
 	return GetDef(t).flags & BLOCK_TRANSLUCENT;
 }

@@ -50,7 +50,9 @@ public:
 	Chunk() = default;
 
 	Chunk(const Chunk&) = delete;
+	Chunk(Chunk&&) = delete;
 	Chunk& operator=(const Chunk&) = delete;
+	Chunk& operator=(Chunk&&) = delete;
 
 	mutable std::shared_mutex chunkMutex;
 	BlockType blocks[CX][CY][CZ];

@@ -13,15 +13,23 @@ private:
 
 public:
     Texture2D() = default;
-    ~Texture2D();
+
+	// Non-copyable, non-movable
+	Texture2D(const Texture2D&) = delete;
+	Texture2D(Texture2D&&) = delete;
+	Texture2D& operator=(const Texture2D&) = delete;
+	Texture2D& operator=(Texture2D&&) = delete;
+
+    ~Texture2D() noexcept;
 
     void load(GLenum wrapType, GLint minFilter, GLint magFilter,
-        const std::string textureFile,
+        const std::string& textureFile,
         GLint internalFormat, GLenum format);
 
-    unsigned int getTextureID() const;
+	[[nodiscard]]
+    unsigned int getTextureID() const noexcept;
 
-    void bindTexture() const;
+    void bindTexture() const noexcept;
 
     void loadTexture(char const* path);
 };

@@ -1516,5 +1516,14 @@
     <Image Include="assets\CrabbyGL.png">
       <Filter>Resource Files</Filter>
     </Image>
+    <Image Include="assets\textures\hotbar.png">
+      <Filter>Resource Files</Filter>
+    </Image>
+    <Image Include="assets\textures\hotbar_selector.png">
+      <Filter>Resource Files</Filter>
+    </Image>
+    <Image Include="assets\textures\textures.png">
+      <Filter>Resource Files</Filter>
+    </Image>
   </ItemGroup>
 </Project>

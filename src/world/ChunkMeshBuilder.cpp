@@ -156,8 +156,8 @@ void ChunkMeshBuilder::EmitCross(std::vector<Vertex>& verts, const glm::ivec3& w
             });
         };
 
-    emit(CROSS_VERTS1, FWD);  emit(CROSS_VERTS2, REV);
-    emit(CROSS_VERTS1, FWD);  emit(CROSS_VERTS2, REV);
+    emit(CROSS_VERTS1, FWD);  emit(CROSS_VERTS1, REV);
+    emit(CROSS_VERTS2, FWD);  emit(CROSS_VERTS2, REV);
 }
 
 void ChunkMeshBuilder::AddFace(std::vector<Vertex>& verts, const glm::ivec3& worldPos, const glm::ivec3& chunkLocalPos, Face face, BlockType type, const Chunk& chunk, const Chunk* nPX, const Chunk* nNX, const Chunk* nPZ, const Chunk* nNZ, const Chunk* nPX_PZ, const Chunk* nPX_NZ, const Chunk* nNX_PZ, const Chunk* nNX_NZ)
@@ -267,11 +267,11 @@ void ChunkMeshBuilder::Build(const Chunk& chunk, const Chunk* nPX, const Chunk* 
             for (int z = 0; z < CZ; z++)
             {
                 BlockType blockType = chunk.GetUnchecked(x, y, z);
-                if (blockType == BlockType::AIR)        // If air, continue
+                if (blockType == BlockType::AIR) [[likely]]     // If air, continue
                     continue;
 
                 // Cross item
-                else if (GetDef(blockType).flags & BLOCK_CROSS)
+				else if (GetDef(blockType).flags & BLOCK_CROSS) [[unlikely]]
                 {
                     // Local world coordinates
                     glm::ivec3 worldPos = glm::ivec3(chunk_wx0 + x, y, chunk_wz0 + z);
@@ -280,7 +280,7 @@ void ChunkMeshBuilder::Build(const Chunk& chunk, const Chunk* nPX, const Chunk* 
                 }
 
                 // For rendering faces of translucent objects
-                else if (IsTranslucent(blockType))
+				else if (IsTranslucent(blockType)) [[unlikely]]
                 {
                     // Local world coordinates
                     glm::ivec3 worldPos = glm::ivec3(chunk_wx0 + x, y, chunk_wz0 + z);

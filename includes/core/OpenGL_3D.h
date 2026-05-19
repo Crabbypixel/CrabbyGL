@@ -21,8 +21,8 @@ class OpenGL_3D
 {
 private:
 	// Window width and height
-	int m_width;
-	int m_height;
+	int m_width = 0;
+	int m_height = 0;
 
 	// Window title name
 	std::string m_sAppName;
@@ -41,9 +41,9 @@ private:
 	} m_keys[MAX_KEYS] = {}, m_mouse[MAX_MOUSE_BUTTONS] = {};
 
 	// Mouse variables
-	float m_mousePosX;
-	float m_mousePosY;
-	int m_mouseScroll;
+	float m_mousePosX = 0.0f;
+	float m_mousePosY = 0.0f;
+	int m_mouseScroll = 0;
 	bool m_bMouseButtonHeld[MAX_MOUSE_BUTTONS] = { false };
 
 	// Atomic variable for running console
@@ -77,6 +77,12 @@ private:
 	void UpdateViewMatrix();
 
 public:
+	// No copying or moving - the window and OpenGL context should be unique and not duplicated
+	OpenGL_3D(const OpenGL_3D&) = delete;
+	OpenGL_3D(OpenGL_3D&&) = delete;
+	OpenGL_3D& operator=(const OpenGL_3D&) = delete;
+	OpenGL_3D& operator=(OpenGL_3D&&) = delete;
+
 	float fTimeSinceStart = 0.0f;
 	bool bFirstMouse = true;
 
@@ -90,13 +96,13 @@ public:
 	// The actual definition of uboMatrices is defined in Main.cpp
 	unsigned int uboMatrices;
 
-	int ScreenWidth() const { return m_width; }
-	int ScreenHeight() const { return m_height; }
-	float GetMousePosX() const { return m_mousePosX; }
-	float GetMousePosY() const { return m_mousePosY; }
-	Mouse GetMouseScroll() const { return (Mouse)m_mouseScroll; }
-	sKeyState GetMouseButton(Mouse button) const { return m_mouse[(int)button]; }
-	sKeyState GetKey(int nKeyID) const { return m_keys[nKeyID]; }
+	[[nodiscard]] int ScreenWidth() const noexcept { return m_width; }
+	[[nodiscard]] int ScreenHeight() const noexcept { return m_height; }
+	[[nodiscard]] float GetMousePosX() const noexcept { return m_mousePosX; }
+	[[nodiscard]] float GetMousePosY() const noexcept { return m_mousePosY; }
+	[[nodiscard]] Mouse GetMouseScroll() const noexcept { return (Mouse)m_mouseScroll; }
+	[[nodiscard]] sKeyState GetMouseButton(Mouse button) const { return m_mouse[(int)button]; }
+	[[nodiscard]] sKeyState GetKey(int nKeyID) const { return m_keys[nKeyID]; }
 
 	OpenGL_3D() : window(nullptr), m_width(0), m_height(0) {}
 

@@ -168,7 +168,7 @@ void OpenGL_3D::HandleInputs(float fElapsedTime)
 			camera.fCameraSpeed = Camera::CAMERA_NORMAL_SPEED;
 
 		if (GetKey(GLFW_KEY_HOME).bPressed)
-			camera.init(glm::vec3(0.0f, 0.0f, 3.0f), glm::vec3(0.0f, 0.0f, -1.0f), ScreenWidth(), ScreenHeight());
+			camera.Init(glm::vec3(0.0f, 0.0f, 3.0f), glm::vec3(0.0f, 0.0f, -1.0f), ScreenWidth(), ScreenHeight());
 
 		/* ------------------------------------------ - Mouse Control - ------------------------------------------ */
 		camera.ProcessMouse(GetMousePosX(), GetMousePosY(), ScreenWidth(), ScreenHeight(), bFirstMouse);

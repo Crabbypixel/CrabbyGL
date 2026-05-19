@@ -4,7 +4,7 @@
 #include "stb/stb_image.h"
 
 // Load with parameters
-void Texture2D::load(GLenum wrapType, GLint minFilter, GLint magFilter, const std::string textureFile, GLint internalFormat, GLenum format)
+void Texture2D::load(GLenum wrapType, GLint minFilter, GLint magFilter, const std::string& textureFile, GLint internalFormat, GLenum format)
 {
     glGenTextures(1, &m_TextureID);
     glBindTexture(GL_TEXTURE_2D, m_TextureID);
@@ -34,13 +34,13 @@ void Texture2D::load(GLenum wrapType, GLint minFilter, GLint magFilter, const st
     stbi_image_free(data);
 }
 
-unsigned int Texture2D::getTextureID() const
+unsigned int Texture2D::getTextureID() const noexcept
 {
     return m_TextureID;
 }
 
 // Bind texture
-void Texture2D::bindTexture() const
+void Texture2D::bindTexture() const noexcept
 {
     glBindTexture(GL_TEXTURE_2D, m_TextureID);
 }
@@ -93,6 +93,6 @@ void Texture2D::loadTexture(char const* path)
 // Destructor
 Texture2D::~Texture2D()
 {
-    std::cout << "deleting textures!\n";
-    glDeleteTextures(1, &m_TextureID);
+    if(m_TextureID != 0)
+        glDeleteTextures(1, &m_TextureID);
 }

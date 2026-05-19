@@ -10,15 +10,22 @@ private:
 public:
 	IndexBuffer() = default;
 
-	void generate();
+	// Non-copyable, non-movable
+	IndexBuffer(const IndexBuffer&) = delete;
+	IndexBuffer(IndexBuffer&&) = delete;
+	IndexBuffer& operator=(const IndexBuffer&) = delete;
+	IndexBuffer& operator=(IndexBuffer&&) = delete;
 
-	void bind() const;
+	void generate() noexcept;
 
-	void unbind() const;
+	void bind() const noexcept;
 
-	void setBuffer(size_t bytes, const void* data) const;
+	void unbind() const noexcept;
 
-	void free() const;
+	void setBuffer(size_t bytes, const void* data) const noexcept;
 
-	const unsigned int getID() const;
+	[[nodiscard]]
+	unsigned int getID() const noexcept;
+
+	void free() const noexcept;
 };
