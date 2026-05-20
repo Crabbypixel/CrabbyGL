@@ -99,8 +99,8 @@ public:
     [[nodiscard]] bool IsSolid(int worldX, int worldY, int worldZ) const;
 
     // Player interaction
-    bool PlaceBlock(const RaycastHit& hit, BlockType type);
-    bool BreakBlock(const RaycastHit& hit);
+    [[nodiscard]] bool PlaceBlock(const RaycastHit& hit, BlockType type);
+    [[nodiscard]] bool BreakBlock(const RaycastHit& hit);
 
     // 1) Generate and unload chunks by sending jobs to chunk job threads
     void UpdateChunkStreaming(const glm::vec3& playerPos);
@@ -116,7 +116,7 @@ public:
 
     // Worker thread loops
     void StartChunkLoadWorkers(int count);
-    void StartMeshWorkers(int count);
+    void StartMeshWorkers(int count = 2);
     void StopAllWorkers();
 
 private:

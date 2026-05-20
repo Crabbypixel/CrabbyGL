@@ -8,7 +8,8 @@ void ChunkMesh::Upload(const std::vector<Vertex>& vertices) noexcept
     vertexCount = (int)vertices.size();
     if (vertexCount == 0) { valid = false; return; }
 
-    if (m_VAO == 0) {
+    if (m_VAO == 0)
+    {
         glGenVertexArrays(1, &m_VAO);
         glGenBuffers(1, &m_VBO);
     }

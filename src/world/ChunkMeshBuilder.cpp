@@ -77,7 +77,7 @@ static const glm::ivec3 FACE_VERTS[6][4] = {
 // Quad -> 2 tris (convert indices into 4-vert quad)
 static const int TRI_IDX[6] = { 0,1,2, 0,2,3 };
 
-static const int GetAOState(int side1, int side2, int corner) {
+static constexpr int GetAOState(int side1, int side2, int corner) noexcept {
     if (side1 + side2 == 2)
         return 0;
 
@@ -335,7 +335,7 @@ void ChunkMeshBuilder::Build(const Chunk& chunk, const Chunk* nPX, const Chunk* 
                             else
                             {
                                 // No neighbor chunk -> face is exposed
-                                shouldRenderFace = false;
+                                shouldRenderFace = true;
                             }
                         }
 

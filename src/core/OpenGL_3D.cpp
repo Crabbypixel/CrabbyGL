@@ -419,5 +419,3 @@ OpenGL_3D::~OpenGL_3D()
 	glDeleteBuffers(1, &uboMatrices);
 	std::cout << "Destructor called" << std::endl;
 }
-
-std::atomic<bool> OpenGL_3D::m_bIsRunning(false);

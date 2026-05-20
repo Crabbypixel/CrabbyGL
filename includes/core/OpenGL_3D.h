@@ -47,7 +47,7 @@ private:
 	bool m_bMouseButtonHeld[MAX_MOUSE_BUTTONS] = { false };
 
 	// Atomic variable for running console
-	static std::atomic<bool> m_bIsRunning;
+	std::atomic<bool> m_bIsRunning{ false };
 
 protected:
 	GLFWwindow* window;

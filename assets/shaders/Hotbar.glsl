@@ -22,6 +22,6 @@ uniform sampler2D hotbarTexture;
 
 void main()
 {
-    FragColor = texture(hotbarTexture, fTexCoord);
+    FragColor = texture(hotbarTexture, fTexCoord) * 0.60f;
 }
 #endif

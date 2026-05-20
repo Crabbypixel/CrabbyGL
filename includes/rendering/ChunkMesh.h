@@ -7,7 +7,7 @@
 class ChunkMesh
 {
 public:
-    ChunkMesh() = default;
+    ChunkMesh() = default;  
 
     void Upload(const std::vector<Vertex>& vertices) noexcept;
     void Draw() const;

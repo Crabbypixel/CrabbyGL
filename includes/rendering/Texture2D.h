@@ -6,10 +6,10 @@
 class Texture2D
 {
 private:
-    unsigned int m_TextureID;
-    int m_width, m_height;
-    unsigned char* data;
-    int m_nrChannels;
+    unsigned int m_TextureID = 0;
+    int m_width = 0, m_height = 0;
+    unsigned char* data = 0;
+    int m_nrChannels = 0;
 
 public:
     Texture2D() = default;

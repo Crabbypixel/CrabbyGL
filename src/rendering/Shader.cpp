@@ -152,12 +152,12 @@ void Shader::setVec4(const std::string& name, const float& f1, const float& f2, 
 
 void Shader::setIvec4(const std::string& name, const glm::ivec4& vec) const noexcept
 {
-	glUniform4f(glGetUniformLocation(id, name.c_str()), vec.x, vec.y, vec.z, vec.w);
+	glUniform4i(glGetUniformLocation(id, name.c_str()), vec.x, vec.y, vec.z, vec.w);
 }
 
 void Shader::setIvec4(const std::string& name, const int& f1, const int& f2, const int& f3, const int& f4) const noexcept
 {
-	glUniform4f(glGetUniformLocation(id, name.c_str()), f1, f2, f3, f4);
+	glUniform4i(glGetUniformLocation(id, name.c_str()), f1, f2, f3, f4);
 }
 
 void Shader::setVec2(const std::string& name, const float& f1, const float& f2) const noexcept
@@ -197,8 +197,8 @@ unsigned int Shader::CompileShader(unsigned int type, const std::string& source,
 		glGetShaderiv(shader, GL_INFO_LOG_LENGTH, &length);
 
 		// Generate info log
-		char* message = (char*)alloca(length * sizeof(char));
-		glGetShaderInfoLog(shader, length, &length, message);
+		std::string message(length, '\0');
+		glGetShaderInfoLog(shader, length, &length, message.data());
 
 		std::cout << "[OpenGL Error] Failed to compile ";
 

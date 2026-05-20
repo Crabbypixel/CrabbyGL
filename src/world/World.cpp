@@ -149,10 +149,6 @@ void World::FillChunkData(Chunk& chunk, glm::ivec2 coord)
 
             if (cx * CX + x == 0 || cz * CZ + z == 0)
                 chunk.blocks[x][height + 1][z] = BlockType::BRICK;
-
-            float cave = stb_perlin_noise3(worldX * 0.05f, chunk.chunkPos.y * 0.1f, worldZ * 0.05f, 0, 0, 0);
-            if (cave > 0.3f && chunk.chunkPos.y > 5 && chunk.chunkPos.y < height - 3)
-                chunk.blocks[x][chunk.chunkPos.y][z] = BlockType::AIR;
         }
     }   
 
@@ -298,34 +294,32 @@ bool World::BreakBlock(const RaycastHit& hit)
 
 void World::MarkAdjacentChunksDirty(int wx, int wy, int wz)
 {
-    glm::vec3 localPos = ChunkLocalCoord(wx, wy, wz);
-    int lx = localPos.x;
-    int lz = localPos.z;
+	glm::ivec3 local = ChunkLocalCoord(wx, wy, wz);
 
-    if (lx == 0)
-    { 
-        Chunk* c = GetChunk(wx - 1, wz);
-        if (c)
-            c->dirty = true; 
-    }
-    if (lx == CX - 1) 
-    { 
-        Chunk* c = GetChunk(wx + 1, wz); 
-        if (c)
+    const bool minX = (local.x == 0);
+	const bool maxX = (local.x == CX - 1);
+
+	const bool minZ = (local.z == 0);
+	const bool maxZ = (local.z == CZ - 1);
+
+	auto markDirty = [&](int dx, int dz) {
+        if (Chunk* c = GetChunk(wx + dx, wz + dz))
             c->dirty = true;
-    }
-    if (lz == 0) 
-    { 
-        Chunk* c = GetChunk(wx, wz - 1); 
-        if (c)
-            c->dirty = true;
-    }
-    if (lz == CZ - 1) 
-    {   
-        Chunk* c = GetChunk(wx, wz + 1);
-        if (c)
-            c->dirty = true;
-    }
+	};
+
+	// Cross neighbors
+	if (minX) markDirty(-1, 0);
+	if (maxX) markDirty(1, 0);
+    
+	if (minZ) markDirty(0, -1);
+	if (maxZ) markDirty(0, 1);
+
+	// Diagonal neighbors
+	if (minX && minZ) markDirty(-1, -1);
+	if (minX && maxZ) markDirty(-1, 1);
+
+	if (maxX && minZ) markDirty(1, -1); 
+	if (maxX && maxZ) markDirty(1, 1);
 }
 
 // ───── Sync ──────────────────────────────────────────────────────────
@@ -659,7 +653,7 @@ void World::StartChunkLoadWorkers(int count)
         m_chunkLoadWorkers.emplace_back([this] { ChunkLoadWorkerLoop(); });
 }
 
-void World::StartMeshWorkers(int count = 2)
+void World::StartMeshWorkers(int count)
 {
     for (int i = 0; i < count; i++)
         m_meshWorkers.emplace_back([this] { MeshWorkerLoop(); });

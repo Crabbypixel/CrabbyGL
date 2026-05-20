@@ -8,11 +8,11 @@
 
 void UIRenderer::Init(int screenWidth, int screenHeight)
 {
-	float x = (screenWidth - 364.0f) * 0.5f;
+	float x = (screenWidth - 360.0f) * 0.5f;
 	float y = 20.0f;
 
 	float w = 364.0f;
-	float h = 44.0f;
+	float h = 40.0f;
 
 	float hotbarVertices[] =
 	{
