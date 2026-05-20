@@ -43,8 +43,17 @@ private:
 	// Mouse variables
 	float m_mousePosX = 0.0f;
 	float m_mousePosY = 0.0f;
-	int m_mouseScroll = 0;
-	bool m_bMouseButtonHeld[MAX_MOUSE_BUTTONS] = { false };
+
+	// Written by main-thread GLFW callbacks, read by renderer thread
+	// Must be atomic to avoid undefined behavior and compiler register-caching
+	std::atomic<int>  m_mouseScroll{ 0 };
+	std::atomic<bool> m_bMouseButtonHeld[MAX_MOUSE_BUTTONS]{};  // per-button
+
+	// Renderer-thread-only snapshot for m_mouseScroll, updated once per frame 
+	// by exchange(0) to drain the atomic into a stable value for the frame
+	// This can be read only once as reading this will cause it to reset to 0,
+	// as the main thread can update the scroll at any time, we want to flush out asap
+	int m_mouseScrollFrame = 0;
 
 	// Atomic variable for running console
 	std::atomic<bool> m_bIsRunning{ false };
@@ -100,7 +109,7 @@ public:
 	[[nodiscard]] int ScreenHeight() const noexcept { return m_height; }
 	[[nodiscard]] float GetMousePosX() const noexcept { return m_mousePosX; }
 	[[nodiscard]] float GetMousePosY() const noexcept { return m_mousePosY; }
-	[[nodiscard]] Mouse GetMouseScroll() const noexcept { return (Mouse)m_mouseScroll; }
+	[[nodiscard]] Mouse GetMouseScroll() const noexcept { return (Mouse)m_mouseScrollFrame; }
 	[[nodiscard]] sKeyState GetMouseButton(Mouse button) const { return m_mouse[(int)button]; }
 	[[nodiscard]] sKeyState GetKey(int nKeyID) const { return m_keys[nKeyID]; }
 
@@ -114,7 +123,7 @@ public:
 
 	void ErrorLog(const std::string& str = "");
 
-// Virtual functions
+	// Virtual functions
 protected:
 	// Has to be overridden by subclasses
 	virtual bool Setup() = 0;
@@ -123,7 +132,7 @@ protected:
 	// Optional to override
 	virtual void Destroy() {}
 
-// Private functions
+	// Private functions
 private:
 	void Error(const std::string& message);
 	void DisplayGPU();

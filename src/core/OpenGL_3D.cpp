@@ -36,6 +36,10 @@ void OpenGL_3D::RendererThread()
 		float fElapsedTime = elapsedTime.count();
 		fTimeSinceStart += fElapsedTime;
 
+		// Capture scroll atomic once per frame into a stable snapshot
+		// This also resets the atomic to 0, so the main thread can update it for the next frame without worrying about synchronization
+		m_mouseScrollFrame = m_mouseScroll.exchange(0, std::memory_order_relaxed);
+
 		// Update key and mouse states on each frame, they may be used later by the programmer
 		// 1. Update key states
 		for (int i = 0; i < MAX_KEYS; i++)
@@ -65,7 +69,8 @@ void OpenGL_3D::RendererThread()
 		// 2. Update mouse states
 		for (int i = 0; i < MAX_MOUSE_BUTTONS; i++)
 		{
-			m_mouseNewState[i] = m_bMouseButtonHeld[i];
+			// Drain the atomic button held states into the new state array for processing
+			m_mouseNewState[i] = m_bMouseButtonHeld[i].load(std::memory_order_relaxed);
 
 			m_mouse[i].bPressed = false;
 			m_mouse[i].bReleased = false;
@@ -130,9 +135,6 @@ void OpenGL_3D::RendererThread()
 			fAccumulatedTime = 0.0f;
 			iFrameCount = 0;
 		}
-
-		m_mouseScroll = 0;
-		m_mouse[2].bReleased = false;
 
 		// Swap buffers
 		glfwSwapBuffers(window);
@@ -316,18 +318,18 @@ void OpenGL_3D::mouse_callback(GLFWwindow* window, double xPos, double yPos)
 void OpenGL_3D::scroll_callback(GLFWwindow* window, double xOffset, double yOffset)
 {
 	OpenGL_3D* instance = static_cast<OpenGL_3D*>(glfwGetWindowUserPointer(window));
+
 	if ((int)yOffset == 1)
-		instance->m_mouseScroll = (int)Mouse::SCROLL_UP;
+		instance->m_mouseScroll.store((int)Mouse::SCROLL_UP, std::memory_order_relaxed);
 	else if ((int)yOffset == -1)
-		instance->m_mouseScroll = (int)Mouse::SCROLL_DOWN;
-	else
-		instance->m_mouseScroll = 0;
+		instance->m_mouseScroll.store((int)Mouse::SCROLL_DOWN, std::memory_order_relaxed);
 }
 
 void OpenGL_3D::mouse_button_callback(GLFWwindow* window, int button, int action, int mods)
 {
 	OpenGL_3D* instance = static_cast<OpenGL_3D*>(glfwGetWindowUserPointer(window));
-	instance->m_bMouseButtonHeld[button] = action;
+	if (button < MAX_MOUSE_BUTTONS)
+		instance->m_bMouseButtonHeld[button].store(action != GLFW_RELEASE, std::memory_order_relaxed);
 }
 
 void OpenGL_3D::DisplayGPU()

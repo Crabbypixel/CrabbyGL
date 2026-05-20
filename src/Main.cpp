@@ -78,6 +78,7 @@ private:
 
 	// Hotbar
 	UIRenderer UIRenderer;
+	int hotbarIndex = 0;
 
 	// Fly
 	const float DOUBLE_TAP_WINDOW = 0.3f;
@@ -327,11 +328,21 @@ public:
 		// Coordinate axis
 		RenderAxis();
 
+		//glDisable(GL_DEPTH_TEST);
+		glDepthMask(GL_FALSE);
+
 		// Crosshair
 		RenderCrosshair();
 
 		// Hotbar
 		UIRenderer.DrawHotbar();
+
+		// Hotbar selector
+
+		UIRenderer.DrawHotbarSelector(hotbarIndex);
+
+		//glEnable(GL_DEPTH_TEST);
+		glDepthMask(GL_TRUE);
 
 		// Bind back to the default framebuffer & draw quad keeping the texture rendered in the custom framebuffer bounded
 		glBindFramebuffer(GL_FRAMEBUFFER, 0);
@@ -426,7 +437,17 @@ public:
 		// Toggle player inventory
 		if (GetKey('E').bPressed)
 		{
+		}
 
+		if (GetMouseScroll() == Mouse::SCROLL_UP)
+		{
+			hotbarIndex = (hotbarIndex + 1) % 9;
+			//std::cout << "up\n";
+		}
+		else if (GetMouseScroll() == Mouse::SCROLL_DOWN)
+		{
+			hotbarIndex = (hotbarIndex - 1 + 9) % 9;
+			//std::cout << "down\n";
 		}
 	}
 

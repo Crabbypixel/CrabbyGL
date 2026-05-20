@@ -506,6 +506,7 @@
     <None Include="assets\shaders\ChunkMesh.glsl" />
     <None Include="assets\shaders\Crosshair.glsl" />
     <None Include="assets\shaders\Hotbar.glsl" />
+    <None Include="assets\shaders\Hotbar_Selector.glsl" />
     <None Include="CrabbyGL.exe" />
     <None Include="externals\glm\detail\func_common.inl" />
     <None Include="externals\glm\detail\func_common_simd.inl" />
