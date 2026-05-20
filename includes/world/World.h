@@ -30,9 +30,16 @@ struct IVec2Hash
 {
     size_t operator()(const glm::ivec2& v) const noexcept
     {
-        size_t h1 = std::hash<int>()(v.x);
-        size_t h2 = std::hash<int>()(v.y);
-        return h1 ^ (h2 * 2654435761u);
+        // Murmur3 finalizer mix — breaks clustering on grid coords
+        // XOR-shift + multiply scrambles bit patterns from axis-aligned sequences
+        size_t h = (size_t)(uint32_t)v.x;
+        h ^= (size_t)(uint32_t)v.y + 0x9e3779b9u + (h << 6) + (h >> 2);
+        h ^= h >> 16;
+        h *= 0x85ebca6bu;
+        h ^= h >> 13;
+        h *= 0xc2b2ae35u;
+        h ^= h >> 16;
+        return h;
     }
 };
 
@@ -85,11 +92,11 @@ public:
     void LoadAtlasTexture(const char* path);
 
     // Block access & Chunk coord functions
-    BlockType GetBlock(int worldX, int worldY, int worldZ) const;
+    [[nodiscard]] BlockType GetBlock(int worldX, int worldY, int worldZ) const;
     void SetBlock(int worldX, int worldY, int worldZ, BlockType type);
-    static glm::ivec2 ChunkCoord(float worldX, float worldZ);
-    static glm::ivec3 ChunkLocalCoord(int worldX, int worldY, int worldZ);
-    bool IsSolid(int worldX, int worldY, int worldZ) const;
+    [[nodiscard]] static glm::ivec2 ChunkCoord(float worldX, float worldZ);
+    [[nodiscard]] static glm::ivec3 ChunkLocalCoord(int worldX, int worldY, int worldZ);
+    [[nodiscard]] bool IsSolid(int worldX, int worldY, int worldZ) const;
 
     // Player interaction
     bool PlaceBlock(const RaycastHit& hit, BlockType type);
@@ -131,19 +138,19 @@ private:
     std::atomic<bool> m_shutdown{ false };
 
     // Internal chunk access
-    Chunk* GetChunk(int worldX, int worldZ);
-    const Chunk* GetChunk(int worldX, int worldZ) const;
+    [[nodiscard]] Chunk* GetChunk(int worldX, int worldZ);
+    [[nodiscard]] const Chunk* GetChunk(int worldX, int worldZ) const;
 
     // Mark the adjacent chunk dirty if the world coord passed is at a chunk boundary 
     void MarkAdjacentChunksDirty(int wx, int wy, int wz);
 
     // Returns height at location using Perlin noise
-    static float GetTerrainHeight(int wx, int wz);
+    [[nodiscard]] static float GetTerrainHeight(int wx, int wz);
 
     // Chunk streaming functions
     static std::string ChunkFilePath(glm::ivec2 coord);
-    static void SaveChunkToDisk(const Chunk& chunk);
-    static bool LoadChunkFromDisk(Chunk& chunk, glm::ivec2& coord);
+    [[nodiscard]] static void SaveChunkToDisk(const Chunk& chunk);
+    [[nodiscard]] static bool LoadChunkFromDisk(Chunk& chunk, glm::ivec2& coord);
 
     // ──────── Load workers ────────
     // Chunk Job queue: main thread pushes coords to load, workers pop

@@ -292,7 +292,7 @@ void ChunkMeshBuilder::Build(const Chunk& chunk, const Chunk* nPX, const Chunk* 
                         int ny = y + NORMALS[face].y;
                         int nz = z + NORMALS[face].z;
 
-                        bool shoundRenderFace = true;
+                        bool shouldRenderFace = true;
 
                         if (Chunk::InBounds(nx, ny, nz))
                         {
@@ -304,7 +304,7 @@ void ChunkMeshBuilder::Build(const Chunk& chunk, const Chunk* nPX, const Chunk* 
 
                             // Render the face if the neighbor is solid, or if it is translucent of the same type.
                             // Do NOT render if the neighbor is translucent and a different type (e.g., glass vs leaves).
-                            shoundRenderFace = !((isSolid || isTranslucent) && !(isTranslucent && neighbor != blockType));
+                            shouldRenderFace = !((isSolid || isTranslucent) && !(isTranslucent && neighbor != blockType));
                         }
                         else
                         {
@@ -329,17 +329,17 @@ void ChunkMeshBuilder::Build(const Chunk& chunk, const Chunk* nPX, const Chunk* 
                                 bool isTranslucent = IsTranslucent(neighbor);
                                 bool isSolid = IsSolid(neighbor);
 
-                                shoundRenderFace = !((isSolid || isTranslucent) &&
+                                shouldRenderFace = !((isSolid || isTranslucent) &&
                                     !(isTranslucent && neighbor != blockType));
                             }
                             else
                             {
                                 // No neighbor chunk -> face is exposed
-                                shoundRenderFace = false;
+                                shouldRenderFace = false;
                             }
                         }
 
-                        if (shoundRenderFace)
+                        if (shouldRenderFace)
                             AddFace(outVertices, worldPos, glm::ivec3{ x, y, z }, (Face)face, blockType, chunk, nPX, nNX, nPZ, nNZ, nPX_PZ, nPX_NZ, nNX_PZ, nNX_NZ);
                     }
                 }
@@ -348,7 +348,7 @@ void ChunkMeshBuilder::Build(const Chunk& chunk, const Chunk* nPX, const Chunk* 
                 else
                 {
                     // Local world coordinates
-                    glm::ivec3 worldPos = glm::vec3(chunk_wx0 + x, y, chunk_wz0 + z);
+                    glm::ivec3 worldPos = glm::ivec3(chunk_wx0 + x, y, chunk_wz0 + z);
 
                     // Check all six faces
                     for (int face = 0; face < 6; face++)

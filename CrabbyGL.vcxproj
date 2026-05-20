@@ -168,7 +168,7 @@
     <ClCompile Include="src\rendering\VertexArray.cpp" />
     <ClCompile Include="src\core\Camera.cpp" />
     <ClCompile Include="src\core\OpenGL_3D.cpp" />
-    <ClCompile Include="src\glad.c" />
+    <ClCompile Include="externals\glad\glad.c" />
     <ClCompile Include="src\Main.cpp" />
   </ItemGroup>
   <ItemGroup>
@@ -506,7 +506,6 @@
     <None Include="assets\shaders\ChunkMesh.glsl" />
     <None Include="assets\shaders\Crosshair.glsl" />
     <None Include="assets\shaders\Hotbar.glsl" />
-    <None Include="assimp-vc143-mtd.dll" />
     <None Include="CrabbyGL.exe" />
     <None Include="externals\glm\detail\func_common.inl" />
     <None Include="externals\glm\detail\func_common_simd.inl" />

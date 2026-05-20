@@ -123,7 +123,7 @@ void OpenGL_3D::RendererThread()
 			if (window)
 			{
 				char s[32];
-				sprintf_s(s, 32, "%s : %d FPS", m_sAppName.c_str(), fps);
+				snprintf(s, 32, "%s : %d FPS", m_sAppName.c_str(), fps);
 				glfwSetWindowTitle(window, s);
 			}
 
@@ -161,11 +161,6 @@ void OpenGL_3D::HandleInputs(float fElapsedTime)
 			fFov = 80.0f;
 			UpdateProjectionMatrix();
 		}
-
-		if (GetKey(GLFW_KEY_LEFT_CONTROL).bHeld)
-			camera.fCameraSpeed = Camera::CAMERA_FAST_SPEED;
-		else
-			camera.fCameraSpeed = Camera::CAMERA_NORMAL_SPEED;
 
 		if (GetKey(GLFW_KEY_HOME).bPressed)
 			camera.Init(glm::vec3(0.0f, 0.0f, 3.0f), glm::vec3(0.0f, 0.0f, -1.0f), ScreenWidth(), ScreenHeight());

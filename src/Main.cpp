@@ -264,11 +264,11 @@ public:
 		glm::ivec3 playerPos = { (int)floor(player.pos.x), (int)floor(player.pos.y), (int)floor(player.pos.z) };
 
 		// Select block
-		if (GetMouseButton(Mouse::MIDDLE).bPressed && m_currentHit.hit)
+		if (!bIsPaused && GetMouseButton(Mouse::MIDDLE).bPressed && m_currentHit.hit)
 			selectedBlock = world.GetBlock(m_currentHit.blockPos.x, m_currentHit.blockPos.y, m_currentHit.blockPos.z);
 
 		// Break block
-		if (GetMouseButton(Mouse::LEFT).bPressed && m_currentHit.hit)
+		if (!bIsPaused && GetMouseButton(Mouse::LEFT).bPressed && m_currentHit.hit)
 		{
 			bool isBlockBreakValid = world.BreakBlock(m_currentHit);
 			
@@ -277,7 +277,7 @@ public:
 		}
 
 		// Place block
-		if (GetMouseButton(Mouse::RIGHT).bPressed && (playerPos != raycastPlacePos) && (glm::ivec3(playerPos.x, playerPos.y + 1, playerPos.z) != raycastPlacePos) && m_currentHit.hit)
+		if (!bIsPaused && GetMouseButton(Mouse::RIGHT).bPressed && (playerPos != raycastPlacePos) && (glm::ivec3(playerPos.x, playerPos.y + 1, playerPos.z) != raycastPlacePos) && m_currentHit.hit)
 		{
 			bool isBlockPlaceValid = world.PlaceBlock(m_currentHit, selectedBlock);
 

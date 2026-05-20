@@ -169,45 +169,53 @@ std::string World::ChunkFilePath(glm::ivec2 coord)
 void World::SaveChunkToDisk(const Chunk& chunk)
 {
     std::filesystem::create_directories("saves");
-    auto path = ChunkFilePath(chunk.chunkPos);
 
-    // TODO: Write this in C++
-    FILE* f = nullptr;
-    fopen_s(&f, path.c_str(), "wb");
+    const auto path = ChunkFilePath(chunk.chunkPos);
 
-    if (!f)
+    std::ofstream file(path, std::ios::binary);
+
+    if (!file)
+    {
+        std::cout << "Failed to open chunk file for writing: " << path << '\n';
         return;
+    }
 
-    size_t bytesWritten = fwrite(chunk.blocks, sizeof(chunk.blocks), 1, f) * sizeof(chunk.blocks);
+    file.write(
+        reinterpret_cast<const char*>(chunk.blocks),
+        sizeof(chunk.blocks)
+    );
 
-    if (bytesWritten != sizeof(chunk.blocks))
-        std::cout << "Error writing to chunk " << path.c_str() << ".\n";
-
-    fclose(f);
+    if (!file)
+    {
+        std::cout << "Error writing chunk file: " << path << '\n';
+    }
 }
 
 bool World::LoadChunkFromDisk(Chunk& chunk, glm::ivec2& coord)
 {
-    auto path = ChunkFilePath(coord);
+    const auto path = ChunkFilePath(coord);
 
-    // TODO: Write this in C++
-    FILE* f = nullptr;
-    fopen_s(&f, path.c_str(), "rb");
-    if (!f)
+    std::ifstream file(path, std::ios::binary);
+
+    if (!file)
         return false;
 
-    size_t bytesRead = fread(chunk.blocks, sizeof(chunk.blocks), 1, f) * sizeof(chunk.blocks);
+    file.read(
+        reinterpret_cast<char*>(chunk.blocks),
+        sizeof(chunk.blocks)
+    );
 
-    if (bytesRead != sizeof(chunk.blocks))
-        std::cout << "Chunk file " << path.c_str() << " is corrupted.\n";
+    if (file.gcount() != sizeof(chunk.blocks))
+    {
+        std::cout << "Chunk file corrupted: " << path << '\n';
 
-    fclose(f);
+        return false;
+    }
 
     chunk.chunkPos = coord;
 
     return true;
 }
-
 void World::UnloadChunks()
 {
     // Save modified chunks
@@ -229,8 +237,6 @@ void World::UnloadChunks()
 
     chunks.clear();
     m_chunkMeshes.clear();
-
-    std::cout << "World saved and unloaded.\n";
 }
 
 // ───── Raycast CRUD ──────────────────────────────────────────────────

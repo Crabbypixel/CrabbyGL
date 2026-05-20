@@ -20,9 +20,6 @@ public:
 	float fLastX = 0.0f;
 	float fLastY = 0.0f;
 
-	static float CAMERA_FAST_SPEED;
-	static float CAMERA_NORMAL_SPEED;
-
 private:
 	float fPitch = 0.0f;
 	float fYaw = -90.0f;

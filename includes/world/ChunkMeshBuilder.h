@@ -1,6 +1,9 @@
 #pragma once
+#include <vector>
+
 class Chunk;
 class ChunkMesh;
+struct Vertex;
 
 class ChunkMeshBuilder
 {
@@ -46,6 +49,7 @@ private:
         const Chunk* nNX_PZ, const Chunk* nNX_NZ
     );
 
+    [[nodiscard]]
     static bool IsSolidLocal(const Chunk& chunk,
         int x, int y, int z,
         const Chunk* nPX, const Chunk* nNX,

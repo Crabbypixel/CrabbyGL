@@ -60,11 +60,11 @@ public:
 	std::atomic<bool> dirty{ true };						// Needs mesh rebuild
 	std::atomic<bool> modified{ false };					// Has unsaved changes (never cleared except after SaveChunk)
 
-	BlockType Get(int x, int y, int z) const;
-	BlockType GetUnchecked(int x, int y, int z) const;
+	[[nodiscard]] BlockType Get(int x, int y, int z) const noexcept;
+	[[nodiscard]] BlockType GetUnchecked(int x, int y, int z) const;
 	void Set(int x, int y, int z, BlockType type);
 	void SetUnchecked(int x, int y, int z, BlockType type);
 
 	// Range check
-	static bool InBounds(int x, int y, int z);
+	[[nodiscard]] static constexpr bool InBounds(int x, int y, int z) noexcept;
 };
