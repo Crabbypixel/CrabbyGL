@@ -29,10 +29,14 @@ RaycastHit RaycastDDA(const glm::vec3& origin, const glm::vec3& direction, const
 	glm::vec3 absInvDir = glm::abs(invDir);
 
 	// Distance to the first block boundary
-	glm::vec3 tMax;
-	tMax.x = (step.x > 0 ? (currentBlock.x + 1.0f - origin.x) : (origin.x - currentBlock.x)) * absInvDir.x;
-	tMax.y = (step.y > 0 ? (currentBlock.y + 1.0f - origin.y) : (origin.y - currentBlock.y)) * absInvDir.y;
-	tMax.z = (step.z > 0 ? (currentBlock.z + 1.0f - origin.z) : (origin.z - currentBlock.z)) * absInvDir.z;
+	glm::vec3 tMax{ 0 };
+	//tMax.x = (step.x > 0 ? (currentBlock.x + 1.0f - origin.x) : (origin.x - currentBlock.x)) * absInvDir.x;
+	//tMax.y = (step.y > 0 ? (currentBlock.y + 1.0f - origin.y) : (origin.y - currentBlock.y)) * absInvDir.y;
+	//tMax.z = (step.z > 0 ? (currentBlock.z + 1.0f - origin.z) : (origin.z - currentBlock.z)) * absInvDir.z;
+
+	tMax.x = (step.x > 0 ? (currentBlock.x + 1.0f - start.x) : (start.x - currentBlock.x)) * absInvDir.x;
+	tMax.y = (step.y > 0 ? (currentBlock.y + 1.0f - start.y) : (start.y - currentBlock.y)) * absInvDir.y;
+	tMax.z = (step.z > 0 ? (currentBlock.z + 1.0f - start.z) : (start.z - currentBlock.z)) * absInvDir.z;
 
 	// Distance between block crossings
 	glm::vec3 tDelta = abs(invDir);

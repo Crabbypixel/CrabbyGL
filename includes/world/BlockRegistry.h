@@ -62,3 +62,4 @@ enum BlockFlags : uint16_t
 [[nodiscard]] bool IsTransparent(BlockType t) noexcept;
 [[nodiscard]] bool IsSolid(BlockType t) noexcept;
 [[nodiscard]] bool IsTranslucent(BlockType t) noexcept;
+[[nodiscard]] bool IsCross(BlockType t) noexcept;

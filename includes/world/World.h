@@ -85,7 +85,8 @@ public:
 	World& operator=(const World&) = delete;
 	World& operator=(World&&) = delete;
 
-    void UnloadChunks();	// Unload chunks
+    // Unload chunks
+    void UnloadChunks();
 
     // Load shader and texture file
     void SetChunkShader(Shader& shader);
@@ -148,9 +149,9 @@ private:
     [[nodiscard]] static float GetTerrainHeight(int wx, int wz);
 
     // Chunk streaming functions
-    static std::string ChunkFilePath(glm::ivec2 coord);
-    [[nodiscard]] static void SaveChunkToDisk(const Chunk& chunk);
-    [[nodiscard]] static bool LoadChunkFromDisk(Chunk& chunk, glm::ivec2& coord);
+    [[nodiscard]] static std::string ChunkFilePath(glm::ivec2 coord);
+    static void SaveChunkToDisk(const Chunk& chunk);
+    static bool LoadChunkFromDisk(Chunk& chunk, glm::ivec2& coord);
 
     // ──────── Load workers ────────
     // Chunk Job queue: main thread pushes coords to load, workers pop

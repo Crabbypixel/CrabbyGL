@@ -40,11 +40,15 @@ void OpenGL_3D::RendererThread()
 		// This also resets the atomic to 0, so the main thread can update it for the next frame without worrying about synchronization
 		m_mouseScrollFrame = m_mouseScroll.exchange(0, std::memory_order_relaxed);
 
+		if (m_keySwapReady.exchange(false, std::memory_order_acquire))
+			std::swap(m_keyRaw, m_keyRawPending);		// Swap the raw state buffers when the main thread signals a fresh snapshot is ready
+
 		// Update key and mouse states on each frame, they may be used later by the programmer
 		// 1. Update key states
 		for (int i = 0; i < MAX_KEYS; i++)
 		{
-			m_keyNewState[i] = glfwGetKey(window, i) == GLFW_PRESS;
+			//m_keyNewState[i] = glfwGetKey(window, i) == GLFW_PRESS;
+			m_keyNewState[i] = m_keyRaw[i];		// Use the raw state captured by the main thread callback
 
 			m_keys[i].bPressed = false;
 			m_keys[i].bReleased = false;
@@ -91,9 +95,6 @@ void OpenGL_3D::RendererThread()
 			}
 		}
 
-		// Control inputs - Change Projection and View matrices & handle keyboard inputs
-		HandleInputs(fElapsedTime);
-
 		// Pause/resume the renderer
 		if (GetKey(GLFW_KEY_P).bPressed)
 		{
@@ -115,6 +116,9 @@ void OpenGL_3D::RendererThread()
 		{
 			m_bIsRunning = false;
 		}
+
+		// Control inputs - Change Projection and View matrices & handle keyboard inputs
+		UpdateCameraControls(fElapsedTime);
 
 		// FPS calculation
 		iFrameCount++;
@@ -146,7 +150,7 @@ void OpenGL_3D::RendererThread()
 	glfwMakeContextCurrent(nullptr);
 }
 
-void OpenGL_3D::HandleInputs(float fElapsedTime)
+void OpenGL_3D::UpdateCameraControls(float fElapsedTime)
 {
 	if (!bIsPaused)
 	{
@@ -277,6 +281,7 @@ void OpenGL_3D::Start()
 			m_bIsRunning = false;
 
 		glfwPollEvents();
+		PollKeys();
 	}
 
 	// Wait until the renderer thread exits
@@ -304,6 +309,16 @@ void OpenGL_3D::Error(const std::string& message)
 	Destroy();
 	glfwTerminate();
 	exit(EXIT_FAILURE);
+}
+
+void OpenGL_3D::PollKeys()
+{
+	// Called from main thread - defined behavior
+	for (int i = 0; i < MAX_KEYS; i++)
+		m_keyRawPending[i] = (glfwGetKey(window, i) == GLFW_PRESS);
+
+	// Signal renderer that a fresh snapshot is ready for swapping
+	m_keySwapReady.store(true, std::memory_order_release);
 }
 
 void OpenGL_3D::mouse_callback(GLFWwindow* window, double xPos, double yPos)

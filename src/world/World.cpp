@@ -94,6 +94,8 @@ void World::SetBlock(int worldX, int worldY, int worldZ, BlockType type)
 
     auto l = ChunkLocalCoord(worldX, worldY, worldZ);
     chunk->SetUnchecked(l.x, l.y, l.z, type);
+
+    //TODO: Mark this dirty - might be the reason for seam issue for world physics
 }
 
 // ───── World generation ────────────────────────────────────────────────────
@@ -176,10 +178,7 @@ void World::SaveChunkToDisk(const Chunk& chunk)
         return;
     }
 
-    file.write(
-        reinterpret_cast<const char*>(chunk.blocks),
-        sizeof(chunk.blocks)
-    );
+    file.write(reinterpret_cast<const char*>(chunk.blocks), sizeof(chunk.blocks));
 
     if (!file)
     {
@@ -196,10 +195,7 @@ bool World::LoadChunkFromDisk(Chunk& chunk, glm::ivec2& coord)
     if (!file)
         return false;
 
-    file.read(
-        reinterpret_cast<char*>(chunk.blocks),
-        sizeof(chunk.blocks)
-    );
+    file.read(reinterpret_cast<char*>(chunk.blocks), sizeof(chunk.blocks));
 
     if (file.gcount() != sizeof(chunk.blocks))
     {
@@ -284,7 +280,6 @@ bool World::BreakBlock(const RaycastHit& hit)
         return false;
 
     const BlockType& blockType = GetBlock(hit.blockPos.x, hit.blockPos.y, hit.blockPos.z);
-    auto flags = GetDef(blockType).flags;
 
     SetBlock(hit.blockPos.x, hit.blockPos.y, hit.blockPos.z, BlockType::AIR);
     MarkAdjacentChunksDirty(hit.blockPos.x, hit.blockPos.y, hit.blockPos.z);
@@ -618,7 +613,9 @@ void World::CommitGeneratedChunks()
     for (auto& [coord, chunkPtr] : queued)
     {
         chunks[coord] = std::move(chunkPtr);
-        m_chunkMeshes[coord];
+
+		m_chunkMeshes.try_emplace(coord);   // default construct mesh for this chunk
+
         chunks[coord]->dirty = true;
 
         /*
@@ -726,7 +723,7 @@ void World::ChunkLoadWorkerLoop()
 void World::MeshWorkerLoop()
 {
     std::vector<Vertex> verts;
-    verts.reserve(CX * CY * CZ * 3);
+    verts.reserve(CX * CZ * 64);
 
     while (true)
     {

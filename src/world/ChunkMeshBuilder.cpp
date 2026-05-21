@@ -36,28 +36,28 @@ static UVRect Tile(int i)
 // 6 faces: +Y -Y +X -X +Z -Z
 // Add this to the current face to go to the neighboring block to that face
 // Each face = 4 verts -> 6 indices (2 tris) baked as 6 verts
-static const glm::ivec3 NORMALS[6] = {
+static constexpr glm::ivec3 NORMALS[6] = {
     { 0, 1, 0}, { 0,-1, 0},         // +Y & -Y
     { 1, 0, 0}, {-1, 0, 0},         // +X & -X
     { 0, 0, 1}, { 0, 0,-1}          // +Z & -Z
 };
 
 // Tangent directions along the face surface (local U axis)
-static const glm::ivec3 TANGENT_U[6] = {
+static constexpr glm::ivec3 TANGENT_U[6] = {
     {1, 0, 0}, {1, 0, 0},           // +Y & -Y
     {0, 0, 1}, {0, 0, 1},           // +X & -X
     {1, 0, 0}, {1, 0, 0},           // +Z & -Z
 };
 
 // Tangent directions along the face surface (local V axis)
-static const glm::ivec3 TANGENT_V[6] = {
+static constexpr glm::ivec3 TANGENT_V[6] = {
     {0, 0, 1}, {0, 0, 1},           // +Y & -Y
     {0, 1, 0}, {0, 1, 0},           // +X & -X
     {0, 1, 0}, {0, 1, 0},           // +Z & -Z
 };
 
 // Quad verts per face (local offsets from block origin)
-static const glm::ivec3 FACE_VERTS[6][4] = {
+static constexpr glm::ivec3 FACE_VERTS[6][4] = {
     // +Y top
     {{0,1,0},{1,1,0},{1,1,1},{0,1,1}},
     // -Y bottom
@@ -75,7 +75,7 @@ static const glm::ivec3 FACE_VERTS[6][4] = {
 };
 
 // Quad -> 2 tris (convert indices into 4-vert quad)
-static const int TRI_IDX[6] = { 0,1,2, 0,2,3 };
+static constexpr int TRI_IDX[6] = { 0,1,2, 0,2,3 };
 
 static constexpr int GetAOState(int side1, int side2, int corner) noexcept {
     if (side1 + side2 == 2)
@@ -120,7 +120,7 @@ bool ChunkMeshBuilder::IsSolidLocal(const Chunk& chunk, int x, int y, int z, con
 
 void ChunkMeshBuilder::EmitCross(std::vector<Vertex>& verts, const glm::ivec3& worldPos, BlockType type)
 {
-    BlockDef crossItem = GetDef(type);
+    const BlockDef& crossItem = GetDef(type);
     UVRect uv = Tile(crossItem.faces[0]);
     glm::vec3 tint = crossItem.tint;
 
@@ -219,13 +219,13 @@ void ChunkMeshBuilder::AddFace(std::vector<Vertex>& verts, const glm::ivec3& wor
     {
         // flipped
         int tmp[6] = { 0, 1, 3, 1, 2, 3 };
-        memcpy(tri, tmp, sizeof(tri));
+        std::copy(tmp, tmp + 6, tri);
     }
     else
     {
         // normal
         int tmp[6] = { 0, 1, 2, 0, 2, 3 };
-        memcpy(tri, tmp, sizeof(tri));
+        std::copy(tmp, tmp + 6, tri);
     }
 
     for (int i : tri)

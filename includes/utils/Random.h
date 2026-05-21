@@ -4,9 +4,10 @@
 #include <chrono>
 #include <random>
 
-// From learncpp.com
+// Directly from learncpp.com
 // This header-only Random namespace implements a self-seeding Mersenne Twister
 // It can be included into as many code files as needed (The inline keyword avoids ODR violations)
+// Included when necessary - this is a good random number generator
 namespace Random
 {
 	// Returns a seeded Mersenne Twister

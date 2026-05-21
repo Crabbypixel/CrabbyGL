@@ -6,7 +6,7 @@
 void ChunkMesh::Upload(const std::vector<Vertex>& vertices) noexcept
 {
     vertexCount = (int)vertices.size();
-    if (vertexCount == 0) { valid = false; return; }
+    if (vertexCount == 0) { valid = false; Destroy(); return; }
 
     if (m_VAO == 0)
     {

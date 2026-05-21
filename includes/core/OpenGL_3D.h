@@ -30,6 +30,12 @@ private:
 	// Arrays to store key states
 	short m_keyNewState[MAX_KEYS] = { 0 };
 	short m_keyOldState[MAX_KEYS] = { 0 };
+
+	// True when main thread finishes writing into the buffer and ready to swap
+	std::atomic<bool> m_keySwapReady{ false };
+	bool m_keyRawPending[MAX_KEYS] = {};		// Main thread writes only
+	bool m_keyRaw[MAX_KEYS] = {};				// Renderer thread reads only
+
 	short m_mouseOldState[MAX_MOUSE_BUTTONS] = { 0 };
 	short m_mouseNewState[MAX_MOUSE_BUTTONS] = { 0 };
 
@@ -77,7 +83,7 @@ private:
 	void RendererThread();
 
 	// Update key and mouse states and update camera parameters
-	void HandleInputs(float fElapsedTime);
+	void UpdateCameraControls(float fElapsedTime);
 
 	// Update projection matrix UBOs
 	void UpdateProjectionMatrix();
@@ -136,6 +142,9 @@ protected:
 private:
 	void Error(const std::string& message);
 	void DisplayGPU();
+
+	// Called from main thread - captures key strokes
+	void PollKeys();
 
 	// Callback functions used by GLFW
 	static void mouse_callback(GLFWwindow* window, double xPos, double yPos);

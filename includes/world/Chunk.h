@@ -55,10 +55,20 @@ public:
 	Chunk& operator=(Chunk&&) = delete;
 
 	mutable std::shared_mutex chunkMutex;
+
+	// Core block data
+	/*
+	  * TODO: Make this private and only accessible via Get / Set, but
+	  * that would require a lot of code changes so maybe later
+	
+	  * TODO: Maybe linearize this into a 1D array for better cache performance, but 
+	  * that would require changing the block access code everywhere so maybe later
+	*/
 	BlockType blocks[CX][CY][CZ];
+
 	glm::ivec2 chunkPos;
 	std::atomic<bool> dirty{ true };						// Needs mesh rebuild
-	std::atomic<bool> modified{ false };					// Has unsaved changes (never cleared except after SaveChunk)
+	std::atomic<bool> modified{ false };					// Has unsaved changes (never cleared except after SaveChunkToDisk)
 
 	[[nodiscard]] BlockType Get(int x, int y, int z) const noexcept;
 	[[nodiscard]] BlockType GetUnchecked(int x, int y, int z) const;
