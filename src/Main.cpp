@@ -126,6 +126,9 @@ public:
 
 		world.SetChunkShader(chunkMeshShader);
 		world.LoadAtlasTexture("assets/textures/textures.png");
+
+		// Spawn 4 threads for loading chunks and 4 threads for generating meshes
+		// This is the optimal spot for good performance without overly increasing number of threads
 		world.StartChunkLoadWorkers(4);
 		world.StartMeshWorkers(4);
 
