@@ -35,7 +35,8 @@ enum class BlockType : uint8_t
 	/*22*/	RED_MUSHROOM,
 	/*23*/  GRASS,
 	/*24*/  TREE_LOG_X,
-	/*25*/  TREE_LOG_Z
+	/*25*/  TREE_LOG_Z,
+	MAX_VALUE			// Ending sentinel - not a real block type, used for validation and iteration
 };
 
 struct BlockInstance
@@ -47,7 +48,7 @@ struct BlockInstance
 class Chunk
 {
 public:
-	Chunk() = default;
+	Chunk() { memset(blocks, 0, sizeof(blocks)); }
 
 	Chunk(const Chunk&) = delete;
 	Chunk(Chunk&&) = delete;

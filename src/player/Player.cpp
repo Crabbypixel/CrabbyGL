@@ -165,7 +165,8 @@ void Player::Update(float dt, const glm::vec3& camFront, bool fwd, bool back, bo
     }
 
     // Jump — single frame trigger, only when grounded
-    if (jump && onGround) {
+    if (jump && onGround && !canFly)
+    {
         vel.y = JUMP_VEL;
         onGround = false;
     }

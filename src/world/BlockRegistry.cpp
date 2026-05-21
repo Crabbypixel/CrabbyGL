@@ -1,4 +1,5 @@
 #include "world/BlockRegistry.h"
+#include "world/Chunk.h"
 
 using namespace Tiles;
 
@@ -34,6 +35,8 @@ const BlockDef BLOCK_DEFS[] =
 /*24*/  { "Log X", { TREE_LOG_SIDES, TREE_LOG_SIDES, TREE_LOG_TOP, TREE_LOG_TOP, TREE_LOG_SIDES, TREE_LOG_SIDES }, -1, {1,1,1}, BLOCK_OPAQUE | BLOCK_SOLID, 1.5f, false },
 /*25*/  { "Log Z", { TREE_LOG_SIDES, TREE_LOG_SIDES, TREE_LOG_SIDES, TREE_LOG_SIDES, TREE_LOG_TOP, TREE_LOG_TOP }, -1, {1,1,1}, BLOCK_OPAQUE | BLOCK_SOLID, 1.5f, false },
 };
+
+static_assert(std::size(BLOCK_DEFS) == (size_t)BlockType::MAX_VALUE, "BlockType enum and BLOCK_DEFS[] out of sync");
 
 const BlockDef& GetDef(BlockType t) noexcept
 {

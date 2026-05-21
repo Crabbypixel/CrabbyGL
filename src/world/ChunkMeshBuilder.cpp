@@ -77,7 +77,8 @@ static constexpr glm::ivec3 FACE_VERTS[6][4] = {
 // Quad -> 2 tris (convert indices into 4-vert quad)
 static constexpr int TRI_IDX[6] = { 0,1,2, 0,2,3 };
 
-static constexpr int GetAOState(int side1, int side2, int corner) noexcept {
+static constexpr int GetAOState(int side1, int side2, int corner) noexcept
+{
     if (side1 + side2 == 2)
         return 0;
 

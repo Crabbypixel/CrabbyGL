@@ -43,7 +43,7 @@ struct BlockDef
 	int overlay = -1;
 	glm::vec3 tint;
 	uint16_t flags;
-	float hardness;
+	float hardness;		// later for mining speed and tool requirements - to be done later
 	bool useOverlay;
 };
 

@@ -95,7 +95,9 @@ void World::SetBlock(int worldX, int worldY, int worldZ, BlockType type)
     auto l = ChunkLocalCoord(worldX, worldY, worldZ);
     chunk->SetUnchecked(l.x, l.y, l.z, type);
 
-    //TODO: Mark this dirty - might be the reason for seam issue for world physics
+    //TODO: Mark this & neighboring chunks dirty - this is the reason for seam issue in world physics, to be done later
+    // NOTE: This still has a visual bug
+	MarkAdjacentChunksDirty(worldX, worldY, worldZ);
 }
 
 // ───── World generation ────────────────────────────────────────────────────
@@ -127,6 +129,8 @@ void World::FillChunkData(Chunk& chunk, glm::ivec2 coord)
         return;
     }
 
+    // TODO: Add trees and grass
+	// Do all this in worldgen phase of development, not right now - to be done later
     // Fresh Perlin gen
     chunk.chunkPos = coord;
     int cx = coord.x;
