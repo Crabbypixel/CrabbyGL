@@ -173,13 +173,13 @@ void UIRenderer::DrawHotbar() noexcept
 
 void UIRenderer::DrawHotbarSelector(int index) noexcept
 {
-	constexpr float SLOT_SPACING = 40.0f;
+	constexpr float SLOT_SPACING = 41.0f;
 
 	float hotbarX = (screenWidth - hotbarWidth) * 0.5f;
 
 	float x = hotbarX - 4.0f + (index * SLOT_SPACING);
 
-	float y = 16.0f;
+	float y = 17.0f;
 
 	float w = (float)hotbarSelectorWidth;
 	float h = (float)hotbarSelectorHeight;

@@ -47,7 +47,7 @@ private:
 	// Written by main-thread GLFW callbacks, read by renderer thread
 	// Must be atomic to avoid undefined behavior and compiler register-caching
 	std::atomic<int>  m_mouseScroll{ 0 };
-	std::atomic<bool> m_bMouseButtonHeld[MAX_MOUSE_BUTTONS]{};  // per-button
+	std::atomic<bool> m_bMouseButtonHeld[MAX_MOUSE_BUTTONS]{ false };  // per-button
 
 	// Renderer-thread-only snapshot for m_mouseScroll, updated once per frame 
 	// by exchange(0) to drain the atomic into a stable value for the frame

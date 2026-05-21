@@ -338,7 +338,6 @@ public:
 		UIRenderer.DrawHotbar();
 
 		// Hotbar selector
-
 		UIRenderer.DrawHotbarSelector(hotbarIndex);
 
 		//glEnable(GL_DEPTH_TEST);
@@ -439,15 +438,13 @@ public:
 		{
 		}
 
-		if (GetMouseScroll() == Mouse::SCROLL_UP)
+		if (GetMouseScroll() == Mouse::SCROLL_DOWN)
 		{
 			hotbarIndex = (hotbarIndex + 1) % 9;
-			//std::cout << "up\n";
 		}
-		else if (GetMouseScroll() == Mouse::SCROLL_DOWN)
+		else if (GetMouseScroll() == Mouse::SCROLL_UP)
 		{
 			hotbarIndex = (hotbarIndex - 1 + 9) % 9;
-			//std::cout << "down\n";
 		}
 	}
 
