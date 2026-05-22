@@ -259,10 +259,6 @@ public:
 			camera.position = player.EyePos();
 		}
 
-		// Toggle rendering chunk borders
-		if (GetKey('G').bPressed)
-			chunkDebug.visible = !chunkDebug.visible;
-
 		RaycastHit m_currentHit = RaycastDDA(camera.position, camera.front, world);
 		glm::ivec3 raycastPlacePos = m_currentHit.blockPos + m_currentHit.normal;
 		glm::ivec3 playerPos = { (int)floor(player.pos.x), (int)floor(player.pos.y), (int)floor(player.pos.z) };
@@ -435,6 +431,10 @@ public:
 		// Toggle Ambient Occlusion
 		if (GetKey('H').bPressed)
 			isAOEnabled = !isAOEnabled;
+
+		// Toggle rendering chunk borders
+		if (GetKey('G').bPressed)
+			chunkDebug.visible = !chunkDebug.visible;
 
 		// Toggle player inventory
 		if (GetKey('E').bPressed)
