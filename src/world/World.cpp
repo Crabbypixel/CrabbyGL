@@ -776,7 +776,7 @@ void World::MeshWorkerLoop()
                 );
         }
 
-        // 3) Push vertices to staging
+        // 3) Push built vertices to staging
         {
             std::lock_guard<std::mutex> lock(m_meshStagingMutex);
 
