@@ -33,6 +33,7 @@ World::World()
 
 World::~World()
 {
+	// If exception path or early exit, call StopAllWorkers to ensure clean shutdown
     if (!m_shutdown)
         StopAllWorkers();
 }

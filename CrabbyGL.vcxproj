@@ -650,6 +650,7 @@
     <None Include="assets\shaders\Line.glsl" />
     <None Include="imgui.ini" />
     <None Include="libraries\glfw3.dll" />
+    <None Include="README.md" />
   </ItemGroup>
   <ItemGroup>
     <Library Include="libraries\glfw3.lib" />
