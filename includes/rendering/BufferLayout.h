@@ -17,7 +17,7 @@ class BufferLayout
 private:
 	int location;
 	int stride;
-	VertexArray m_va;
+	//VertexArray m_va;
 
 public:
 	BufferLayout() : stride{ 0 }, location{ 0 }
@@ -30,10 +30,10 @@ public:
 	BufferLayout& operator=(BufferLayout&&) = delete;
 
 	template<typename T>
-	void setBufferLayout(VertexArray& va, VertexBuffer<T>& buffer, IndexBuffer& indexBuffer, int count, BufferType type, bool resetStride = false);
+	void setBufferLayout(const VertexArray& va, const VertexBuffer<T>& buffer, IndexBuffer& indexBuffer, int count, BufferType type, bool resetStride = false);
 
 	template<typename T>
-	void setBufferLayout(VertexArray& va, VertexBuffer<T>& buffer, int count, BufferType type);
+	void setBufferLayout(const VertexArray& va, const VertexBuffer<T>& buffer, int count, BufferType type);
 
 	[[nodiscard]]
 	int getLocation() const noexcept { return location; }
@@ -43,10 +43,9 @@ private:
 };
 
 template<typename T>
-void BufferLayout::setBufferLayout(VertexArray& va, VertexBuffer<T>& buffer, IndexBuffer& indexBuffer, int count, BufferType type, bool resetStride)
+void BufferLayout::setBufferLayout(const VertexArray& va, const VertexBuffer<T>& buffer, IndexBuffer& indexBuffer, int count, BufferType type, bool resetStride)
 {
-	m_va = va;
-	m_va.bind();
+	va.bind();
 
 	buffer.bind();
 	indexBuffer.bind();
@@ -62,10 +61,9 @@ void BufferLayout::setBufferLayout(VertexArray& va, VertexBuffer<T>& buffer, Ind
 }
 
 template<typename T>
-void BufferLayout::setBufferLayout(VertexArray& va, VertexBuffer<T>& buffer, int count, BufferType type)
+void BufferLayout::setBufferLayout(const VertexArray& va, const VertexBuffer<T>& buffer, int count, BufferType type)
 {
-	m_va = va;
-	m_va.bind();
+	va.bind();
 
 	buffer.bind();
 

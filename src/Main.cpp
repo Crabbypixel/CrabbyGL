@@ -529,7 +529,6 @@ public:
 		ImGui_ImplGlfw_Shutdown();
 		ImGui::DestroyContext();
 
-		glDeleteBuffers(1, &uboMatrices);
 		glDeleteFramebuffers(1, &framebuffer);
 		glDeleteRenderbuffers(1, &rbo);
 		glDeleteTextures(1, &textureColorBuffer);

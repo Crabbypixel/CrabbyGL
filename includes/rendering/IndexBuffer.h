@@ -9,6 +9,7 @@ private:
 
 public:
 	IndexBuffer() = default;
+	~IndexBuffer() noexcept;
 
 	// Non-copyable, non-movable
 	IndexBuffer(const IndexBuffer&) = delete;
@@ -26,6 +27,4 @@ public:
 
 	[[nodiscard]]
 	unsigned int getID() const noexcept;
-
-	void free() const noexcept;
 };

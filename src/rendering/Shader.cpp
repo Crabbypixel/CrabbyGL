@@ -71,9 +71,8 @@ void Shader::load(const std::string& shaderPath)
 		int length;
 		glGetProgramiv(id, GL_INFO_LOG_LENGTH, &length);
 
-		char* message = (char*)alloca(length * sizeof(char));
-
-		glGetShaderInfoLog(id, length, &length, message);
+		std::string message(length, '\0');
+		glGetShaderInfoLog(id, length, &length, message.data());
 
 		std::cout << "[OpenGL Error] Linking error in \'" << shaderPath << "\'" << std::endl;
 		std::cout << "Log: " << message << std::endl;

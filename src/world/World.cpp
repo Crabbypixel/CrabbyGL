@@ -31,6 +31,12 @@ World::World()
     m_chunkSaveWorker = std::thread(&World::SaveWorkerLoop, this);
 }
 
+World::~World()
+{
+    if (!m_shutdown)
+        StopAllWorkers();
+}
+
 // ───── Coord helpers ─────────────────────────────────────────────────
 // Get chunk coord from world coords
 glm::ivec2 World::ChunkCoord(float worldX, float worldZ)
@@ -227,8 +233,11 @@ void World::UnloadChunks()
     // Unload chunks from memory
     for (auto& [coord, chunk] : chunks)
     {
-        m_chunkMeshes[coord].Destroy();
-        m_chunkMeshes.erase(coord);
+        if (m_chunkMeshes.contains(coord))
+        {
+            m_chunkMeshes[coord].Destroy();
+            m_chunkMeshes.erase(coord);
+        }
     }
 
     chunks.clear();
@@ -770,7 +779,11 @@ void World::MeshWorkerLoop()
         // 3) Push vertices to staging
         {
             std::lock_guard<std::mutex> lock(m_meshStagingMutex);
-            m_meshStaging[job.coord] = std::move(verts);
+
+            std::vector<Vertex> toStage;
+            toStage.swap(verts);
+
+            m_meshStaging[job.coord] = std::move(toStage);
         }
 
         // 4) Decrement refcounts, so that the chunk can be unloaded (unguard now)

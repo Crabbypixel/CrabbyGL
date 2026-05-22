@@ -26,7 +26,7 @@ void Chunk::Set(int x, int y, int z, BlockType type)
 	if (!InBounds(x, y, z))
 		return;
 
-	//std::unique_lock lock(chunkMutex);
+	std::unique_lock lock(chunkMutex);
 
 	blocks[x][y][z] = type;
 	dirty = true;

@@ -78,6 +78,7 @@ public:
     std::unordered_map<glm::ivec2, std::unique_ptr<Chunk>, IVec2Hash> chunks;
 
     World(); // Constructor
+    ~World(); // Destructor
 
 	// Non-copyable, non-movable as it manages worker threads and has unique ownership of chunks
 	World(const World&) = delete;

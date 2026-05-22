@@ -69,6 +69,7 @@ void UIRenderer::InitHotbar()
 
 	// Load and generate the texture
 	int width, height, nrChannels;
+	stbi_set_flip_vertically_on_load(false);
 	unsigned char* data = stbi_load("assets/textures/hotbar.png", &width, &height, &nrChannels, 0);
 
 	if (data)

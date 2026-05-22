@@ -26,7 +26,7 @@ unsigned int IndexBuffer::getID() const noexcept
 	return m_IndexBufferID;
 }
 
-void IndexBuffer::free() const noexcept
+IndexBuffer::~IndexBuffer() noexcept
 {
 	if (m_IndexBufferID != 0)
 		glDeleteBuffers(1, &m_IndexBufferID);

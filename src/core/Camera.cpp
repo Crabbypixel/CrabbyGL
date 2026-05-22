@@ -79,7 +79,7 @@ void Camera::ProcessMouse(float fMousePosX, float fMousePosY, int screenWidth, i
 		if (fPitch > 89.9f)
 			fPitch = 89.9f;
 		else if (fPitch < -89.9f)
-			fPitch = -89.9;
+			fPitch = -89.9f;
 
 		glm::vec3 vDirection;
 		vDirection.x = cosf(glm::radians(fYaw)) * cosf(glm::radians(fPitch));

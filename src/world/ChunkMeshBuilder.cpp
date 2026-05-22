@@ -253,7 +253,11 @@ void ChunkMeshBuilder::Build(const Chunk& chunk, const Chunk* nPX, const Chunk* 
     std::shared_lock lockNX = nNX ? std::shared_lock(nNX->chunkMutex) : std::shared_lock<std::shared_mutex>{};
     std::shared_lock lockPZ = nPZ ? std::shared_lock(nPZ->chunkMutex) : std::shared_lock<std::shared_mutex>{};
     std::shared_lock lockNZ = nNZ ? std::shared_lock(nNZ->chunkMutex) : std::shared_lock<std::shared_mutex>{};
-        
+	std::shared_lock lockPX_PZ = nPX_PZ ? std::shared_lock(nPX_PZ->chunkMutex) : std::shared_lock<std::shared_mutex>{};
+    std::shared_lock lockPX_NZ = nPX_NZ ? std::shared_lock(nPX_NZ->chunkMutex) : std::shared_lock<std::shared_mutex>{};
+    std::shared_lock lockNX_PZ = nNX_PZ ? std::shared_lock(nNX_PZ->chunkMutex) : std::shared_lock<std::shared_mutex>{};
+    std::shared_lock lockNX_NZ = nNX_NZ ? std::shared_lock(nNX_NZ->chunkMutex) : std::shared_lock<std::shared_mutex>{};
+
     outVertices.clear();
 
     // Chunk world coordinates (not global world coordinates)
