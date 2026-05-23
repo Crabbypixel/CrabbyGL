@@ -15,7 +15,6 @@ void Texture2D::load(GLenum wrapType, GLint minFilter, GLint magFilter, const st
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, minFilter);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, magFilter);
 
-    stbi_set_flip_vertically_on_load(true);
     data = stbi_load(textureFile.c_str(), &m_width, &m_height, &m_nrChannels, 0);
 
     if (data)

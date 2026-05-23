@@ -96,6 +96,9 @@
     <ClCompile Include="src\rendering\UIRenderer.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="src\player\Inventory.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="externals\glad\glad.h">
@@ -1079,6 +1082,12 @@
     <ClInclude Include="includes\rendering\UIRenderer.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="includes\player\Inventory.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="includes\world\BlockType.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <None Include="externals\glm\detail\func_common.inl">
@@ -1507,6 +1516,8 @@
     <None Include="assets\shaders\Hotbar.glsl" />
     <None Include="assets\shaders\Hotbar_Selector.glsl" />
     <None Include="README.md" />
+    <None Include="assets\shaders\Inventory.glsl" />
+    <None Include="assets\shaders\DebugRect.glsl" />
   </ItemGroup>
   <ItemGroup>
     <Library Include="libraries\glfw3.lib" />
@@ -1524,6 +1535,9 @@
       <Filter>Resource Files</Filter>
     </Image>
     <Image Include="assets\textures\textures.png">
+      <Filter>Resource Files</Filter>
+    </Image>
+    <Image Include="assets\textures\player_inventory.png">
       <Filter>Resource Files</Filter>
     </Image>
   </ItemGroup>

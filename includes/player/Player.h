@@ -27,6 +27,7 @@ public:
         const glm::vec3& camFront,
         bool fwd, bool back, bool left, bool right,
         bool jump, bool crouch, bool booster,
+        bool shouldUpdateControls,
         const World& world
     );
 

@@ -74,7 +74,7 @@ void main() {
     vec4 base = texture(u_atlas, fBaseUV);
 
     if (base.a < 0.5)
-        discard;
+       discard;
 
     if(fUseOverlay > 0.5f)
     {

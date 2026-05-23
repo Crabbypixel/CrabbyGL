@@ -7,14 +7,16 @@
 // GLM (needed for matProjection)
 #include <glm/glm.hpp>
 
+// Camera
 #include "core/Camera.h"
+
+// Image
+#include "stb/stb_image.h"
 
 #include <string>
 #include <atomic>
 
 // Constants
-static constexpr int MAX_KEYS = GLFW_KEY_LAST;
-static constexpr int MAX_MOUSE_BUTTONS = 3;
 constexpr float pi = 3.14159f;
 
 class OpenGL_3D
@@ -26,6 +28,10 @@ private:
 
 	// Window title name
 	std::string m_sAppName;
+
+	// Maximum number of keys supported in GLFW
+	static constexpr int MAX_KEYS = GLFW_KEY_LAST;
+	static constexpr int MAX_MOUSE_BUTTONS = 3;
 
 	// Arrays to store key states
 	short m_keyNewState[MAX_KEYS] = { 0 };
@@ -64,6 +70,9 @@ private:
 	// Atomic variable for running console
 	std::atomic<bool> m_bIsRunning{ false };
 
+	// Atomic variable for cursor visibility - renderer writes, main reads
+	std::atomic<bool> m_cursorVisible{ false };
+
 protected:
 	GLFWwindow* window;
 
@@ -77,6 +86,11 @@ protected:
 	};
 
 	bool bIsPaused = false;
+	bool shouldUpdateCamera = true;		// Set to false to disable camera controls and view/projection updates
+
+	// Call from Update(), the atomic m_cursorVisible flag toggles cursor visibility
+	// GLFW only allows cursor visibility to be changed from the main thread
+	void RequestCursor(bool visible) noexcept { m_cursorVisible.store(visible, std::memory_order_relaxed); }
 
 private:
 	// Main renderer thread which constantly renders to the screen
@@ -105,7 +119,7 @@ public:
 	glm::mat4 matProjection;
 	float fFov = 80.0f;
 
-	// Using a Uniform Buffer Object(UBO) to store the projection & view matrices 
+	// Using a Uniform Buffer Object (UBO) to store the projection & view matrices 
 	// in VRAM allows multiple shaders to access this matrix directly, 
 	// eliminating the need for repeated CPU - GPU calls each time
 	// The actual definition of uboMatrices is defined in Main.cpp

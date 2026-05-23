@@ -130,17 +130,21 @@ void Player::ResolveY(const World& world)
 }
 
 // ── main update ───────────────────────────────────────────────────────
-void Player::Update(float dt, const glm::vec3& camFront, bool fwd, bool back, bool left, bool right, bool jump, bool crouch, bool booster, const World& world)
+void Player::Update(float dt, const glm::vec3& camFront, bool fwd, bool back, bool left, bool right, bool jump, bool crouch, bool booster, bool shouldUpdateControls, const World& world)
 {
     // XZ movement — flatten camFront onto horizontal plane
     glm::vec3 flatFront = glm::normalize(glm::vec3(camFront.x, 0.0f, camFront.z));
     glm::vec3 flatRight = glm::normalize(glm::cross(flatFront, glm::vec3(0.0f, 1.0f, 0.0f)));
 
     glm::vec3 move(0.0f);
-    if (fwd)   move += flatFront;
-    if (back)  move -= flatFront;
-    if (right) move += flatRight;
-    if (left)  move -= flatRight;
+
+    if (shouldUpdateControls)
+    {
+        if (fwd)   move += flatFront;
+        if (back)  move -= flatFront;
+        if (right) move += flatRight;
+        if (left)  move -= flatRight;
+    }
 
     if (glm::length(move) > 0.001f)
         move = glm::normalize(move);

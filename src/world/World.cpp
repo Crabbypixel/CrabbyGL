@@ -5,6 +5,7 @@
 #include "stb/stb_perlin.h"
 
 #include "rendering/ChunkMesh.h"
+#include "world/BlockType.h"
 #include "world/Chunk.h"
 #include "world/Raycast.h"
 #include "world/World.h"
@@ -405,8 +406,6 @@ void World::SetChunkShader(Shader& shader)
 
 void World::LoadAtlasTexture(const char* path)
 {
-    stbi_set_flip_vertically_on_load(true);   // GL origin = bottom-left
-
     int w, h, channels;
     unsigned char* data = stbi_load(path, &w, &h, &channels, 0);
     if (!data) {

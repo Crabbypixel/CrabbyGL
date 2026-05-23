@@ -154,6 +154,7 @@
     <ClCompile Include="externals\imgui\imgui_widgets.cpp" />
     <ClCompile Include="src\debug\ChunkDebug.cpp" />
     <ClCompile Include="src\physics\WorldPhysics.cpp" />
+    <ClCompile Include="src\player\Inventory.cpp" />
     <ClCompile Include="src\player\Player.cpp" />
     <ClCompile Include="src\rendering\ChunkMesh.cpp" />
     <ClCompile Include="src\rendering\UIRenderer.cpp" />
@@ -478,6 +479,7 @@
     <ClInclude Include="externals\stb\stb_image.h" />
     <ClInclude Include="includes\debug\ChunkDebug.h" />
     <ClInclude Include="includes\physics\WorldPhysics.h" />
+    <ClInclude Include="includes\player\Inventory.h" />
     <ClInclude Include="includes\player\Player.h" />
     <ClInclude Include="includes\rendering\BufferLayout.h" />
     <ClInclude Include="includes\rendering\ChunkMesh.h" />
@@ -494,6 +496,7 @@
     <ClInclude Include="includes\core\defines.h" />
     <ClInclude Include="includes\world\BlockRef.h" />
     <ClInclude Include="includes\world\BlockRegistry.h" />
+    <ClInclude Include="includes\world\BlockType.h" />
     <ClInclude Include="includes\world\Chunk.h" />
     <ClInclude Include="includes\world\ChunkMeshBuilder.h" />
     <ClInclude Include="includes\world\Raycast.h" />
@@ -505,8 +508,10 @@
     <None Include="assets\shaders\ChunkDebug.glsl" />
     <None Include="assets\shaders\ChunkMesh.glsl" />
     <None Include="assets\shaders\Crosshair.glsl" />
+    <None Include="assets\shaders\DebugRect.glsl" />
     <None Include="assets\shaders\Hotbar.glsl" />
     <None Include="assets\shaders\Hotbar_Selector.glsl" />
+    <None Include="assets\shaders\Inventory.glsl" />
     <None Include="CrabbyGL.exe" />
     <None Include="externals\glm\detail\func_common.inl" />
     <None Include="externals\glm\detail\func_common_simd.inl" />
@@ -661,6 +666,7 @@
     <Image Include="assets\CrabbyGL.png" />
     <Image Include="assets\textures\hotbar.png" />
     <Image Include="assets\textures\hotbar_selector.png" />
+    <Image Include="assets\textures\player_inventory.png" />
     <Image Include="assets\textures\textures.png" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

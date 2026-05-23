@@ -1,4 +1,5 @@
 #include "world/Raycast.h"
+#include "world/BlockType.h"
 #include "world/World.h"
 #include "world/BlockRegistry.h"
 

@@ -16,13 +16,13 @@
 #include "world/BlockRegistry.h"
 
 #include "player/Player.h"
+#include "player/Inventory.h"
 
 #include "physics/WorldPhysics.h"
 
 #include "rendering/VertexArray.h"
 #include "rendering/VertexBuffer.h"
 #include "rendering/BufferLayout.h"
-
 #include "rendering/UIRenderer.h"
 
 #include "imgui/imgui_includes.h"
@@ -63,9 +63,9 @@ private:
 	Shader chunkMeshShader;
 
 	// Framebuffer variables
-	unsigned int framebuffer;
-	unsigned int textureColorBuffer;
-	unsigned int rbo;
+	unsigned int framebuffer = 0;
+	unsigned int textureColorBuffer = 0;
+	unsigned int rbo = 0;
 
 	// Constants
 	const float tickSpeed = 0.05f;
@@ -79,6 +79,7 @@ private:
 	// Hotbar
 	UIRenderer UIRenderer;
 	int hotbarIndex = 0;
+	bool showInventory = false;
 
 	// Fly
 	const float DOUBLE_TAP_WINDOW = 0.3f;
@@ -147,11 +148,11 @@ public:
 			// Generate and bind the framebuffer
 			glGenFramebuffers(1, &framebuffer);
 			glBindFramebuffer(GL_FRAMEBUFFER, framebuffer);
-
+				
 			// Create a texture attachment for color attachment
 			glGenTextures(1, &textureColorBuffer);
 			glBindTexture(GL_TEXTURE_2D, textureColorBuffer);
-			glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, ScreenWidth(), ScreenHeight(), 0, GL_RGB, GL_UNSIGNED_BYTE, NULL);
+			glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, ScreenWidth(), ScreenHeight(), 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
 			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
 			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 			glBindTexture(GL_TEXTURE_2D, 0);
@@ -222,8 +223,9 @@ public:
 		glClearColor(0.227f, 0.757f, 1.0f, 1.0f);
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
 
-		// Render scene to depth cubemap
+		// Use the depth buffer
 		glEnable(GL_DEPTH_TEST);
+		glDepthMask(GL_TRUE);
 
 		// Get user controls
 		UserControls(dt);
@@ -242,6 +244,8 @@ public:
 		// ───── Physics ───────────────────────────────────────────────
 		if (!bIsPaused)
 		{
+			bool shouldUpdatePlayerMovement = !showInventory;
+
 			player.Update(
 				dt,
 				camera.front,
@@ -252,6 +256,7 @@ public:
 				GetKey(GLFW_KEY_SPACE).bHeld,
 				GetKey(GLFW_KEY_LEFT_SHIFT).bHeld,
 				GetKey(GLFW_KEY_LEFT_CONTROL).bHeld,
+				shouldUpdatePlayerMovement,
 				world
 			);
 
@@ -264,11 +269,11 @@ public:
 		glm::ivec3 playerPos = { (int)floor(player.pos.x), (int)floor(player.pos.y), (int)floor(player.pos.z) };
 
 		// Select block
-		if (!bIsPaused && GetMouseButton(Mouse::MIDDLE).bPressed && m_currentHit.hit)
+		if (!bIsPaused && shouldUpdateCamera && GetMouseButton(Mouse::MIDDLE).bPressed && m_currentHit.hit)
 			selectedBlock = world.GetBlock(m_currentHit.blockPos.x, m_currentHit.blockPos.y, m_currentHit.blockPos.z);
 
 		// Break block
-		if (!bIsPaused && GetMouseButton(Mouse::LEFT).bPressed && m_currentHit.hit)
+		if (!bIsPaused && shouldUpdateCamera && GetMouseButton(Mouse::LEFT).bPressed && m_currentHit.hit)
 		{
 			bool isBlockBreakValid = world.BreakBlock(m_currentHit);
 			
@@ -277,7 +282,7 @@ public:
 		}
 
 		// Place block
-		if (!bIsPaused && GetMouseButton(Mouse::RIGHT).bPressed && (playerPos != raycastPlacePos) && (glm::ivec3(playerPos.x, playerPos.y + 1, playerPos.z) != raycastPlacePos) && m_currentHit.hit)
+		if (!bIsPaused && shouldUpdateCamera && GetMouseButton(Mouse::RIGHT).bPressed && (playerPos != raycastPlacePos) && (glm::ivec3(playerPos.x, playerPos.y + 1, playerPos.z) != raycastPlacePos) && m_currentHit.hit)
 		{
 			bool isBlockPlaceValid = world.PlaceBlock(m_currentHit, selectedBlock);
 
@@ -327,8 +332,12 @@ public:
 		// Coordinate axis
 		RenderAxis();
 
-		//glDisable(GL_DEPTH_TEST);
+		// ── UI pass ────────────────────────────────────────
+		// Disable writing & using the depth buffer
+		glDisable(GL_DEPTH_TEST);
 		glDepthMask(GL_FALSE);
+		glEnable(GL_BLEND);
+		glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
 		// Crosshair
 		RenderCrosshair();
@@ -337,14 +346,38 @@ public:
 		UIRenderer.DrawHotbar();
 
 		// Hotbar selector
-		UIRenderer.DrawHotbarSelector(hotbarIndex);
+		UIRenderer.DrawHotbarCursor(hotbarIndex);
 
-		//glEnable(GL_DEPTH_TEST);
+		for (int i = 0; i < 9; ++i)
+		{
+			glm::vec2 pos = UIRenderer.GetHotbarSlotPos(i);
+			int rectSize = 32;
+			UIRenderer.DrawDebugRect(pos.x, pos.y, rectSize, rectSize, glm::vec4(1.0f, 0.3f, 1.0f, 0.25f));
+		}
+
+		// Inventory
+		if (showInventory)
+		{
+			UIRenderer.DrawInventory();
+
+
+			int index = UIRenderer.GetMouseInventorySlot(GetMousePosX(), ScreenHeight() - GetMousePosY());
+			std::cout << "index: " << index << '\n';
+
+			if (index != -1)
+			{
+				glm::vec2 highlightPos = UIRenderer.GetInventorySlotPos(index);
+				UIRenderer.DrawDebugRect(highlightPos.x, highlightPos.y, 32, 32, glm::vec4(1.0f, 1.0f, 1.0f, 0.8f));
+			}
+		}
+
+		// Write and use the depth buffer
 		glDepthMask(GL_TRUE);
+		glEnable(GL_DEPTH_TEST);
+		glDisable(GL_BLEND);
 
 		// Bind back to the default framebuffer & draw quad keeping the texture rendered in the custom framebuffer bounded
 		glBindFramebuffer(GL_FRAMEBUFFER, 0);
-		glDisable(GL_DEPTH_TEST);
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
 		glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
 
@@ -439,6 +472,14 @@ public:
 		// Toggle player inventory
 		if (GetKey('E').bPressed)
 		{
+			showInventory = !showInventory;
+			shouldUpdateCamera = !shouldUpdateCamera;
+
+			if (!showInventory)
+			{
+				camera.fLastX = (float)GetMousePosX();
+				camera.fLastY = (float)GetMousePosY();
+			}
 		}
 
 		if (GetMouseScroll() == Mouse::SCROLL_DOWN)
@@ -449,6 +490,8 @@ public:
 		{
 			hotbarIndex = (hotbarIndex - 1 + 9) % 9;
 		}
+
+		RequestCursor(bIsPaused || showInventory);
 	}
 
 	void InitShaders()

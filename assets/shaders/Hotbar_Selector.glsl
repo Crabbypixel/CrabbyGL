@@ -9,7 +9,7 @@ void main()
 {
 	fTexCoord = aTexCoord;
 
-    gl_Position = matProjection * vec4(aPos, 1.0);
+    gl_Position = matProjection * vec4(aPos, 1.0f);
 }
 #endif
 

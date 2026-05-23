@@ -102,10 +102,14 @@ void OpenGL_3D::RendererThread()
 
 			if (bIsPaused)
 			{
+				shouldUpdateCamera = false;
+
 				std::cout << "Engine: paused\n";
 			}
 			else
 			{
+				shouldUpdateCamera = true;
+
 				camera.fLastX = (float)GetMousePosX();
 				camera.fLastY = (float)GetMousePosY();
 				std::cout << "Engine: unpaused\n";
@@ -152,7 +156,7 @@ void OpenGL_3D::RendererThread()
 
 void OpenGL_3D::UpdateCameraControls(float fElapsedTime)
 {
-	if (!bIsPaused)
+	if (shouldUpdateCamera)
 	{
 		if (GetKey('C').bHeld)
 		{
@@ -174,6 +178,9 @@ void OpenGL_3D::UpdateCameraControls(float fElapsedTime)
 		/* ------------------------------------------ - Mouse Control - ------------------------------------------ */
 		camera.ProcessMouse(GetMousePosX(), GetMousePosY(), ScreenWidth(), ScreenHeight(), bFirstMouse);
 	}
+
+	if (!shouldUpdateCamera && !bIsPaused)
+		camera.ProcessMouse(camera.fLastX, camera.fLastY, ScreenWidth(), ScreenHeight(), bFirstMouse);
 
 	UpdateViewMatrix();
 }
@@ -242,6 +249,11 @@ void OpenGL_3D::ConstructWindow(int width, int height, std::string windowName)
 	// Enable multi-sampling (usually enabled, good to enable it ourselves anyways)
 	glEnable(GL_MULTISAMPLE);
 
+	// Make the image loading library flip textures on load by default since 
+	// OpenGL's texture coordinate system has the y-axis going 
+	// upwards, while images usually have it downwards
+	stbi_set_flip_vertically_on_load(true);
+
 	// Display GPU info
 	DisplayGPU();
 }
@@ -274,8 +286,8 @@ void OpenGL_3D::Start()
 		}
 
 		// Set cursor mode
-		glfwSetInputMode(window, GLFW_CURSOR, (bIsPaused ? GLFW_CURSOR_NORMAL : GLFW_CURSOR_DISABLED));
-
+		glfwSetInputMode(window, GLFW_CURSOR, m_cursorVisible.load(std::memory_order_relaxed) ? GLFW_CURSOR_NORMAL : GLFW_CURSOR_DISABLED);
+		
 		// Initiate shutdown when window is closed
 		if (glfwWindowShouldClose(window))
 			m_bIsRunning = false;

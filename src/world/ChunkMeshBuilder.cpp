@@ -244,7 +244,6 @@ void ChunkMeshBuilder::AddFace(std::vector<Vertex>& verts, const glm::ivec3& wor
     }
 }
 
-
 // Builds mesh for chunks
 void ChunkMeshBuilder::Build(const Chunk& chunk, const Chunk* nPX, const Chunk* nNX, const Chunk* nPZ, const Chunk* nNZ, const Chunk* nPX_PZ, const Chunk* nPX_NZ, const Chunk* nNX_PZ, const Chunk* nNX_NZ, std::vector<Vertex>& outVertices)
 {

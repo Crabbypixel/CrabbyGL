@@ -24,7 +24,6 @@ class Chunk;
 class RaycastHit;
 
 enum class BlockType : uint8_t;
-struct BlockInstance;
 
 struct IVec2Hash
 {
