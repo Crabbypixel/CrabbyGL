@@ -144,7 +144,8 @@ void ChunkMeshBuilder::EmitCross(std::vector<Vertex>& verts, const glm::ivec3& w
     constexpr int REV[6] = { 0,2,1, 0,3,2 };
 
     auto emit = [&](const glm::ivec3 quad[4], const int idx[6]) {
-        for (int i = 0; i < 6; i++)
+        for (int i = 0; i < 6; ++i)
+        {
             verts.emplace_back(Vertex{
                 worldPos + quad[idx[i]],
                 uvs[idx[i]],
@@ -155,7 +156,8 @@ void ChunkMeshBuilder::EmitCross(std::vector<Vertex>& verts, const glm::ivec3& w
                 0.0f,   // no overlay
                 0.6f    // ao = full bright
             });
-        };
+        }
+    };
 
     emit(CROSS_VERTS1, FWD);  emit(CROSS_VERTS1, REV);
     emit(CROSS_VERTS2, FWD);  emit(CROSS_VERTS2, REV);
@@ -195,7 +197,7 @@ void ChunkMeshBuilder::AddFace(std::vector<Vertex>& verts, const glm::ivec3& wor
     glm::ivec3 V = TANGENT_V[face];
     glm::ivec3 N = NORMALS[face];
 
-    for (int i = 0; i < 4; i++)
+    for (int i = 0; i < 4; ++i)
     {
         glm::ivec3 v = FACE_VERTS[face][i];
         int du = (glm::dot(glm::vec3(v), glm::vec3(U)) > 0.5f) ? 1 : -1;
@@ -264,11 +266,11 @@ void ChunkMeshBuilder::Build(const Chunk& chunk, const Chunk* nPX, const Chunk* 
     int chunk_wz0 = chunk.chunkPos.y * CZ;
 
     // Iterate over every block
-    for (int x = 0; x < CX; x++)
+    for (int x = 0; x < CX; ++x)
     {
-        for (int y = 0; y < CY; y++)
+        for (int y = 0; y < CY; ++y)
         {
-            for (int z = 0; z < CZ; z++)
+            for (int z = 0; z < CZ; ++z)
             {
                 BlockType blockType = chunk.GetUnchecked(x, y, z);
                 if (blockType == BlockType::AIR) [[likely]]     // If air, continue
@@ -290,7 +292,7 @@ void ChunkMeshBuilder::Build(const Chunk& chunk, const Chunk* nPX, const Chunk* 
                     glm::ivec3 worldPos = glm::ivec3(chunk_wx0 + x, y, chunk_wz0 + z);
 
                     // Check all six faces
-                    for (int face = 0; face < 6; face++)
+                    for (int face = 0; face < 6; ++face)
                     {
                         int nx = x + NORMALS[face].x;
                         int ny = y + NORMALS[face].y;
@@ -355,7 +357,7 @@ void ChunkMeshBuilder::Build(const Chunk& chunk, const Chunk* nPX, const Chunk* 
                     glm::ivec3 worldPos = glm::ivec3(chunk_wx0 + x, y, chunk_wz0 + z);
 
                     // Check all six faces
-                    for (int face = 0; face < 6; face++)
+                    for (int face = 0; face < 6; ++face)
                     {
                         int nx = x + NORMALS[face].x;
                         int ny = y + NORMALS[face].y;

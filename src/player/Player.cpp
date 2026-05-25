@@ -23,8 +23,8 @@ void Player::ResolveX(const World& world)
         float px1 = pos.x + HALF_W;
         int   bx = (int)std::floor(px1);
         float push = 0.0f;
-        for (int y = y0; y <= y1; y++)
-            for (int z = z0; z <= z1; z++)
+        for (int y = y0; y <= y1; ++y)
+            for (int z = z0; z <= z1; ++z)
             {
                 if (!world.IsSolid(bx, y, z)) continue;
                 float pen = px1 - (float)bx;
@@ -38,8 +38,8 @@ void Player::ResolveX(const World& world)
         float px0 = pos.x - HALF_W;
         int   bx = (int)std::floor(px0);
         float push = 0.0f;
-        for (int y = y0; y <= y1; y++)
-            for (int z = z0; z <= z1; z++)
+        for (int y = y0; y <= y1; ++y)
+            for (int z = z0; z <= z1; ++z)
             {
                 if (!world.IsSolid(bx, y, z)) continue;
                 float pen = (float)(bx + 1) - px0;
@@ -63,8 +63,8 @@ void Player::ResolveZ(const World& world)
         float pz1 = pos.z + HALF_W;
         int   bz = (int)std::floor(pz1);
         float push = 0.0f;
-        for (int x = x0; x <= x1; x++)
-            for (int y = y0; y <= y1; y++)
+        for (int x = x0; x <= x1; ++x)
+            for (int y = y0; y <= y1; ++y)
             {
                 if (!world.IsSolid(x, y, bz)) continue;
                 float pen = pz1 - (float)bz;
@@ -78,8 +78,8 @@ void Player::ResolveZ(const World& world)
         float pz0 = pos.z - HALF_W;
         int   bz = (int)std::floor(pz0);
         float push = 0.0f;
-        for (int x = x0; x <= x1; x++)
-            for (int y = y0; y <= y1; y++)
+        for (int x = x0; x <= x1; ++x)
+            for (int y = y0; y <= y1; ++y)
             {
                 if (!world.IsSolid(x, y, bz)) continue;
                 float pen = (float)(bz + 1) - pz0;
@@ -102,8 +102,8 @@ void Player::ResolveY(const World& world)
     {
         int   by = (int)std::floor(pos.y);
         float push = 0.0f;
-        for (int x = x0; x <= x1; x++)
-            for (int z = z0; z <= z1; z++)
+        for (int x = x0; x <= x1; ++x)
+            for (int z = z0; z <= z1; ++z)
             {
                 if (!world.IsSolid(x, by, z)) continue;
                 float pen = (float)(by + 1) - pos.y;
@@ -117,8 +117,8 @@ void Player::ResolveY(const World& world)
         float py1 = pos.y + HEIGHT;
         int   by = (int)std::floor(py1);
         float push = 0.0f;
-        for (int x = x0; x <= x1; x++)
-            for (int z = z0; z <= z1; z++)
+        for (int x = x0; x <= x1; ++x)
+            for (int z = z0; z <= z1; ++z)
             {
                 if (!world.IsSolid(x, by, z)) continue;
                 float pen = py1 - (float)by;

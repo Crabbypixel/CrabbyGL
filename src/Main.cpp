@@ -78,15 +78,15 @@ private:
 
 	// Hotbar
 	UIRenderer UIRenderer;
-	int hotbarIndex = 0;
-	bool showInventory = false;
+	//int hotbarIndex = 0;
+	//bool showInventory = false;
+
+	Inventory inventory;
 
 	// Fly
 	const float DOUBLE_TAP_WINDOW = 0.3f;
 	float spaceTimer = 0.0f;
 	bool waitingForSecondTap = false;
-
-	BlockType selectedBlock = BlockType::AIR;
 
 	bool isAOEnabled = true;
 
@@ -119,7 +119,7 @@ public:
 
 		// Chunk boundaries
 		chunkDebug.Init("assets/shaders/ChunkDebug.glsl");
-		
+
 		// ───── World ──────────────────────────────────────────────────
 		auto dt1 = std::chrono::system_clock::now();
 
@@ -148,7 +148,7 @@ public:
 			// Generate and bind the framebuffer
 			glGenFramebuffers(1, &framebuffer);
 			glBindFramebuffer(GL_FRAMEBUFFER, framebuffer);
-				
+
 			// Create a texture attachment for color attachment
 			glGenTextures(1, &textureColorBuffer);
 			glBindTexture(GL_TEXTURE_2D, textureColorBuffer);
@@ -192,8 +192,13 @@ public:
 			// ──────────────────────────────────────────────────────────────
 		}
 
-		// Initalize hotbar UI
+		// UI Renderer
 		UIRenderer.Init(ScreenWidth(), ScreenHeight());
+		UIRenderer.LoadIcons("assets/textures/icons.png");
+		UIRenderer.LoadASCII("assets/textures/ascii.png");
+
+		// Inventory
+		inventory.Load("saves/player_inventory.bin");
 
 		// Initialize ImGui
 		IMGUI_CHECKVERSION();
@@ -230,21 +235,10 @@ public:
 		// Get user controls
 		UserControls(dt);
 
-		if (GetKey('U').bPressed)
-		{
-			for (int i = 200; i < 220; i++)
-			{
-				for (int j = 200; j < 220; j++)
-				{
-					world.SetBlock(i, 150, j, BlockType::SAND);
-				}
-			}
-		}
-
 		// ───── Physics ───────────────────────────────────────────────
 		if (!bIsPaused)
 		{
-			bool shouldUpdatePlayerMovement = !showInventory;
+			bool shouldUpdatePlayerMovement = !inventory.IsOpen();
 
 			player.Update(
 				dt,
@@ -262,6 +256,18 @@ public:
 
 			// Camera tracks player head
 			camera.position = player.EyePos();
+
+			// Physics test - ge
+			if (GetKey('U').bPressed)
+			{
+				for (int i = 200; i < 220; ++i)
+				{
+					for (int j = 200; j < 220; ++j)
+					{
+						world.SetBlock(i, 150, j, BlockType::SAND);
+					}
+				}
+			}
 		}
 
 		RaycastHit m_currentHit = RaycastDDA(camera.position, camera.front, world);
@@ -270,23 +276,26 @@ public:
 
 		// Select block
 		if (!bIsPaused && shouldUpdateCamera && GetMouseButton(Mouse::MIDDLE).bPressed && m_currentHit.hit)
-			selectedBlock = world.GetBlock(m_currentHit.blockPos.x, m_currentHit.blockPos.y, m_currentHit.blockPos.z);
+		{
+			BlockType picked = world.GetBlock(m_currentHit.blockPos.x, m_currentHit.blockPos.y, m_currentHit.blockPos.z);
+			inventory.AddBlock(picked);
+		}
 
 		// Break block
 		if (!bIsPaused && shouldUpdateCamera && GetMouseButton(Mouse::LEFT).bPressed && m_currentHit.hit)
 		{
 			bool isBlockBreakValid = world.BreakBlock(m_currentHit);
-			
-			if(isBlockBreakValid)
+
+			if (isBlockBreakValid)
 				worldPhysics.NotifyBlockChanged(m_currentHit.blockPos.x, m_currentHit.blockPos.y, m_currentHit.blockPos.z);
 		}
 
 		// Place block
 		if (!bIsPaused && shouldUpdateCamera && GetMouseButton(Mouse::RIGHT).bPressed && (playerPos != raycastPlacePos) && (glm::ivec3(playerPos.x, playerPos.y + 1, playerPos.z) != raycastPlacePos) && m_currentHit.hit)
 		{
-			bool isBlockPlaceValid = world.PlaceBlock(m_currentHit, selectedBlock);
+			bool isBlockPlaceValid = world.PlaceBlock(m_currentHit, inventory.GetHeldBlock());
 
-			if(isBlockPlaceValid)
+			if (isBlockPlaceValid)
 				worldPhysics.NotifyBlockChanged(raycastPlacePos.x, raycastPlacePos.y, raycastPlacePos.z);
 		}
 
@@ -298,12 +307,12 @@ public:
 		// - Identify chunks outside unload distance for removal
 		// - Maintains streaming window around the player
 		world.UpdateChunkStreaming(player.pos);
-		
+
 		// Promote fully generated chunks from staging into the main world: 
 		// - Transfers ownership into `chunks` map (main thread)
 		// - Ensures chunks become visible/usable only after complete generation
 		world.CommitGeneratedChunks();
-		
+
 		// Synchronize CPU-side world state with GPU rendering:
 		// - Enqueue dirty chunks for meshing
 		// - Upload completed mesh data to GPU buffers
@@ -345,30 +354,43 @@ public:
 		// Hotbar
 		UIRenderer.DrawHotbar();
 
-		// Hotbar selector
-		UIRenderer.DrawHotbarCursor(hotbarIndex);
+		// Hotbar icons
+		UIRenderer.DrawHotbarIcons(inventory);
 
-		for (int i = 0; i < 9; ++i)
+		// Hotbar selector
+		UIRenderer.DrawHotbarCursor(inventory.GetHotbarIndex());
+		for (int i = 0; i < 9; ++i)			// Hotbar text
 		{
-			glm::vec2 pos = UIRenderer.GetHotbarSlotPos(i);
-			int rectSize = 32;
-			UIRenderer.DrawDebugRect(pos.x, pos.y, rectSize, rectSize, glm::vec4(1.0f, 0.3f, 1.0f, 0.25f));
+			glm::vec2 pos = UIRenderer::GetHotbarSlotPos(i);
+			UIRenderer.DrawTextBold(pos.x + 23.0f, pos.y - 2.0f, 2.0f, std::to_string(i), glm::vec4(1.0f, 1.0f, 1.0f, 1.0f));
 		}
 
 		// Inventory
-		if (showInventory)
+		if (inventory.IsOpen())
 		{
 			UIRenderer.DrawInventory();
 
+			// Item icons
+			UIRenderer.DrawInventoryIcons(inventory);
 
-			int index = UIRenderer.GetMouseInventorySlot(GetMousePosX(), ScreenHeight() - GetMousePosY());
-			std::cout << "index: " << index << '\n';
+			int index = UIRenderer::GetMouseInventorySlot(GetMousePosX(), ScreenHeight() - GetMousePosY());
 
 			if (index != -1)
 			{
 				glm::vec2 highlightPos = UIRenderer.GetInventorySlotPos(index);
-				UIRenderer.DrawDebugRect(highlightPos.x, highlightPos.y, 32, 32, glm::vec4(1.0f, 1.0f, 1.0f, 0.8f));
+				UIRenderer.DrawDebugRect(highlightPos.x, highlightPos.y, 32, 32, glm::vec4(0.7f, 0.7f, 0.7f, 0.6f));
 			}
+
+			float mouseX = GetMousePosX();
+			float mouseY = ScreenHeight() - GetMousePosY();
+
+			if (GetMouseButton(Mouse::LEFT).bPressed)
+			{
+				int slot = UIRenderer::GetMouseInventorySlot(mouseX, mouseY);
+				if (slot >= 0) inventory.ClickSlot(slot, false);
+			}
+
+			UIRenderer.DrawHeldItem(inventory, mouseX, mouseY);
 		}
 
 		// Write and use the depth buffer
@@ -396,7 +418,7 @@ public:
 		ImGui::Text("Player Position: %d %d %d", (int)camera.position.x, (int)camera.position.y, (int)camera.position.z);
 		ImGui::Text("Currently at chunk: %d %d", playerChunk.x, playerChunk.y);
 
-		ImGui::Text("Selected Block: %s", GetDef(selectedBlock).name);
+		ImGui::Text("Selected Block: %s", GetDef(inventory.GetHeldBlock()).name);
 		ImGui::Text("Raycast place position: %d %d %d", raycastPlacePos.x, raycastPlacePos.y, raycastPlacePos.z);
 		ImGui::Text("AO (H to toggle): %s", isAOEnabled ? "Yes" : "No");
 		ImGui::Text("Chunk borders (G to toggle): %s", chunkDebug.visible ? "Enabled" : "Disabled");
@@ -472,26 +494,37 @@ public:
 		// Toggle player inventory
 		if (GetKey('E').bPressed)
 		{
-			showInventory = !showInventory;
+			// If inventory closes, dump the held item on the inve
+			if (inventory.IsOpen())
+				inventory.Dump();
+
+			inventory.Toggle();
 			shouldUpdateCamera = !shouldUpdateCamera;
 
-			if (!showInventory)
+			if (!inventory.IsOpen())
 			{
 				camera.fLastX = (float)GetMousePosX();
 				camera.fLastY = (float)GetMousePosY();
 			}
 		}
 
+		// Remove item from hotbar
+		if (GetKey('Q').bPressed)
+		{
+			inventory.RemoveFromSlot(inventory.GetHotbarIndex());
+		}
+
+		// Scroll hotbar cursor
 		if (GetMouseScroll() == Mouse::SCROLL_DOWN)
 		{
-			hotbarIndex = (hotbarIndex + 1) % 9;
+			inventory.Scroll(1);
 		}
 		else if (GetMouseScroll() == Mouse::SCROLL_UP)
 		{
-			hotbarIndex = (hotbarIndex - 1 + 9) % 9;
+			inventory.Scroll(-1);
 		}
 
-		RequestCursor(bIsPaused || showInventory);
+		RequestCursor(bIsPaused || inventory.IsOpen());
 	}
 
 	void InitShaders()
@@ -557,7 +590,7 @@ public:
 		crosshairVAO.bind();
 		crosshairShader.setFloat("aspect", static_cast<float>(ScreenWidth()) / static_cast<float>(ScreenHeight()));
 
-		glDrawArrays(GL_LINES, 0, 4);	
+		glDrawArrays(GL_LINES, 0, 4);
 		glEnable(GL_DEPTH_TEST);
 
 		glLineWidth(1.0f);
@@ -565,6 +598,9 @@ public:
 
 	void Destroy() override
 	{
+		inventory.Dump();
+		inventory.Save();
+
 		world.StopAllWorkers();			// Stop all threads
 		world.UnloadChunks();			// Unload all chunks
 

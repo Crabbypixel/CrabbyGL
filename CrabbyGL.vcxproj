@@ -505,12 +505,14 @@
   </ItemGroup>
   <ItemGroup>
     <None Include=".gitignore" />
+    <None Include="assets\shaders\ASCII.glsl" />
     <None Include="assets\shaders\ChunkDebug.glsl" />
     <None Include="assets\shaders\ChunkMesh.glsl" />
     <None Include="assets\shaders\Crosshair.glsl" />
     <None Include="assets\shaders\DebugRect.glsl" />
     <None Include="assets\shaders\Hotbar.glsl" />
     <None Include="assets\shaders\Hotbar_Selector.glsl" />
+    <None Include="assets\shaders\Icons.glsl" />
     <None Include="assets\shaders\Inventory.glsl" />
     <None Include="CrabbyGL.exe" />
     <None Include="externals\glm\detail\func_common.inl" />
@@ -664,8 +666,10 @@
   </ItemGroup>
   <ItemGroup>
     <Image Include="assets\CrabbyGL.png" />
+    <Image Include="assets\textures\ascii.png" />
     <Image Include="assets\textures\hotbar.png" />
     <Image Include="assets\textures\hotbar_selector.png" />
+    <Image Include="assets\textures\icons.png" />
     <Image Include="assets\textures\player_inventory.png" />
     <Image Include="assets\textures\textures.png" />
   </ItemGroup>

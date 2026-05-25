@@ -144,9 +144,9 @@ void World::FillChunkData(Chunk& chunk, glm::ivec2 coord)
     int cx = coord.x;
     int cz = coord.y;
 
-    for (int x = 0; x < CX; x++)
+    for (int x = 0; x < CX; ++x)
     {
-        for (int z = 0; z < CZ; z++)
+        for (int z = 0; z < CZ; ++z)
         {
             int worldX = cx * CX + x;
             int worldZ = cz * CZ + z;
@@ -157,8 +157,8 @@ void World::FillChunkData(Chunk& chunk, glm::ivec2 coord)
             int   base = std::max(1, height - thickness);
 
             chunk.blocks[x][0][z] = BlockType::BEDROCK;
-            for (int y = 1; y < base; y++) chunk.blocks[x][y][z] = BlockType::STONE;
-            for (int y = base; y < height; y++) chunk.blocks[x][y][z] = BlockType::DIRT;
+            for (int y = 1; y < base; ++y) chunk.blocks[x][y][z] = BlockType::STONE;
+            for (int y = base; y < height; ++y) chunk.blocks[x][y][z] = BlockType::DIRT;
             chunk.blocks[x][height][z] = BlockType::GRASS_BLOCK;
 
             if (cx * CX + x == 0 || cz * CZ + z == 0)
@@ -220,6 +220,7 @@ bool World::LoadChunkFromDisk(Chunk& chunk, glm::ivec2& coord)
 
     return true;
 }
+
 void World::UnloadChunks()
 {
     // Save modified chunks
@@ -358,7 +359,7 @@ void World::SyncRenderer()
             // Protect coord (and +4 neighbors) from unload/deletion later by the main thread
             m_chunkMeshUsageGuards[chunkPos]++;
             for (auto& neighborPos : GUARDED_NEIGHBORS)
-                m_chunkMeshUsageGuards[chunkPos + neighborPos]++;    // We check if this coord is present in worker thread, no need to check now
+                ++m_chunkMeshUsageGuards[chunkPos + neighborPos];    // We check if this coord is present in worker thread, no need to check now
 
 			// Do this to ensure the worker thread can access the chunk data without worrying about concurrent deletion by the main thread
 			// This is used in ChunkMeshBuilder when it accesses neighbor chunk data for Ambient Occlusion (and later greedy meshing)
@@ -408,7 +409,8 @@ void World::LoadAtlasTexture(const char* path)
 {
     int w, h, channels;
     unsigned char* data = stbi_load(path, &w, &h, &channels, 0);
-    if (!data) {
+    if (!data)
+    {
         std::cout << "Atlas load failed: " << path << '\n';
         return;
     }
@@ -502,9 +504,9 @@ void World::UpdateChunkStreaming(const glm::vec3& playerPos)
         bool hasAllChunksLoaded = true;
         std::lock_guard<std::mutex> lock(m_chunkLoadReservationsMutex);
         {
-            for (int dx = -m_viewDist; dx <= m_viewDist && hasAllChunksLoaded; dx++)
+            for (int dx = -m_viewDist; dx <= m_viewDist && hasAllChunksLoaded; ++dx)
             {
-                for (int dz = -m_viewDist; dz <= m_viewDist && hasAllChunksLoaded; dz++)
+                for (int dz = -m_viewDist; dz <= m_viewDist && hasAllChunksLoaded; ++dz)
                 {
                     if (dx * dx + dz * dz > m_viewDist * m_viewDist)
                         continue;
@@ -567,9 +569,9 @@ void World::UpdateChunkStreaming(const glm::vec3& playerPos)
 
     // Make list of chunks to load
     std::vector<glm::ivec2> chunksToLoad;
-    for (int dx = -m_viewDist; dx <= m_viewDist; dx++)
+    for (int dx = -m_viewDist; dx <= m_viewDist; ++dx)
     {
-        for (int dz = -m_viewDist; dz <= m_viewDist; dz++)
+        for (int dz = -m_viewDist; dz <= m_viewDist; ++dz)
         {
 			// If chunk is outside the view distance, skip
             if (dx * dx + dz * dz > m_viewDist * m_viewDist)
@@ -659,13 +661,13 @@ void World::CommitGeneratedChunks()
 void World::StartChunkLoadWorkers(int count)
 {
     m_shutdown = false;
-    for (int i = 0; i < count; i++)
+    for (int i = 0; i < count; ++i)
         m_chunkLoadWorkers.emplace_back([this] { ChunkLoadWorkerLoop(); });
 }
 
 void World::StartMeshWorkers(int count)
 {
-    for (int i = 0; i < count; i++)
+    for (int i = 0; i < count; ++i)
         m_meshWorkers.emplace_back([this] { MeshWorkerLoop(); });
 }
 

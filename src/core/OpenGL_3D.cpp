@@ -45,9 +45,8 @@ void OpenGL_3D::RendererThread()
 
 		// Update key and mouse states on each frame, they may be used later by the programmer
 		// 1. Update key states
-		for (int i = 0; i < MAX_KEYS; i++)
+		for (int i = 0; i < MAX_KEYS; ++i)
 		{
-			//m_keyNewState[i] = glfwGetKey(window, i) == GLFW_PRESS;
 			m_keyNewState[i] = m_keyRaw[i];		// Use the raw state captured by the main thread callback
 
 			m_keys[i].bPressed = false;
@@ -71,7 +70,7 @@ void OpenGL_3D::RendererThread()
 		}
 
 		// 2. Update mouse states
-		for (int i = 0; i < MAX_MOUSE_BUTTONS; i++)
+		for (int i = 0; i < MAX_MOUSE_BUTTONS; ++i)
 		{
 			// Drain the atomic button held states into the new state array for processing
 			m_mouseNewState[i] = m_bMouseButtonHeld[i].load(std::memory_order_relaxed);
@@ -125,7 +124,7 @@ void OpenGL_3D::RendererThread()
 		UpdateCameraControls(fElapsedTime);
 
 		// FPS calculation
-		iFrameCount++;
+		++iFrameCount;
 		fAccumulatedTime += fElapsedTime;
 
 		// Update FPS every 0.5 seconds
@@ -326,7 +325,7 @@ void OpenGL_3D::Error(const std::string& message)
 void OpenGL_3D::PollKeys()
 {
 	// Called from main thread - defined behavior
-	for (int i = 0; i < MAX_KEYS; i++)
+	for (int i = 0; i < MAX_KEYS; ++i)
 		m_keyRawPending[i] = (glfwGetKey(window, i) == GLFW_PRESS);
 
 	// Signal renderer that a fresh snapshot is ready for swapping
