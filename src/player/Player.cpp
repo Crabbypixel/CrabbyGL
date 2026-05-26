@@ -169,7 +169,7 @@ void Player::Update(float dt, const glm::vec3& camFront, bool fwd, bool back, bo
     }
 
     // Jump — single frame trigger, only when grounded
-    if (jump && onGround && !canFly)
+    if (shouldUpdateControls && jump && onGround && !canFly)
     {
         vel.y = JUMP_VEL;
         onGround = false;
@@ -178,6 +178,6 @@ void Player::Update(float dt, const glm::vec3& camFront, bool fwd, bool back, bo
     // Move + resolve each axis independently
     pos.x += vel.x * dt;  ResolveX(world);
     onGround = false;        // reset before Y resolve
-    pos.y += vel.y * dt;  ResolveY(world);   // sets onGround=true if floor hit
+    pos.y += vel.y * dt;  ResolveY(world);   // sets onGround = true if floor hit
     pos.z += vel.z * dt;  ResolveZ(world);
 }

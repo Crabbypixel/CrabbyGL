@@ -97,7 +97,7 @@ void main() {
     // Highlight selected block
     if(u_isSelected)
         if(ivec3(fBlockOrigin) == u_selectedBlock)
-            base.rgb /= 0.85f;
+            base.rgb /= 0.5f;
 
     FragColor = vec4(base.rgb * lighting, base.a);
 

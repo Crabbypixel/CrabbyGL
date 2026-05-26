@@ -51,9 +51,13 @@ private:
 	VertexBuffer<float> crosshairVBO;
 	BufferLayout crosshairLayout;
 
+	// Player
+	Player player;
+
 	// World
 	World world;
-	Player player;
+
+	// Chunk outlines for debugging
 	ChunkDebug chunkDebug;
 
 	// Shaders
@@ -61,6 +65,13 @@ private:
 	Shader framebufferShader;
 	Shader crosshairShader;
 	Shader chunkMeshShader;
+
+	// Physics
+	WorldPhysics worldPhysics;
+
+	// Hotbar & Inventory
+	UIRenderer UIRenderer;
+	Inventory inventory;
 
 	// Framebuffer variables
 	unsigned int framebuffer = 0;
@@ -73,21 +84,12 @@ private:
 	// Other variables
 	float fDebugTimer = 0.0f;
 
-	// Physics
-	WorldPhysics worldPhysics;
-
-	// Hotbar
-	UIRenderer UIRenderer;
-	//int hotbarIndex = 0;
-	//bool showInventory = false;
-
-	Inventory inventory;
-
-	// Fly
+	// Jump fly
 	const float DOUBLE_TAP_WINDOW = 0.3f;
 	float spaceTimer = 0.0f;
 	bool waitingForSecondTap = false;
 
+	// Ambient occlusion toggle
 	bool isAOEnabled = true;
 
 public:
@@ -119,6 +121,14 @@ public:
 
 		// Chunk boundaries
 		chunkDebug.Init("assets/shaders/ChunkDebug.glsl");
+
+		// UI Renderer
+		UIRenderer.Init(ScreenWidth(), ScreenHeight());
+		UIRenderer.LoadIcons("assets/textures/icons.png");
+		UIRenderer.LoadASCII("assets/textures/ascii.png");
+
+		// Inventory
+		inventory.Load("saves/player_inventory.bin");
 
 		// ───── World ──────────────────────────────────────────────────
 		auto dt1 = std::chrono::system_clock::now();
@@ -191,14 +201,6 @@ public:
 			glBindBufferBase(GL_UNIFORM_BUFFER, 0, uboMatrices);
 			// ──────────────────────────────────────────────────────────────
 		}
-
-		// UI Renderer
-		UIRenderer.Init(ScreenWidth(), ScreenHeight());
-		UIRenderer.LoadIcons("assets/textures/icons.png");
-		UIRenderer.LoadASCII("assets/textures/ascii.png");
-
-		// Inventory
-		inventory.Load("saves/player_inventory.bin");
 
 		// Initialize ImGui
 		IMGUI_CHECKVERSION();
@@ -359,11 +361,15 @@ public:
 
 		// Hotbar selector
 		UIRenderer.DrawHotbarCursor(inventory.GetHotbarIndex());
-		for (int i = 0; i < 9; ++i)			// Hotbar text
+		
+		// Draw text over hotbar
+		/*
+		for (int i = 0; i < 9; ++i)
 		{
 			glm::vec2 pos = UIRenderer::GetHotbarSlotPos(i);
 			UIRenderer.DrawTextBold(pos.x + 23.0f, pos.y - 2.0f, 2.0f, std::to_string(i), glm::vec4(1.0f, 1.0f, 1.0f, 1.0f));
 		}
+		*/
 
 		// Inventory
 		if (inventory.IsOpen())
@@ -373,12 +379,17 @@ public:
 			// Item icons
 			UIRenderer.DrawInventoryIcons(inventory);
 
-			int index = UIRenderer::GetMouseInventorySlot(GetMousePosX(), ScreenHeight() - GetMousePosY());
-
-			if (index != -1)
+			int inventoryMouseHoverIndex = UIRenderer::GetMouseInventorySlot(GetMousePosX(), ScreenHeight() - GetMousePosY());
+			if (inventoryMouseHoverIndex != -1)
 			{
-				glm::vec2 highlightPos = UIRenderer.GetInventorySlotPos(index);
+				glm::vec2 highlightPos = UIRenderer.GetInventorySlotPos(inventoryMouseHoverIndex);
 				UIRenderer.DrawDebugRect(highlightPos.x, highlightPos.y, 32, 32, glm::vec4(0.7f, 0.7f, 0.7f, 0.6f));
+
+				// Remove item if Q selected while hovering over inventory slot
+				if (GetKey('Q').bPressed)
+				{
+					inventory.RemoveFromSlot(inventoryMouseHoverIndex);
+				}
 			}
 
 			float mouseX = GetMousePosX();
@@ -498,14 +509,18 @@ public:
 			if (inventory.IsOpen())
 				inventory.Dump();
 
+			// Toggle open and close
 			inventory.Toggle();
-			shouldUpdateCamera = !shouldUpdateCamera;
 
+			// If inventory is closed, make last mouse coords as
+			// current mouse coords to avoid jump spikes
 			if (!inventory.IsOpen())
 			{
 				camera.fLastX = (float)GetMousePosX();
 				camera.fLastY = (float)GetMousePosY();
 			}
+
+			shouldUpdateCamera = !shouldUpdateCamera;
 		}
 
 		// Remove item from hotbar
@@ -598,7 +613,9 @@ public:
 
 	void Destroy() override
 	{
-		inventory.Dump();
+		if(inventory.IsOpen())
+			inventory.Dump();
+
 		inventory.Save();
 
 		world.StopAllWorkers();			// Stop all threads

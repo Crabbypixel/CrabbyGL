@@ -5,16 +5,6 @@
 #include <filesystem>
 #include <fstream>
 
-Inventory::Inventory()
-{
-
-}
-
-Inventory::~Inventory()
-{
-
-}
-
 // Updates hotbar cursor
 void Inventory::Scroll(int delta) noexcept
 {
@@ -82,19 +72,21 @@ bool Inventory::Load(const std::string& filepath)
 	inventorySaveFilePath = filepath;
 
 	std::ifstream f(filepath, std::ios::binary);
+
 	if (!f)
 		return false;
 
 	f.read(reinterpret_cast<char*>(m_slots.data()), TOTAL_SIZE * sizeof(ItemStack));
+	return f.good();
 }
 
 bool Inventory::Save()
 {
 	std::ofstream f(inventorySaveFilePath, std::ios::binary);
+
 	if (!f)
 		return false;
 
 	f.write(reinterpret_cast<char*>(m_slots.data()), TOTAL_SIZE * sizeof(ItemStack));
-
-	return false;
+	return f.good();
 }

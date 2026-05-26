@@ -21,8 +21,8 @@ public:
 	static constexpr int TOTAL_SIZE = 36;
 	static constexpr int MAX_STACK = 64;
 
-	Inventory();
-	~Inventory();
+	Inventory() = default;
+	~Inventory() = default;
 
 	[[nodiscard]] const ItemStack& GetDragItem() const noexcept { return m_dragItem; };
 	[[nodiscard]] BlockType GetHeldBlock() const noexcept { return m_slots[m_hotbarIndex].IsEmpty() ? BlockType::AIR : m_slots[m_hotbarIndex].type; };
