@@ -21,19 +21,36 @@ bool Inventory::AddBlock(BlockType type)
 	}
 
 	// If already present
-	for (auto& slot :m_slots)
+	for (int i = 0; i < INVENTORY_SIZE; ++i)
 	{
+		auto& slot = m_slots[i];
+
 		if (slot.type == type)
+		{
+			if (i < 9)
+				m_hotbarIndex = i;
+			else
+				std::swap(slot, m_slots[m_hotbarIndex]);
+
 			return true;
+		}
 	}
 
 	// If not present, add new
-	for (auto& slot : m_slots)
+	for (int i = 0; i < INVENTORY_SIZE; ++i)
 	{
+		auto& slot = m_slots[i];
+
 		if (slot.IsEmpty())
 		{
 			slot.type = type;
 			slot.count = 1;
+
+			if (i < 9)
+				m_hotbarIndex = i;
+			else
+				std::swap(m_slots[i], m_slots[m_hotbarIndex]);
+
 			return true;
 		}
 	}
@@ -43,15 +60,15 @@ bool Inventory::AddBlock(BlockType type)
 
 void Inventory::RemoveFromSlot(int index)
 {
-	if (index < 0 || index > TOTAL_SIZE)
+	if (index < 0 || index >= INVENTORY_SIZE)
 		return;
 
 	m_slots[index] = {};
 }
 
-void Inventory::ClickSlot(int index, bool rightClick) noexcept
+void Inventory::ClickSlot(int index) noexcept
 {
-	if (index < 0 || index > TOTAL_SIZE)
+	if (index < 0 || index >= INVENTORY_SIZE)
 		return;
 
 	std::swap(m_dragItem, m_slots[index]);
@@ -67,6 +84,11 @@ void Inventory::Dump() noexcept
 	}
 }
 
+void Inventory::ClearHeld() noexcept
+{
+	m_dragItem = {};
+}
+
 bool Inventory::Load(const std::string& filepath)
 {
 	inventorySaveFilePath = filepath;
@@ -76,7 +98,7 @@ bool Inventory::Load(const std::string& filepath)
 	if (!f)
 		return false;
 
-	f.read(reinterpret_cast<char*>(m_slots.data()), TOTAL_SIZE * sizeof(ItemStack));
+	f.read(reinterpret_cast<char*>(m_slots.data()), INVENTORY_SIZE * sizeof(ItemStack));
 	return f.good();
 }
 
@@ -87,6 +109,6 @@ bool Inventory::Save()
 	if (!f)
 		return false;
 
-	f.write(reinterpret_cast<char*>(m_slots.data()), TOTAL_SIZE * sizeof(ItemStack));
+	f.write(reinterpret_cast<char*>(m_slots.data()), INVENTORY_SIZE * sizeof(ItemStack));
 	return f.good();
 }

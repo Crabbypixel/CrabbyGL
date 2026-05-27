@@ -18,7 +18,7 @@ class Inventory
 {
 public:
 	static constexpr int HOTBAR_SIZE = 9;
-	static constexpr int TOTAL_SIZE = 36;
+	static constexpr int INVENTORY_SIZE = 36;
 	static constexpr int MAX_STACK = 64;
 
 	Inventory() = default;
@@ -27,7 +27,7 @@ public:
 	[[nodiscard]] const ItemStack& GetDragItem() const noexcept { return m_dragItem; };
 	[[nodiscard]] BlockType GetHeldBlock() const noexcept { return m_slots[m_hotbarIndex].IsEmpty() ? BlockType::AIR : m_slots[m_hotbarIndex].type; };
 	[[nodiscard]] int GetHotbarIndex() const noexcept { return m_hotbarIndex; };
-	[[nodiscard]] const ItemStack& At(int i) const noexcept { assert(i >= 0 && i < TOTAL_SIZE); return m_slots[i]; };
+	[[nodiscard]] const ItemStack& At(int i) const noexcept { assert(i >= 0 && i < INVENTORY_SIZE); return m_slots[i]; };
 
 	[[nodiscard]] bool IsOpen() const noexcept { return m_isOpen; };
 	void Open() noexcept { m_isOpen = true; };
@@ -37,14 +37,15 @@ public:
 	bool AddBlock(BlockType type);
 	void RemoveFromSlot(int index);
 	void Scroll(int delta) noexcept;
-	void ClickSlot(int index, bool rightClick) noexcept;
+	void ClickSlot(int index) noexcept;
 	void Dump() noexcept;
+	void ClearHeld() noexcept;
 
-	bool Load(const std::string& filepath);
-	bool Save();
+	[[nodiscard]] bool Load(const std::string& filepath);
+	[[nodiscard]] bool Save(); 
 
 private:
-	std::array<ItemStack, TOTAL_SIZE> m_slots{};
+	std::array<ItemStack, INVENTORY_SIZE> m_slots{};
 	ItemStack m_dragItem{};
 	int m_hotbarIndex = 0;
 	bool m_isOpen = false;

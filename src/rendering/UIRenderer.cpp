@@ -705,7 +705,7 @@ void UIRenderer::DrawDebugRect(float x, float y, float w, float h, const glm::ve
 
 void UIRenderer::DrawInventoryIcons(const Inventory& inv) noexcept
 {
-	for (int i = 0; i < Inventory::TOTAL_SIZE; ++i)
+	for (int i = 0; i < Inventory::INVENTORY_SIZE; ++i)
 	{
 		auto [uvMin, uvMax] = AtlasUV(GetIconIndex(inv.At(i).type));
 		glm::vec2 pos = GetInventorySlotPos(i);

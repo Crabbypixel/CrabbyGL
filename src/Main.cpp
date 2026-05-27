@@ -388,17 +388,21 @@ public:
 				// Remove item if Q selected while hovering over inventory slot
 				if (GetKey('Q').bPressed)
 				{
-					inventory.RemoveFromSlot(inventoryMouseHoverIndex);
+					if (!inventory.GetDragItem().IsEmpty())
+						inventory.ClearHeld();
+					else
+						inventory.RemoveFromSlot(inventoryMouseHoverIndex);
 				}
 			}
 
 			float mouseX = GetMousePosX();
 			float mouseY = ScreenHeight() - GetMousePosY();
 
+			// If item clicked while inventory is open
 			if (GetMouseButton(Mouse::LEFT).bPressed)
 			{
 				int slot = UIRenderer::GetMouseInventorySlot(mouseX, mouseY);
-				if (slot >= 0) inventory.ClickSlot(slot, false);
+				if (slot >= 0) inventory.ClickSlot(slot);
 			}
 
 			UIRenderer.DrawHeldItem(inventory, mouseX, mouseY);
@@ -407,7 +411,7 @@ public:
 		// Write and use the depth buffer
 		glDepthMask(GL_TRUE);
 		glEnable(GL_DEPTH_TEST);
-		glDisable(GL_BLEND);
+		glDisable(GL_BLEND);	// Disable alpha blending
 
 		// Bind back to the default framebuffer & draw quad keeping the texture rendered in the custom framebuffer bounded
 		glBindFramebuffer(GL_FRAMEBUFFER, 0);
@@ -463,11 +467,11 @@ public:
 			{
 				if (spaceTimer <= DOUBLE_TAP_WINDOW)
 				{
-					// DOUBLE TAP
+					// Double
 					player.canFly = !player.canFly;
 
 					waitingForSecondTap = false;
-					spaceTimer = DOUBLE_TAP_WINDOW + 1.0f; // invalidate
+					spaceTimer = DOUBLE_TAP_WINDOW + 1.0f;	// invalidate
 				}
 				else
 				{
@@ -505,7 +509,7 @@ public:
 		// Toggle player inventory
 		if (GetKey('E').bPressed)
 		{
-			// If inventory closes, dump the held item on the inve
+			// If inventory closes, dump the held item on the inventory
 			if (inventory.IsOpen())
 				inventory.Dump();
 
@@ -524,7 +528,7 @@ public:
 		}
 
 		// Remove item from hotbar
-		if (GetKey('Q').bPressed)
+		if (GetKey('Q').bPressed && !inventory.IsOpen())
 		{
 			inventory.RemoveFromSlot(inventory.GetHotbarIndex());
 		}
