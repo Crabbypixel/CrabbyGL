@@ -7,14 +7,21 @@
 class ChunkMesh
 {
 public:
-    void Upload(const std::vector<Vertex>& vertices);
+    ChunkMesh() = default;
+	~ChunkMesh() noexcept { Destroy(); }
+
+	// No copying or moving - OpenGL resources should be unique and not duplicated
+	ChunkMesh(const ChunkMesh&) = delete;
+	ChunkMesh& operator=(const ChunkMesh&) = delete;
+
+    void Upload(const std::vector<Vertex>& vertices) noexcept;
     void Draw() const;
-    void Destroy();
+    void Destroy() noexcept;
 
     int  vertexCount = 0;
     bool valid = false;             // has uploaded data?
 
 private:
-    GLuint m_VAO = 0;
-    GLuint m_VBO = 0;
+    unsigned int m_VAO = 0;
+    unsigned int m_VBO = 0;
 };

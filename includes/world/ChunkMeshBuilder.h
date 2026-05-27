@@ -1,10 +1,21 @@
 #pragma once
+#include <vector>
+
 class Chunk;
 class ChunkMesh;
+struct Vertex;
 
 class ChunkMeshBuilder
 {
 public:
+    ChunkMeshBuilder() = default;
+
+    // Non-copyable, non-movable
+	ChunkMeshBuilder(const ChunkMeshBuilder&) = delete;
+	ChunkMeshBuilder(ChunkMeshBuilder&&) = delete;
+	ChunkMeshBuilder& operator=(const ChunkMeshBuilder&) = delete;
+	ChunkMeshBuilder& operator=(ChunkMeshBuilder&&) = delete;
+
     // Builds mesh for chunk, queries world for cross-chunk neighbors
     // The pointers point to neighboring chunks, caching for performance (no need of map lookups)
     static void Build(
@@ -38,6 +49,7 @@ private:
         const Chunk* nNX_PZ, const Chunk* nNX_NZ
     );
 
+    [[nodiscard]]
     static bool IsSolidLocal(const Chunk& chunk,
         int x, int y, int z,
         const Chunk* nPX, const Chunk* nNX,

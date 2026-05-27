@@ -16,13 +16,13 @@
 #include "world/BlockRegistry.h"
 
 #include "player/Player.h"
+#include "player/Inventory.h"
 
 #include "physics/WorldPhysics.h"
 
 #include "rendering/VertexArray.h"
 #include "rendering/VertexBuffer.h"
 #include "rendering/BufferLayout.h"
-
 #include "rendering/UIRenderer.h"
 
 #include "imgui/imgui_includes.h"
@@ -51,48 +51,44 @@ private:
 	VertexBuffer<float> crosshairVBO;
 	BufferLayout crosshairLayout;
 
-	// World
-	World world;
-	Player player;
-	ChunkDebug chunkDebug;
-
 	// Shaders
 	Shader axesShader;
 	Shader framebufferShader;
 	Shader crosshairShader;
 	Shader chunkMeshShader;
 
-	// Framebuffer variables
-	unsigned int framebuffer;
-	unsigned int textureColorBuffer;
-	unsigned int rbo;
+	// Player
+	Player player;
 
-	// Constants
-	const float tickSpeed = 0.05f;
-
-	// Other variables
-	float fDebugTimer = 0.0f;
-
-	// Physics
+	// World
+	World world;
 	WorldPhysics worldPhysics;
 
-	// Hotbar
-	UIRenderer UIRenderer;
+	// Chunk outlines for debugging
+	ChunkDebug chunkDebug;
 
-	// Fly
+	// Hotbar & Inventory
+	UIRenderer UIRenderer;
+	Inventory inventory;
+
+	// Framebuffer variables
+	unsigned int framebuffer = 0;
+	unsigned int textureColorBuffer = 0;
+	unsigned int rbo = 0;
+
+	// Jump fly
 	const float DOUBLE_TAP_WINDOW = 0.3f;
 	float spaceTimer = 0.0f;
 	bool waitingForSecondTap = false;
 
-	BlockType selectedBlock = BlockType::AIR;
-
+	// Ambient occlusion toggle
 	bool isAOEnabled = true;
 
 public:
 	bool Setup() override
 	{
-		player.pos = glm::vec3(20.0f, 39.0f, 78.0f);
-		camera.init(glm::vec3(24.0f, 37.0f, 56.0f), glm::vec3(0.0f, 0.0f, -1.0f), ScreenWidth(), ScreenHeight());
+		player.SetPos(glm::vec3(20.0f, 39.0f, 78.0f));
+		camera.Init(player.GetPos(), glm::vec3(0.0f, 0.0f, -1.0f), ScreenWidth(), ScreenHeight());
 
 		// Axes
 		axesVAO.generate();
@@ -117,7 +113,16 @@ public:
 
 		// Chunk boundaries
 		chunkDebug.Init("assets/shaders/ChunkDebug.glsl");
-		
+
+		// UI Renderer
+		UIRenderer.Init(ScreenWidth(), ScreenHeight());
+		UIRenderer.LoadIcons("assets/textures/icons.png");
+		UIRenderer.LoadASCII("assets/textures/ascii.png");
+
+		// Inventory
+		if (inventory.Load("saves/player_inventory.bin"))
+			std::cout << "Error loading player inventory\n";
+
 		// ───── World ──────────────────────────────────────────────────
 		auto dt1 = std::chrono::system_clock::now();
 
@@ -125,6 +130,9 @@ public:
 
 		world.SetChunkShader(chunkMeshShader);
 		world.LoadAtlasTexture("assets/textures/textures.png");
+
+		// Spawn 4 threads for loading chunks and 4 threads for generating meshes
+		// This is the optimal spot for good performance without overly increasing number of threads
 		world.StartChunkLoadWorkers(4);
 		world.StartMeshWorkers(4);
 
@@ -147,7 +155,7 @@ public:
 			// Create a texture attachment for color attachment
 			glGenTextures(1, &textureColorBuffer);
 			glBindTexture(GL_TEXTURE_2D, textureColorBuffer);
-			glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, ScreenWidth(), ScreenHeight(), 0, GL_RGB, GL_UNSIGNED_BYTE, NULL);
+			glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, ScreenWidth(), ScreenHeight(), 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
 			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
 			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 			glBindTexture(GL_TEXTURE_2D, 0);
@@ -162,7 +170,7 @@ public:
 
 			// Check if the custom framebuffer is complete
 			if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
-				std::cout << "ERROR::FRAMEBUFFER:: Framebuffer is not complete!" << std::endl;
+				std::cerr << "ERROR::FRAMEBUFFER:: Framebuffer is not complete!" << std::endl;
 
 			// Bind back to the default framebuffer
 			glBindFramebuffer(GL_FRAMEBUFFER, 0);
@@ -186,9 +194,6 @@ public:
 			glBindBufferBase(GL_UNIFORM_BUFFER, 0, uboMatrices);
 			// ──────────────────────────────────────────────────────────────
 		}
-
-		// Initalize hotbar UI
-		UIRenderer.Init(ScreenWidth(), ScreenHeight());
 
 		// Initialize ImGui
 		IMGUI_CHECKVERSION();
@@ -218,26 +223,18 @@ public:
 		glClearColor(0.227f, 0.757f, 1.0f, 1.0f);
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
 
-		// Render scene to depth cubemap
+		// Use the depth buffer
 		glEnable(GL_DEPTH_TEST);
+		glDepthMask(GL_TRUE);
 
 		// Get user controls
 		UserControls(dt);
 
-		if (GetKey('U').bPressed)
-		{
-			for (int i = 200; i < 220; i++)
-			{
-				for (int j = 200; j < 220; j++)
-				{
-					world.SetBlock(i, 150, j, BlockType::SAND);
-				}
-			}
-		}
-
 		// ───── Physics ───────────────────────────────────────────────
 		if (!bIsPaused)
 		{
+			bool shouldUpdatePlayerMovement = !inventory.IsOpen();
+
 			player.Update(
 				dt,
 				camera.front,
@@ -248,40 +245,52 @@ public:
 				GetKey(GLFW_KEY_SPACE).bHeld,
 				GetKey(GLFW_KEY_LEFT_SHIFT).bHeld,
 				GetKey(GLFW_KEY_LEFT_CONTROL).bHeld,
+				shouldUpdatePlayerMovement,
 				world
 			);
 
 			// Camera tracks player head
 			camera.position = player.EyePos();
-		}
 
-		// Toggle rendering chunk borders
-		if (GetKey('G').bPressed)
-			chunkDebug.visible = !chunkDebug.visible;
+			// Physics test - generate a gravel platform to test physics (in development - prone to bugs)
+			if (GetKey('U').bPressed)
+			{
+				for (int i = 200; i < 220; ++i)
+				{
+					for (int j = 200; j < 220; ++j)
+					{
+						world.SetBlock(i, 150, j, BlockType::GRAVEL);
+					}
+				}
+			}
+		}
 
 		RaycastHit m_currentHit = RaycastDDA(camera.position, camera.front, world);
 		glm::ivec3 raycastPlacePos = m_currentHit.blockPos + m_currentHit.normal;
-		glm::ivec3 playerPos = { (int)floor(player.pos.x), (int)floor(player.pos.y), (int)floor(player.pos.z) };
+		glm::ivec3 playerPos = { (int)floor(player.GetPos().x), (int)floor(player.GetPos().y), (int)floor(player.GetPos().z)};
 
 		// Select block
-		if (GetMouseButton(Mouse::MIDDLE).bPressed && m_currentHit.hit)
-			selectedBlock = world.GetBlock(m_currentHit.blockPos.x, m_currentHit.blockPos.y, m_currentHit.blockPos.z);
+		if (!bIsPaused && shouldUpdateCamera && GetMouseButton(Mouse::MIDDLE).bPressed && m_currentHit.hit)
+		{
+			BlockType picked = world.GetBlock(m_currentHit.blockPos.x, m_currentHit.blockPos.y, m_currentHit.blockPos.z);
+			inventory.AddBlock(picked);
+		}
 
 		// Break block
-		if (GetMouseButton(Mouse::LEFT).bPressed && m_currentHit.hit)
+		if (!bIsPaused && shouldUpdateCamera && GetMouseButton(Mouse::LEFT).bPressed && m_currentHit.hit)
 		{
 			bool isBlockBreakValid = world.BreakBlock(m_currentHit);
-			
-			if(isBlockBreakValid)
+
+			if (isBlockBreakValid)
 				worldPhysics.NotifyBlockChanged(m_currentHit.blockPos.x, m_currentHit.blockPos.y, m_currentHit.blockPos.z);
 		}
 
 		// Place block
-		if (GetMouseButton(Mouse::RIGHT).bPressed && (playerPos != raycastPlacePos) && (glm::ivec3(playerPos.x, playerPos.y + 1, playerPos.z) != raycastPlacePos) && m_currentHit.hit)
+		if (!bIsPaused && shouldUpdateCamera && GetMouseButton(Mouse::RIGHT).bPressed && (playerPos != raycastPlacePos) && (glm::ivec3(playerPos.x, playerPos.y + 1, playerPos.z) != raycastPlacePos) && m_currentHit.hit)
 		{
-			bool isBlockPlaceValid = world.PlaceBlock(m_currentHit, selectedBlock);
+			bool isBlockPlaceValid = world.PlaceBlock(m_currentHit, inventory.GetHeldBlock());
 
-			if(isBlockPlaceValid)
+			if (isBlockPlaceValid)
 				worldPhysics.NotifyBlockChanged(raycastPlacePos.x, raycastPlacePos.y, raycastPlacePos.z);
 		}
 
@@ -292,13 +301,13 @@ public:
 		// - Enqueue new chunks for generation within view distance
 		// - Identify chunks outside unload distance for removal
 		// - Maintains streaming window around the player
-		world.UpdateChunkStreaming(player.pos);
-		
+		world.UpdateChunkStreaming(player.GetPos());
+
 		// Promote fully generated chunks from staging into the main world: 
 		// - Transfers ownership into `chunks` map (main thread)
 		// - Ensures chunks become visible/usable only after complete generation
 		world.CommitGeneratedChunks();
-		
+
 		// Synchronize CPU-side world state with GPU rendering:
 		// - Enqueue dirty chunks for meshing
 		// - Upload completed mesh data to GPU buffers
@@ -327,15 +336,74 @@ public:
 		// Coordinate axis
 		RenderAxis();
 
+		// ── UI pass ────────────────────────────────────────
+		// Disable writing & using the depth buffer
+		glDisable(GL_DEPTH_TEST);
+		glDepthMask(GL_FALSE);
+		glEnable(GL_BLEND);
+		glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
 		// Crosshair
 		RenderCrosshair();
 
 		// Hotbar
 		UIRenderer.DrawHotbar();
 
+		// Hotbar icons
+		UIRenderer.DrawHotbarIcons(inventory);
+
+		// Hotbar selector
+		UIRenderer.DrawHotbarCursor(inventory.GetHotbarIndex());
+
+		// Inventory
+		if (inventory.IsOpen())
+		{
+			// Draw inventory screen
+			UIRenderer.DrawInventory();
+
+			// Draw items
+			UIRenderer.DrawInventoryIcons(inventory);
+
+			// Get inventory slot under mouse cursor
+			int inventoryMouseHoverIndex = UIRenderer::GetMouseInventorySlot(GetMousePosX(), ScreenHeight() - GetMousePosY());
+			if (inventoryMouseHoverIndex != -1)
+			{
+				glm::vec2 highlightPos = UIRenderer.GetInventorySlotPos(inventoryMouseHoverIndex);
+				
+				// Highlight the slot under the mouse cursor
+				UIRenderer.DrawHighlightRect(highlightPos.x, highlightPos.y, 32, 32, glm::vec4(0.7f, 0.7f, 0.7f, 0.6f));
+
+				// Remove item if Q selected while hovering over inventory slot
+				if (GetKey('Q').bPressed)
+				{
+					if (!inventory.GetDragItem().IsEmpty())
+						inventory.ClearHeld();
+					else
+						inventory.RemoveFromSlot(inventoryMouseHoverIndex);
+				}
+			}
+
+			float mouseX = GetMousePosX();
+			float mouseY = ScreenHeight() - GetMousePosY();
+
+			// If item clicked while inventory is open
+			if (GetMouseButton(Mouse::LEFT).bPressed)
+			{
+				int slot = UIRenderer::GetMouseInventorySlot(mouseX, mouseY);
+				if (slot >= 0) inventory.ClickSlot(slot);
+			}
+
+			// Draw held item above all
+			UIRenderer.DrawHeldItem(inventory, mouseX, mouseY);
+		}
+
+		// Write and use the depth buffer
+		glDepthMask(GL_TRUE);
+		glEnable(GL_DEPTH_TEST);
+		glDisable(GL_BLEND);	// Disable alpha blending
+
 		// Bind back to the default framebuffer & draw quad keeping the texture rendered in the custom framebuffer bounded
 		glBindFramebuffer(GL_FRAMEBUFFER, 0);
-		glDisable(GL_DEPTH_TEST);
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
 		glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
 
@@ -348,13 +416,13 @@ public:
 		glDrawArrays(GL_TRIANGLES, 0, 6);
 
 		// ───── ImGui ───────────────────────────────────────────────
-		glm::ivec2 playerChunk = World::ChunkCoord(player.pos.x, player.pos.z);
+		glm::ivec2 playerChunk = World::ChunkCoord(player.GetPos().x, player.GetPos().z);
 		ImGui::Begin("Debug Console");
 		ImGui::Text("Hello World!");
 		ImGui::Text("Player Position: %d %d %d", (int)camera.position.x, (int)camera.position.y, (int)camera.position.z);
 		ImGui::Text("Currently at chunk: %d %d", playerChunk.x, playerChunk.y);
 
-		ImGui::Text("Selected Block: %s", GetDef(selectedBlock).name);
+		ImGui::Text("Selected Block: %s", GetDef(inventory.GetHeldBlock()).name);
 		ImGui::Text("Raycast place position: %d %d %d", raycastPlacePos.x, raycastPlacePos.y, raycastPlacePos.z);
 		ImGui::Text("AO (H to toggle): %s", isAOEnabled ? "Yes" : "No");
 		ImGui::Text("Chunk borders (G to toggle): %s", chunkDebug.visible ? "Enabled" : "Disabled");
@@ -368,9 +436,7 @@ public:
 		ImGui::InputInt("Z", &teleportZ);
 
 		if (ImGui::Button("Teleport"))
-		{
-			player.pos = glm::vec3(teleportX, teleportY, teleportZ);
-		}
+			player.SetPos(glm::vec3(teleportX, teleportY, teleportZ));
 
 		ImGui::End();
 		ImGui::Render();
@@ -388,11 +454,11 @@ public:
 			{
 				if (spaceTimer <= DOUBLE_TAP_WINDOW)
 				{
-					// DOUBLE TAP
-					player.canFly = !player.canFly;
+					// Double
+					player.ToggleFly();
 
 					waitingForSecondTap = false;
-					spaceTimer = DOUBLE_TAP_WINDOW + 1.0f; // invalidate
+					spaceTimer = DOUBLE_TAP_WINDOW + 1.0f;	// invalidate
 				}
 				else
 				{
@@ -423,11 +489,42 @@ public:
 		if (GetKey('H').bPressed)
 			isAOEnabled = !isAOEnabled;
 
+		// Toggle rendering chunk borders
+		if (GetKey('G').bPressed)
+			chunkDebug.visible = !chunkDebug.visible;
+
 		// Toggle player inventory
 		if (GetKey('E').bPressed)
 		{
+			// If inventory closes, dump the held item on the inventory
+			if (inventory.IsOpen())
+				inventory.Dump();
 
+			// Toggle open and close
+			inventory.Toggle();
+
+			// If inventory is closed, make last mouse coords as
+			// current mouse coords to avoid jump spikes
+			if (!inventory.IsOpen())
+			{
+				camera.fLastX = (float)GetMousePosX();
+				camera.fLastY = (float)GetMousePosY();
+			}
+
+			shouldUpdateCamera = !shouldUpdateCamera;
 		}
+
+		// Remove item from hotbar
+		if (GetKey('Q').bPressed && !inventory.IsOpen())
+			inventory.RemoveFromSlot(inventory.GetHotbarIndex());
+
+		// Scroll hotbar cursor
+		if (GetMouseScroll() == Mouse::SCROLL_DOWN)
+			inventory.Scroll(1);
+		else if (GetMouseScroll() == Mouse::SCROLL_UP)
+			inventory.Scroll(-1);
+
+		RequestCursor(bIsPaused || inventory.IsOpen());
 	}
 
 	void InitShaders()
@@ -440,6 +537,8 @@ public:
 
 	void Debug(float dt, const World& world)
 	{
+		static float fDebugTimer = 0.5f;
+
 		// Prints on the screen every 500ms
 		// Nothing as of now - be happy!
 		fDebugTimer += dt;
@@ -493,7 +592,7 @@ public:
 		crosshairVAO.bind();
 		crosshairShader.setFloat("aspect", static_cast<float>(ScreenWidth()) / static_cast<float>(ScreenHeight()));
 
-		glDrawArrays(GL_LINES, 0, 4);	
+		glDrawArrays(GL_LINES, 0, 4);
 		glEnable(GL_DEPTH_TEST);
 
 		glLineWidth(1.0f);
@@ -501,6 +600,12 @@ public:
 
 	void Destroy() override
 	{
+		if(inventory.IsOpen())
+			inventory.Dump();
+
+		if (inventory.Save())
+			std::cerr << "Error saving player inventory\n";
+
 		world.StopAllWorkers();			// Stop all threads
 		world.UnloadChunks();			// Unload all chunks
 
@@ -508,21 +613,9 @@ public:
 		ImGui_ImplGlfw_Shutdown();
 		ImGui::DestroyContext();
 
-		axesVAO.free();
-		axesVBO.free();
-
-		quadVAO.free();
-		quadVBO.free();
-
-		crosshairVAO.free();
-		crosshairVBO.free();
-
-		glDeleteBuffers(1, &uboMatrices);
 		glDeleteFramebuffers(1, &framebuffer);
 		glDeleteRenderbuffers(1, &rbo);
 		glDeleteTextures(1, &textureColorBuffer);
-
-		chunkDebug.Destroy();
 
 		// Check for any errors - debug
 		ErrorLog("Destroy()");
@@ -534,7 +627,9 @@ public:
 int main()
 {
 	Window window;
-	window.ConstructWindow(800, 450, "OpenGL");
+	//window.ConstructWindow(800, 450, "OpenGL");
+	//window.ConstructWindow(1600, 900, "OpenGL");
+	window.ConstructWindow(1200, 675, "OpenGL");
 	window.Start();
 
 	std::cout << "Goodbye!" << std::endl;

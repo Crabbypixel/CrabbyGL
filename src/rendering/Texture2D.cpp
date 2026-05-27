@@ -4,7 +4,7 @@
 #include "stb/stb_image.h"
 
 // Load with parameters
-void Texture2D::load(GLenum wrapType, GLint minFilter, GLint magFilter, const std::string textureFile, GLint internalFormat, GLenum format)
+void Texture2D::load(GLenum wrapType, GLint minFilter, GLint magFilter, const std::string& textureFile, GLint internalFormat, GLenum format)
 {
     glGenTextures(1, &m_TextureID);
     glBindTexture(GL_TEXTURE_2D, m_TextureID);
@@ -15,7 +15,6 @@ void Texture2D::load(GLenum wrapType, GLint minFilter, GLint magFilter, const st
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, minFilter);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, magFilter);
 
-    stbi_set_flip_vertically_on_load(true);
     data = stbi_load(textureFile.c_str(), &m_width, &m_height, &m_nrChannels, 0);
 
     if (data)
@@ -28,19 +27,19 @@ void Texture2D::load(GLenum wrapType, GLint minFilter, GLint magFilter, const st
     }
     else
     {
-        std::cout << "Failed to load texture: " << textureFile << std::endl;
+        std::cerr << "Failed to load texture: " << textureFile << std::endl;
     }
 
     stbi_image_free(data);
 }
 
-unsigned int Texture2D::getTextureID() const
+unsigned int Texture2D::getTextureID() const noexcept
 {
     return m_TextureID;
 }
 
 // Bind texture
-void Texture2D::bindTexture() const
+void Texture2D::bindTexture() const noexcept
 {
     glBindTexture(GL_TEXTURE_2D, m_TextureID);
 }
@@ -85,7 +84,7 @@ void Texture2D::loadTexture(char const* path)
     }
     else
     {
-        std::cout << "Texture failed to load at path: " << path << std::endl;
+        std::cerr << "Texture failed to load at path: " << path << std::endl;
         stbi_image_free(data);
     }
 }
@@ -93,6 +92,6 @@ void Texture2D::loadTexture(char const* path)
 // Destructor
 Texture2D::~Texture2D()
 {
-    std::cout << "deleting textures!\n";
-    glDeleteTextures(1, &m_TextureID);
+    if(m_TextureID != 0)
+        glDeleteTextures(1, &m_TextureID);
 }

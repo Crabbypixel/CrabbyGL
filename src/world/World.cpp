@@ -5,6 +5,7 @@
 #include "stb/stb_perlin.h"
 
 #include "rendering/ChunkMesh.h"
+#include "world/BlockType.h"
 #include "world/Chunk.h"
 #include "world/Raycast.h"
 #include "world/World.h"
@@ -29,6 +30,13 @@ World::World()
 {
     chunks.reserve(1000);
     m_chunkSaveWorker = std::thread(&World::SaveWorkerLoop, this);
+}
+
+World::~World()
+{
+	// If exception path or early exit, call StopAllWorkers to ensure clean shutdown
+    if (!m_shutdown)
+        StopAllWorkers();
 }
 
 // ───── Coord helpers ─────────────────────────────────────────────────
@@ -94,6 +102,10 @@ void World::SetBlock(int worldX, int worldY, int worldZ, BlockType type)
 
     auto l = ChunkLocalCoord(worldX, worldY, worldZ);
     chunk->SetUnchecked(l.x, l.y, l.z, type);
+
+    // TODO: Mark this & neighboring chunks dirty - this is the reason for seam issue in world physics, to be done later
+    // NOTE: This still has a visual bug
+	MarkAdjacentChunksDirty(worldX, worldY, worldZ);
 }
 
 // ───── World generation ────────────────────────────────────────────────────
@@ -125,14 +137,16 @@ void World::FillChunkData(Chunk& chunk, glm::ivec2 coord)
         return;
     }
 
+    // TODO: Add trees and grass
+	// Do all this in worldgen phase of development, not right now - to be done later
     // Fresh Perlin gen
     chunk.chunkPos = coord;
     int cx = coord.x;
     int cz = coord.y;
 
-    for (int x = 0; x < CX; x++)
+    for (int x = 0; x < CX; ++x)
     {
-        for (int z = 0; z < CZ; z++)
+        for (int z = 0; z < CZ; ++z)
         {
             int worldX = cx * CX + x;
             int worldZ = cz * CZ + z;
@@ -143,16 +157,12 @@ void World::FillChunkData(Chunk& chunk, glm::ivec2 coord)
             int   base = std::max(1, height - thickness);
 
             chunk.blocks[x][0][z] = BlockType::BEDROCK;
-            for (int y = 1; y < base; y++) chunk.blocks[x][y][z] = BlockType::STONE;
-            for (int y = base; y < height; y++) chunk.blocks[x][y][z] = BlockType::DIRT;
+            for (int y = 1; y < base; ++y) chunk.blocks[x][y][z] = BlockType::STONE;
+            for (int y = base; y < height; ++y) chunk.blocks[x][y][z] = BlockType::DIRT;
             chunk.blocks[x][height][z] = BlockType::GRASS_BLOCK;
 
             if (cx * CX + x == 0 || cz * CZ + z == 0)
                 chunk.blocks[x][height + 1][z] = BlockType::BRICK;
-
-            float cave = stb_perlin_noise3(worldX * 0.05f, chunk.chunkPos.y * 0.1f, worldZ * 0.05f, 0, 0, 0);
-            if (cave > 0.3f && chunk.chunkPos.y > 5 && chunk.chunkPos.y < height - 3)
-                chunk.blocks[x][chunk.chunkPos.y][z] = BlockType::AIR;
         }
     }   
 
@@ -169,39 +179,42 @@ std::string World::ChunkFilePath(glm::ivec2 coord)
 void World::SaveChunkToDisk(const Chunk& chunk)
 {
     std::filesystem::create_directories("saves");
-    auto path = ChunkFilePath(chunk.chunkPos);
 
-    // TODO: Write this in C++
-    FILE* f = nullptr;
-    fopen_s(&f, path.c_str(), "wb");
+    const auto path = ChunkFilePath(chunk.chunkPos);
 
-    if (!f)
+    std::ofstream file(path, std::ios::binary);
+
+    if (!file)
+    {
+        std::cerr << "Failed to open chunk file for writing: " << path << '\n';
         return;
+    }
 
-    size_t bytesWritten = fwrite(chunk.blocks, sizeof(chunk.blocks), 1, f) * sizeof(chunk.blocks);
+    file.write(reinterpret_cast<const char*>(chunk.blocks), sizeof(chunk.blocks));
 
-    if (bytesWritten != sizeof(chunk.blocks))
-        std::cout << "Error writing to chunk " << path.c_str() << ".\n";
-
-    fclose(f);
+    if (!file)
+    {
+        std::cerr << "Error writing chunk file: " << path << '\n';
+    }
 }
 
 bool World::LoadChunkFromDisk(Chunk& chunk, glm::ivec2& coord)
 {
-    auto path = ChunkFilePath(coord);
+    const auto path = ChunkFilePath(coord);
 
-    // TODO: Write this in C++
-    FILE* f = nullptr;
-    fopen_s(&f, path.c_str(), "rb");
-    if (!f)
+    std::ifstream file(path, std::ios::binary);
+
+    if (!file)
         return false;
 
-    size_t bytesRead = fread(chunk.blocks, sizeof(chunk.blocks), 1, f) * sizeof(chunk.blocks);
+    file.read(reinterpret_cast<char*>(chunk.blocks), sizeof(chunk.blocks));
 
-    if (bytesRead != sizeof(chunk.blocks))
-        std::cout << "Chunk file " << path.c_str() << " is corrupted.\n";
+    if (file.gcount() != sizeof(chunk.blocks))
+    {
+        std::cerr << "Chunk file corrupted: " << path << '\n';
 
-    fclose(f);
+        return false;
+    }
 
     chunk.chunkPos = coord;
 
@@ -223,14 +236,15 @@ void World::UnloadChunks()
     // Unload chunks from memory
     for (auto& [coord, chunk] : chunks)
     {
-        m_chunkMeshes[coord].Destroy();
-        m_chunkMeshes.erase(coord);
+        if (m_chunkMeshes.contains(coord))
+        {
+            m_chunkMeshes[coord].Destroy();
+            m_chunkMeshes.erase(coord);
+        }
     }
 
     chunks.clear();
     m_chunkMeshes.clear();
-
-    std::cout << "World saved and unloaded.\n";
 }
 
 // ───── Raycast CRUD ──────────────────────────────────────────────────
@@ -239,39 +253,32 @@ bool World::PlaceBlock(const RaycastHit& hit, BlockType type)
     if (!hit.hit)
         return false;
 
-	// Prevent placing beside non-solid blocks (cross face blocks)
-    if(GetDef(GetBlock(hit.blockPos.x, hit.blockPos.y, hit.blockPos.z)).flags & BLOCK_CROSS)
-		return false;
+    // Prevent placing beside non-solid blocks (cross-face blocks)
+    if (GetDef(GetBlock(hit.blockPos.x, hit.blockPos.y, hit.blockPos.z)).flags & BLOCK_CROSS)
+        return false;
 
     glm::ivec3 target = hit.blockPos + hit.normal;
 
-	// No placing inside solid blocks
+    // Prevent placing inside solid blocks
     if (IsSolid(target.x, target.y, target.z))
         return false;
 
-    // TODO - ACTIVE DEVELOPMENT
-	// Log blocks have directional variants based on placement face
-    if (type == BlockType::TREE_LOG || type == BlockType::TREE_LOG_X || type == BlockType::TREE_LOG_Z)
+    // TODO
+    // Log blocks have directional variants based on placement face
+    const bool isLog = type == BlockType::TREE_LOG_Y ||
+                       type == BlockType::TREE_LOG_X ||
+                       type == BlockType::TREE_LOG_Z;
+
+    if (isLog)
     {
-        if (hit.normal.x != 0)
-        {
-            type = BlockType::TREE_LOG_X;
-			std::cout << "log x\n"; 
-        }
-        else if (hit.normal.z != 0)
-        {
-            type = BlockType::TREE_LOG_Z;
-			std::cout << "log z\n";
-        }
-        else
-        {
-            type = BlockType::TREE_LOG;   // default Y orientation for top/bottom face placement
-            std::cout << "log y\n";
-        }
+        type =
+            hit.normal.x != 0 ? BlockType::TREE_LOG_X :
+            hit.normal.z != 0 ? BlockType::TREE_LOG_Z :
+            BlockType::TREE_LOG_Y;
     }
 
     SetBlock(target.x, target.y, target.z, type);
-    MarkAdjacentChunksDirty(hit.blockPos.x, hit.blockPos.y, hit.blockPos.z);
+    MarkAdjacentChunksDirty(target.x, target.y, target.z);
 
     return true;
 }
@@ -282,7 +289,6 @@ bool World::BreakBlock(const RaycastHit& hit)
         return false;
 
     const BlockType& blockType = GetBlock(hit.blockPos.x, hit.blockPos.y, hit.blockPos.z);
-    auto flags = GetDef(blockType).flags;
 
     SetBlock(hit.blockPos.x, hit.blockPos.y, hit.blockPos.z, BlockType::AIR);
     MarkAdjacentChunksDirty(hit.blockPos.x, hit.blockPos.y, hit.blockPos.z);
@@ -292,34 +298,32 @@ bool World::BreakBlock(const RaycastHit& hit)
 
 void World::MarkAdjacentChunksDirty(int wx, int wy, int wz)
 {
-    glm::vec3 localPos = ChunkLocalCoord(wx, wy, wz);
-    int lx = localPos.x;
-    int lz = localPos.z;
+	glm::ivec3 local = ChunkLocalCoord(wx, wy, wz);
 
-    if (lx == 0)
-    { 
-        Chunk* c = GetChunk(wx - 1, wz);
-        if (c)
-            c->dirty = true; 
-    }
-    if (lx == CX - 1) 
-    { 
-        Chunk* c = GetChunk(wx + 1, wz); 
-        if (c)
+    const bool minX = (local.x == 0);
+	const bool maxX = (local.x == CX - 1);
+
+	const bool minZ = (local.z == 0);
+	const bool maxZ = (local.z == CZ - 1);
+
+	auto markDirty = [&](int dx, int dz) {
+        if (Chunk* c = GetChunk(wx + dx, wz + dz))
             c->dirty = true;
-    }
-    if (lz == 0) 
-    { 
-        Chunk* c = GetChunk(wx, wz - 1); 
-        if (c)
-            c->dirty = true;
-    }
-    if (lz == CZ - 1) 
-    {   
-        Chunk* c = GetChunk(wx, wz + 1);
-        if (c)
-            c->dirty = true;
-    }
+	};
+
+	// Cross neighbors
+	if (minX) markDirty(-1, 0);
+	if (maxX) markDirty(1, 0);
+    
+	if (minZ) markDirty(0, -1);
+	if (maxZ) markDirty(0, 1);
+
+	// Diagonal neighbors
+	if (minX && minZ) markDirty(-1, -1);
+	if (minX && maxZ) markDirty(-1, 1);
+
+	if (maxX && minZ) markDirty(1, -1); 
+	if (maxX && maxZ) markDirty(1, 1);
 }
 
 // ───── Sync ──────────────────────────────────────────────────────────
@@ -348,7 +352,7 @@ void World::SyncRenderer()
             // Protect coord (and +4 neighbors) from unload/deletion later by the main thread
             m_chunkMeshUsageGuards[chunkPos]++;
             for (auto& neighborPos : GUARDED_NEIGHBORS)
-                m_chunkMeshUsageGuards[chunkPos + neighborPos]++;    // We check if this coord is present in worker thread, no need to check now
+                ++m_chunkMeshUsageGuards[chunkPos + neighborPos];    // We check if this coord is present in worker thread, no need to check now
 
 			// Do this to ensure the worker thread can access the chunk data without worrying about concurrent deletion by the main thread
 			// This is used in ChunkMeshBuilder when it accesses neighbor chunk data for Ambient Occlusion (and later greedy meshing)
@@ -396,12 +400,11 @@ void World::SetChunkShader(Shader& shader)
 
 void World::LoadAtlasTexture(const char* path)
 {
-    stbi_set_flip_vertically_on_load(true);   // GL origin = bottom-left
-
     int w, h, channels;
     unsigned char* data = stbi_load(path, &w, &h, &channels, 0);
-    if (!data) {
-        std::cout << "Atlas load failed: " << path << '\n';
+    if (!data)
+    {
+        std::cerr << "Atlas load failed: " << path << '\n';
         return;
     }
 
@@ -494,9 +497,9 @@ void World::UpdateChunkStreaming(const glm::vec3& playerPos)
         bool hasAllChunksLoaded = true;
         std::lock_guard<std::mutex> lock(m_chunkLoadReservationsMutex);
         {
-            for (int dx = -m_viewDist; dx <= m_viewDist && hasAllChunksLoaded; dx++)
+            for (int dx = -m_viewDist; dx <= m_viewDist && hasAllChunksLoaded; ++dx)
             {
-                for (int dz = -m_viewDist; dz <= m_viewDist && hasAllChunksLoaded; dz++)
+                for (int dz = -m_viewDist; dz <= m_viewDist && hasAllChunksLoaded; ++dz)
                 {
                     if (dx * dx + dz * dz > m_viewDist * m_viewDist)
                         continue;
@@ -559,9 +562,9 @@ void World::UpdateChunkStreaming(const glm::vec3& playerPos)
 
     // Make list of chunks to load
     std::vector<glm::ivec2> chunksToLoad;
-    for (int dx = -m_viewDist; dx <= m_viewDist; dx++)
+    for (int dx = -m_viewDist; dx <= m_viewDist; ++dx)
     {
-        for (int dz = -m_viewDist; dz <= m_viewDist; dz++)
+        for (int dz = -m_viewDist; dz <= m_viewDist; ++dz)
         {
 			// If chunk is outside the view distance, skip
             if (dx * dx + dz * dz > m_viewDist * m_viewDist)
@@ -618,7 +621,9 @@ void World::CommitGeneratedChunks()
     for (auto& [coord, chunkPtr] : queued)
     {
         chunks[coord] = std::move(chunkPtr);
-        m_chunkMeshes[coord];
+
+		m_chunkMeshes.try_emplace(coord);   // default construct mesh for this chunk
+
         chunks[coord]->dirty = true;
 
         /*
@@ -649,13 +654,13 @@ void World::CommitGeneratedChunks()
 void World::StartChunkLoadWorkers(int count)
 {
     m_shutdown = false;
-    for (int i = 0; i < count; i++)
+    for (int i = 0; i < count; ++i)
         m_chunkLoadWorkers.emplace_back([this] { ChunkLoadWorkerLoop(); });
 }
 
-void World::StartMeshWorkers(int count = 2)
+void World::StartMeshWorkers(int count)
 {
-    for (int i = 0; i < count; i++)
+    for (int i = 0; i < count; ++i)
         m_meshWorkers.emplace_back([this] { MeshWorkerLoop(); });
 }
 
@@ -726,7 +731,7 @@ void World::ChunkLoadWorkerLoop()
 void World::MeshWorkerLoop()
 {
     std::vector<Vertex> verts;
-    verts.reserve(CX * CY * CZ * 3);
+    verts.reserve(CX * CZ * 64);
 
     while (true)
     {
@@ -766,10 +771,14 @@ void World::MeshWorkerLoop()
                 );
         }
 
-        // 3) Push vertices to staging
+        // 3) Push built vertices to staging
         {
             std::lock_guard<std::mutex> lock(m_meshStagingMutex);
-            m_meshStaging[job.coord] = std::move(verts);
+
+            std::vector<Vertex> toStage;
+            toStage.swap(verts);
+
+            m_meshStaging[job.coord] = std::move(toStage);
         }
 
         // 4) Decrement refcounts, so that the chunk can be unloaded (unguard now)

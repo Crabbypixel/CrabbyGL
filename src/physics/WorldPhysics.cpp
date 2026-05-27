@@ -1,6 +1,6 @@
 #include "physics/WorldPhysics.h"
+#include "world/BlockType.h"
 #include "world/World.h"
-#include "world/Chunk.h"
 #include "world/BlockRegistry.h"
 
 void WorldPhysics::Update(float dt, World& world)
@@ -64,7 +64,7 @@ void WorldPhysics::Tick(World& world)
 	m_nextDirtyBlocks.clear();
 }
 
-bool WorldPhysics::IsGravityBlock(BlockType type)
+bool WorldPhysics::IsGravityBlock(BlockType type) noexcept
 {
 	return type == BlockType::SAND || type == BlockType::GRAVEL;
 }

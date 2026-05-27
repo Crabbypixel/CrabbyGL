@@ -36,28 +36,28 @@ static UVRect Tile(int i)
 // 6 faces: +Y -Y +X -X +Z -Z
 // Add this to the current face to go to the neighboring block to that face
 // Each face = 4 verts -> 6 indices (2 tris) baked as 6 verts
-static const glm::ivec3 NORMALS[6] = {
+static constexpr glm::ivec3 NORMALS[6] = {
     { 0, 1, 0}, { 0,-1, 0},         // +Y & -Y
     { 1, 0, 0}, {-1, 0, 0},         // +X & -X
     { 0, 0, 1}, { 0, 0,-1}          // +Z & -Z
 };
 
 // Tangent directions along the face surface (local U axis)
-static const glm::ivec3 TANGENT_U[6] = {
+static constexpr glm::ivec3 TANGENT_U[6] = {
     {1, 0, 0}, {1, 0, 0},           // +Y & -Y
     {0, 0, 1}, {0, 0, 1},           // +X & -X
     {1, 0, 0}, {1, 0, 0},           // +Z & -Z
 };
 
 // Tangent directions along the face surface (local V axis)
-static const glm::ivec3 TANGENT_V[6] = {
+static constexpr glm::ivec3 TANGENT_V[6] = {
     {0, 0, 1}, {0, 0, 1},           // +Y & -Y
     {0, 1, 0}, {0, 1, 0},           // +X & -X
     {0, 1, 0}, {0, 1, 0},           // +Z & -Z
 };
 
 // Quad verts per face (local offsets from block origin)
-static const glm::ivec3 FACE_VERTS[6][4] = {
+static constexpr glm::ivec3 FACE_VERTS[6][4] = {
     // +Y top
     {{0,1,0},{1,1,0},{1,1,1},{0,1,1}},
     // -Y bottom
@@ -75,9 +75,10 @@ static const glm::ivec3 FACE_VERTS[6][4] = {
 };
 
 // Quad -> 2 tris (convert indices into 4-vert quad)
-static const int TRI_IDX[6] = { 0,1,2, 0,2,3 };
+static constexpr int TRI_IDX[6] = { 0,1,2, 0,2,3 };
 
-static const int GetAOState(int side1, int side2, int corner) {
+static constexpr int GetAOState(int side1, int side2, int corner) noexcept
+{
     if (side1 + side2 == 2)
         return 0;
 
@@ -120,7 +121,7 @@ bool ChunkMeshBuilder::IsSolidLocal(const Chunk& chunk, int x, int y, int z, con
 
 void ChunkMeshBuilder::EmitCross(std::vector<Vertex>& verts, const glm::ivec3& worldPos, BlockType type)
 {
-    BlockDef crossItem = GetDef(type);
+    const BlockDef& crossItem = GetDef(type);
     UVRect uv = Tile(crossItem.faces[0]);
     glm::vec3 tint = crossItem.tint;
 
@@ -143,7 +144,8 @@ void ChunkMeshBuilder::EmitCross(std::vector<Vertex>& verts, const glm::ivec3& w
     constexpr int REV[6] = { 0,2,1, 0,3,2 };
 
     auto emit = [&](const glm::ivec3 quad[4], const int idx[6]) {
-        for (int i = 0; i < 6; i++)
+        for (int i = 0; i < 6; ++i)
+        {
             verts.emplace_back(Vertex{
                 worldPos + quad[idx[i]],
                 uvs[idx[i]],
@@ -154,10 +156,11 @@ void ChunkMeshBuilder::EmitCross(std::vector<Vertex>& verts, const glm::ivec3& w
                 0.0f,   // no overlay
                 0.6f    // ao = full bright
             });
-        };
+        }
+    };
 
-    emit(CROSS_VERTS1, FWD);  emit(CROSS_VERTS2, REV);
-    emit(CROSS_VERTS1, FWD);  emit(CROSS_VERTS2, REV);
+    emit(CROSS_VERTS1, FWD);  emit(CROSS_VERTS1, REV);
+    emit(CROSS_VERTS2, FWD);  emit(CROSS_VERTS2, REV);
 }
 
 void ChunkMeshBuilder::AddFace(std::vector<Vertex>& verts, const glm::ivec3& worldPos, const glm::ivec3& chunkLocalPos, Face face, BlockType type, const Chunk& chunk, const Chunk* nPX, const Chunk* nNX, const Chunk* nPZ, const Chunk* nNZ, const Chunk* nPX_PZ, const Chunk* nPX_NZ, const Chunk* nNX_PZ, const Chunk* nNX_NZ)
@@ -194,7 +197,7 @@ void ChunkMeshBuilder::AddFace(std::vector<Vertex>& verts, const glm::ivec3& wor
     glm::ivec3 V = TANGENT_V[face];
     glm::ivec3 N = NORMALS[face];
 
-    for (int i = 0; i < 4; i++)
+    for (int i = 0; i < 4; ++i)
     {
         glm::ivec3 v = FACE_VERTS[face][i];
         int du = (glm::dot(glm::vec3(v), glm::vec3(U)) > 0.5f) ? 1 : -1;
@@ -219,13 +222,13 @@ void ChunkMeshBuilder::AddFace(std::vector<Vertex>& verts, const glm::ivec3& wor
     {
         // flipped
         int tmp[6] = { 0, 1, 3, 1, 2, 3 };
-        memcpy(tri, tmp, sizeof(tri));
+        std::copy(tmp, tmp + 6, tri);
     }
     else
     {
         // normal
         int tmp[6] = { 0, 1, 2, 0, 2, 3 };
-        memcpy(tri, tmp, sizeof(tri));
+        std::copy(tmp, tmp + 6, tri);
     }
 
     for (int i : tri)
@@ -243,7 +246,6 @@ void ChunkMeshBuilder::AddFace(std::vector<Vertex>& verts, const glm::ivec3& wor
     }
 }
 
-
 // Builds mesh for chunks
 void ChunkMeshBuilder::Build(const Chunk& chunk, const Chunk* nPX, const Chunk* nNX, const Chunk* nPZ, const Chunk* nNZ, const Chunk* nPX_PZ, const Chunk* nPX_NZ, const Chunk* nNX_PZ, const Chunk* nNX_NZ, std::vector<Vertex>& outVertices)
 {
@@ -252,7 +254,11 @@ void ChunkMeshBuilder::Build(const Chunk& chunk, const Chunk* nPX, const Chunk* 
     std::shared_lock lockNX = nNX ? std::shared_lock(nNX->chunkMutex) : std::shared_lock<std::shared_mutex>{};
     std::shared_lock lockPZ = nPZ ? std::shared_lock(nPZ->chunkMutex) : std::shared_lock<std::shared_mutex>{};
     std::shared_lock lockNZ = nNZ ? std::shared_lock(nNZ->chunkMutex) : std::shared_lock<std::shared_mutex>{};
-        
+	std::shared_lock lockPX_PZ = nPX_PZ ? std::shared_lock(nPX_PZ->chunkMutex) : std::shared_lock<std::shared_mutex>{};
+    std::shared_lock lockPX_NZ = nPX_NZ ? std::shared_lock(nPX_NZ->chunkMutex) : std::shared_lock<std::shared_mutex>{};
+    std::shared_lock lockNX_PZ = nNX_PZ ? std::shared_lock(nNX_PZ->chunkMutex) : std::shared_lock<std::shared_mutex>{};
+    std::shared_lock lockNX_NZ = nNX_NZ ? std::shared_lock(nNX_NZ->chunkMutex) : std::shared_lock<std::shared_mutex>{};
+
     outVertices.clear();
 
     // Chunk world coordinates (not global world coordinates)
@@ -260,18 +266,18 @@ void ChunkMeshBuilder::Build(const Chunk& chunk, const Chunk* nPX, const Chunk* 
     int chunk_wz0 = chunk.chunkPos.y * CZ;
 
     // Iterate over every block
-    for (int x = 0; x < CX; x++)
+    for (int x = 0; x < CX; ++x)
     {
-        for (int y = 0; y < CY; y++)
+        for (int y = 0; y < CY; ++y)
         {
-            for (int z = 0; z < CZ; z++)
+            for (int z = 0; z < CZ; ++z)
             {
                 BlockType blockType = chunk.GetUnchecked(x, y, z);
-                if (blockType == BlockType::AIR)        // If air, continue
+                if (blockType == BlockType::AIR) [[likely]]     // If air, continue
                     continue;
 
                 // Cross item
-                else if (GetDef(blockType).flags & BLOCK_CROSS)
+				else if (GetDef(blockType).flags & BLOCK_CROSS) [[unlikely]]
                 {
                     // Local world coordinates
                     glm::ivec3 worldPos = glm::ivec3(chunk_wx0 + x, y, chunk_wz0 + z);
@@ -280,19 +286,19 @@ void ChunkMeshBuilder::Build(const Chunk& chunk, const Chunk* nPX, const Chunk* 
                 }
 
                 // For rendering faces of translucent objects
-                else if (IsTranslucent(blockType))
+				else if (IsTranslucent(blockType)) [[unlikely]]
                 {
                     // Local world coordinates
                     glm::ivec3 worldPos = glm::ivec3(chunk_wx0 + x, y, chunk_wz0 + z);
 
                     // Check all six faces
-                    for (int face = 0; face < 6; face++)
+                    for (int face = 0; face < 6; ++face)
                     {
                         int nx = x + NORMALS[face].x;
                         int ny = y + NORMALS[face].y;
                         int nz = z + NORMALS[face].z;
 
-                        bool shoundRenderFace = true;
+                        bool shouldRenderFace = true;
 
                         if (Chunk::InBounds(nx, ny, nz))
                         {
@@ -304,7 +310,7 @@ void ChunkMeshBuilder::Build(const Chunk& chunk, const Chunk* nPX, const Chunk* 
 
                             // Render the face if the neighbor is solid, or if it is translucent of the same type.
                             // Do NOT render if the neighbor is translucent and a different type (e.g., glass vs leaves).
-                            shoundRenderFace = !((isSolid || isTranslucent) && !(isTranslucent && neighbor != blockType));
+                            shouldRenderFace = !((isSolid || isTranslucent) && !(isTranslucent && neighbor != blockType));
                         }
                         else
                         {
@@ -329,17 +335,17 @@ void ChunkMeshBuilder::Build(const Chunk& chunk, const Chunk* nPX, const Chunk* 
                                 bool isTranslucent = IsTranslucent(neighbor);
                                 bool isSolid = IsSolid(neighbor);
 
-                                shoundRenderFace = !((isSolid || isTranslucent) &&
+                                shouldRenderFace = !((isSolid || isTranslucent) &&
                                     !(isTranslucent && neighbor != blockType));
                             }
                             else
                             {
                                 // No neighbor chunk -> face is exposed
-                                shoundRenderFace = false;
+                                shouldRenderFace = true;
                             }
                         }
 
-                        if (shoundRenderFace)
+                        if (shouldRenderFace)
                             AddFace(outVertices, worldPos, glm::ivec3{ x, y, z }, (Face)face, blockType, chunk, nPX, nNX, nPZ, nNZ, nPX_PZ, nPX_NZ, nNX_PZ, nNX_NZ);
                     }
                 }
@@ -348,10 +354,10 @@ void ChunkMeshBuilder::Build(const Chunk& chunk, const Chunk* nPX, const Chunk* 
                 else
                 {
                     // Local world coordinates
-                    glm::ivec3 worldPos = glm::vec3(chunk_wx0 + x, y, chunk_wz0 + z);
+                    glm::ivec3 worldPos = glm::ivec3(chunk_wx0 + x, y, chunk_wz0 + z);
 
                     // Check all six faces
-                    for (int face = 0; face < 6; face++)
+                    for (int face = 0; face < 6; ++face)
                     {
                         int nx = x + NORMALS[face].x;
                         int ny = y + NORMALS[face].y;

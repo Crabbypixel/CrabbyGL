@@ -3,10 +3,7 @@
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
 
-float Camera::CAMERA_FAST_SPEED = 20.0f;
-float Camera::CAMERA_NORMAL_SPEED = 5.0f;
-
-void Camera::init(glm::vec3 vPos, glm::vec3 vFront, int screenWidth, int screenHeight)
+void Camera::Init(glm::vec3 vPos, glm::vec3 vFront, int screenWidth, int screenHeight)
 {
 	position = vPos;
 	fLastX = screenWidth / 2.0f;
@@ -82,7 +79,7 @@ void Camera::ProcessMouse(float fMousePosX, float fMousePosY, int screenWidth, i
 		if (fPitch > 89.9f)
 			fPitch = 89.9f;
 		else if (fPitch < -89.9f)
-			fPitch = -89.9;
+			fPitch = -89.9f;
 
 		glm::vec3 vDirection;
 		vDirection.x = cosf(glm::radians(fYaw)) * cosf(glm::radians(fPitch));

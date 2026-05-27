@@ -24,7 +24,7 @@
     <ClCompile Include="externals\glm\glm.cppm">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="src\glad.c">
+    <ClCompile Include="externals\glad\glad.c">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="externals\imgui\imgui.cpp">
@@ -94,6 +94,9 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="src\rendering\UIRenderer.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="src\player\Inventory.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
@@ -1079,6 +1082,12 @@
     <ClInclude Include="includes\rendering\UIRenderer.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="includes\player\Inventory.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="includes\world\BlockType.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <None Include="externals\glm\detail\func_common.inl">
@@ -1500,12 +1509,17 @@
     <None Include="assets\shaders\Crosshair.glsl" />
     <None Include="assets\shaders\ChunkDebug.glsl" />
     <None Include="assets\shaders\ChunkMesh.glsl" />
-    <None Include="assimp-vc143-mtd.dll" />
     <None Include=".gitignore" />
     <None Include="imgui.ini" />
     <None Include="libraries\glfw3.dll" />
     <None Include="CrabbyGL.exe" />
     <None Include="assets\shaders\Hotbar.glsl" />
+    <None Include="assets\shaders\Hotbar_Selector.glsl" />
+    <None Include="README.md" />
+    <None Include="assets\shaders\Inventory.glsl" />
+    <None Include="assets\shaders\DebugRect.glsl" />
+    <None Include="assets\shaders\Icons.glsl" />
+    <None Include="assets\shaders\ASCII.glsl" />
   </ItemGroup>
   <ItemGroup>
     <Library Include="libraries\glfw3.lib" />
@@ -1514,6 +1528,24 @@
   </ItemGroup>
   <ItemGroup>
     <Image Include="assets\CrabbyGL.png">
+      <Filter>Resource Files</Filter>
+    </Image>
+    <Image Include="assets\textures\hotbar.png">
+      <Filter>Resource Files</Filter>
+    </Image>
+    <Image Include="assets\textures\hotbar_selector.png">
+      <Filter>Resource Files</Filter>
+    </Image>
+    <Image Include="assets\textures\textures.png">
+      <Filter>Resource Files</Filter>
+    </Image>
+    <Image Include="assets\textures\player_inventory.png">
+      <Filter>Resource Files</Filter>
+    </Image>
+    <Image Include="assets\textures\icons.png">
+      <Filter>Resource Files</Filter>
+    </Image>
+    <Image Include="assets\textures\ascii.png">
       <Filter>Resource Files</Filter>
     </Image>
   </ItemGroup>

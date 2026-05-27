@@ -10,11 +10,19 @@ private:
 public:
 	VertexArray() = default;
 
-	void generate();
+	// Non-copyable, non-movable
+	VertexArray(const VertexArray&) = delete;
+	VertexArray(VertexArray&&) = delete;
+	VertexArray& operator=(const VertexArray&) = delete;
+	VertexArray& operator=(VertexArray&&) = delete;
 
-	void bind() const;
+	void generate() noexcept;
 
-	void unbind() const;
+	void bind() const noexcept;
 
-	void free() const;
+	void unbind() const noexcept;
+
+	unsigned int& getID() noexcept { return m_VertexArrayID; }
+
+	~VertexArray() noexcept;
 };

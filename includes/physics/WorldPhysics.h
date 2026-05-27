@@ -8,6 +8,14 @@ enum class BlockType : uint8_t;
 class WorldPhysics
 {
 public:
+	WorldPhysics() = default;
+
+	// No copying or moving - physics state is tightly coupled to the world and shouldn't be duplicated
+	WorldPhysics(const WorldPhysics&) = delete;
+	WorldPhysics(WorldPhysics&&) = delete;
+    WorldPhysics& operator=(const WorldPhysics&) = delete;
+	WorldPhysics& operator=(WorldPhysics&&) = delete;
+
 	static constexpr float TICK_RATE = 20.0f;		            // 20 ticks per second
 	static constexpr float TICK_DT = 1.0f / TICK_RATE;
 
@@ -24,7 +32,7 @@ private:
     // Simple XOR hashes cluster badly — positions on the same axis collide
     struct IVec3Hash
     {
-        size_t operator()(const glm::ivec3& v) const
+        size_t operator()(const glm::ivec3& v) const noexcept
         {
             size_t h = 0;
             auto combine = [&](int n)
@@ -51,5 +59,5 @@ private:
     void Tick(World& world);
 
 	// Returns true if the block type is affected by gravity (e.g. sand, gravel)
-	static bool IsGravityBlock(BlockType type);
+	[[nodiscard]] static bool IsGravityBlock(BlockType type) noexcept;
 };

@@ -3,12 +3,12 @@
 #include <vector>
 #include <mutex>
 
-bool Chunk::InBounds(int x, int y, int z)
+constexpr bool Chunk::InBounds(int x, int y, int z) noexcept
 {
 	return (x >= 0 && x < CX) && (y >= 0 && y < CY) && (z >= 0 && z < CZ);
 }
 
-BlockType Chunk::Get(int x, int y, int z) const
+BlockType Chunk::Get(int x, int y, int z) const noexcept
 {
 	if (!InBounds(x, y, z))
 		return BlockType::AIR;

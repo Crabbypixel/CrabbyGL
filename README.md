@@ -24,6 +24,16 @@ The goal: understand how Minecraft actually works by building it piece by piece.
 
 ---
 
+## Performance
+
+Performance:
+
+60-70 FPS on an 12 year old HP EliteBook 840 G1, i7 4th gen U series with 2 hyperthreaded cores
+
+250-300+ FPS on a decent laptop with a decent GPU (All without greedy meshing)
+
+---
+
 ## Features
 
 ### Infinite World Streaming

@@ -13,7 +13,7 @@ namespace Tiles
 	constexpr int STONE = 3;
 	constexpr int BEDROCK = 4;
 	constexpr int BRICK = 5;
-	constexpr int TREE_LOG_SIDES = 6;
+	constexpr int TREE_LOG_SIDES_1 = 6;
 	constexpr int TREE_LOG_TOP = 7;
 	constexpr int TREE_LEAVES = 8;
 	constexpr int COBBLESTONE = 9;
@@ -21,6 +21,7 @@ namespace Tiles
 	constexpr int PLANK = 10;
 	constexpr int SAND = 16;
 	constexpr int GRAVEL = 17;
+	constexpr int TREE_LOG_SIDES_2 = 22;
 	constexpr int GLASS = 11;
 	constexpr int SMOOTH_STONE = 12;
 	constexpr int ORE_GOLD = 32;
@@ -43,7 +44,7 @@ struct BlockDef
 	int overlay = -1;
 	glm::vec3 tint;
 	uint16_t flags;
-	float hardness;
+	float hardness;		// later for mining speed and tool requirements - to be done later
 	bool useOverlay;
 };
 
@@ -57,8 +58,9 @@ enum BlockFlags : uint16_t
 	BLOCK_CROSS = 1 << 5
 };
 
-const BlockDef& GetDef(BlockType t);
-bool IsOpaque(BlockType t);
-bool IsTransparent(BlockType t);
-bool IsSolid(BlockType t);
-bool IsTranslucent(BlockType t);
+[[nodiscard]] const BlockDef& GetDef(BlockType t) noexcept;
+[[nodiscard]] bool IsOpaque(BlockType t) noexcept;
+[[nodiscard]] bool IsTransparent(BlockType t) noexcept;
+[[nodiscard]] bool IsSolid(BlockType t) noexcept;
+[[nodiscard]] bool IsTranslucent(BlockType t) noexcept;
+[[nodiscard]] bool IsCross(BlockType t) noexcept;

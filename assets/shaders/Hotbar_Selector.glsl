@@ -7,7 +7,7 @@ uniform mat4 matProjection;
 
 void main()
 {
-    fTexCoord = aTexCoord;
+	fTexCoord = aTexCoord;
 
     gl_Position = matProjection * vec4(aPos, 1.0f);
 }
@@ -18,11 +18,14 @@ out vec4 FragColor;
 
 in vec2 fTexCoord;
 
-uniform sampler2D hotbarTexture;
+uniform sampler2D hotbarSelectorTexture;
 
 void main()
 {
-    vec4 texColor = texture(hotbarTexture, fTexCoord);
-    FragColor = vec4(texColor.x, texColor.y, texColor.z, 1.0f);
+	FragColor = texture(hotbarSelectorTexture, fTexCoord);
+
+	if(FragColor.a < 0.1f) {
+		discard;
+	}
 }
 #endif

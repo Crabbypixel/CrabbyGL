@@ -10,29 +10,35 @@ private:
 	size_t m_BufferBytes = 0;
 	size_t m_VertexCount = 0;
 public:
-	size_t typeSize = sizeof(T);
+	static constexpr size_t typeSize = sizeof(T);
 
 	VertexBuffer() = default;
 
-	void generate(size_t vertexCount);
+	// Non-copyable, non-movable
+	VertexBuffer(const VertexBuffer&) = delete;
+	VertexBuffer(VertexBuffer&&) = delete;
+	VertexBuffer& operator=(const VertexBuffer&) = delete;
+	VertexBuffer& operator=(VertexBuffer&&) = delete;
 
-	void bind() const;
+	void generate(size_t vertexCount) noexcept;
 
-	void unbind() const;
+	void bind() const noexcept;
 
-	void setBuffer(size_t bytes, const void* data);
+	void unbind() const noexcept;
 
-	size_t getBufferBytes() const;
+	void setBuffer(size_t bytes, const void* data) noexcept;
 
-	size_t getVertexCount() const;
+	[[nodiscard]] size_t getBufferBytes() const noexcept;
 
-	void free();
+	[[nodiscard]] size_t getVertexCount() const noexcept;
 
-	const unsigned int getID() const;
+	[[nodiscard]] unsigned int getID() const noexcept;
+
+	~VertexBuffer() noexcept;
 };
 
 template<typename T>
-void VertexBuffer<T>::generate(size_t vertexCount)
+void VertexBuffer<T>::generate(size_t vertexCount) noexcept
 {
 	m_VertexCount = vertexCount;
 
@@ -41,44 +47,45 @@ void VertexBuffer<T>::generate(size_t vertexCount)
 }
 
 template<typename T>
-void VertexBuffer<T>::bind() const
+void VertexBuffer<T>::bind() const noexcept
 {
 	glBindBuffer(GL_ARRAY_BUFFER, m_VertexBufferID);
 }
 
 template<typename T>
-void VertexBuffer<T>::unbind() const
+void VertexBuffer<T>::unbind() const noexcept
 {
 	glBindBuffer(GL_ARRAY_BUFFER, 0);
 }
 
 template<typename T>
-void VertexBuffer<T>::setBuffer(size_t bytes, const void* data)
+void VertexBuffer<T>::setBuffer(size_t bytes, const void* data) noexcept
 {
 	m_BufferBytes = bytes;
 	glBufferData(GL_ARRAY_BUFFER, bytes, data, GL_STATIC_DRAW);
 }
 
 template<typename T>
-size_t VertexBuffer<T>::getBufferBytes() const
+size_t VertexBuffer<T>::getBufferBytes() const noexcept
 {
 	return m_BufferBytes;
 }
 
 template<typename T>
-size_t VertexBuffer<T>::getVertexCount() const
+size_t VertexBuffer<T>::getVertexCount() const noexcept
 {
 	return m_VertexCount;
 }
 
 template<typename T>
-void VertexBuffer<T>::free()
+unsigned int VertexBuffer<T>::getID() const noexcept
 {
-	glDeleteBuffers(1, &m_VertexBufferID);
+	return m_VertexBufferID;
 }
 
 template<typename T>
-const unsigned int VertexBuffer<T>::getID() const
+VertexBuffer<T>::~VertexBuffer() noexcept
 {
-	return m_VertexBufferID;
+	if (m_VertexBufferID != 0)
+		glDeleteBuffers(1, &m_VertexBufferID);
 }

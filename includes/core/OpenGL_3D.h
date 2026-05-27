@@ -7,29 +7,41 @@
 // GLM (needed for matProjection)
 #include <glm/glm.hpp>
 
+// Camera
 #include "core/Camera.h"
+
+// Image
+#include "stb/stb_image.h"
 
 #include <string>
 #include <atomic>
 
 // Constants
-static constexpr int MAX_KEYS = GLFW_KEY_LAST;
-static constexpr int MAX_MOUSE_BUTTONS = 3;
 constexpr float pi = 3.14159f;
 
 class OpenGL_3D
 {
 private:
 	// Window width and height
-	int m_width;
-	int m_height;
+	int m_width = 0;
+	int m_height = 0;
 
 	// Window title name
 	std::string m_sAppName;
 
+	// Maximum number of keys supported in GLFW
+	static constexpr int MAX_KEYS = GLFW_KEY_LAST;
+	static constexpr int MAX_MOUSE_BUTTONS = 3;
+
 	// Arrays to store key states
 	short m_keyNewState[MAX_KEYS] = { 0 };
 	short m_keyOldState[MAX_KEYS] = { 0 };
+
+	// True when main thread finishes writing into the buffer and ready to swap
+	std::atomic<bool> m_keySwapReady{ false };
+	bool m_keyRawPending[MAX_KEYS] = {};		// Main thread writes only
+	bool m_keyRaw[MAX_KEYS] = {};				// Renderer thread reads only
+
 	short m_mouseOldState[MAX_MOUSE_BUTTONS] = { 0 };
 	short m_mouseNewState[MAX_MOUSE_BUTTONS] = { 0 };
 
@@ -41,13 +53,25 @@ private:
 	} m_keys[MAX_KEYS] = {}, m_mouse[MAX_MOUSE_BUTTONS] = {};
 
 	// Mouse variables
-	float m_mousePosX;
-	float m_mousePosY;
-	int m_mouseScroll;
-	bool m_bMouseButtonHeld[MAX_MOUSE_BUTTONS] = { false };
+	float m_mousePosX = 0.0f;
+	float m_mousePosY = 0.0f;
+
+	// Written by main-thread GLFW callbacks, read by renderer thread
+	// Must be atomic to avoid undefined behavior and compiler register-caching
+	std::atomic<int>  m_mouseScroll{ 0 };
+	std::atomic<bool> m_bMouseButtonHeld[MAX_MOUSE_BUTTONS]{ false };  // per-button
+
+	// Renderer-thread-only snapshot for m_mouseScroll, updated once per frame 
+	// by exchange(0) to drain the atomic into a stable value for the frame
+	// This can be read only once as reading this will cause it to reset to 0,
+	// as the main thread can update the scroll at any time, we want to flush out asap
+	int m_mouseScrollFrame = 0;
 
 	// Atomic variable for running console
-	static std::atomic<bool> m_bIsRunning;
+	std::atomic<bool> m_bIsRunning{ false };
+
+	// Atomic variable for cursor visibility - renderer writes, main reads
+	std::atomic<bool> m_cursorVisible{ false };
 
 protected:
 	GLFWwindow* window;
@@ -62,13 +86,18 @@ protected:
 	};
 
 	bool bIsPaused = false;
+	bool shouldUpdateCamera = true;		// Set to false to disable camera controls and view/projection updates
+
+	// Call from Update(), the atomic m_cursorVisible flag toggles cursor visibility
+	// GLFW only allows cursor visibility to be changed from the main thread
+	void RequestCursor(bool visible) noexcept { m_cursorVisible.store(visible, std::memory_order_relaxed); }
 
 private:
 	// Main renderer thread which constantly renders to the screen
 	void RendererThread();
 
 	// Update key and mouse states and update camera parameters
-	void HandleInputs(float fElapsedTime);
+	void UpdateCameraControls(float fElapsedTime);
 
 	// Update projection matrix UBOs
 	void UpdateProjectionMatrix();
@@ -77,6 +106,12 @@ private:
 	void UpdateViewMatrix();
 
 public:
+	// No copying or moving - the window and OpenGL context should be unique and not duplicated
+	OpenGL_3D(const OpenGL_3D&) = delete;
+	OpenGL_3D(OpenGL_3D&&) = delete;
+	OpenGL_3D& operator=(const OpenGL_3D&) = delete;
+	OpenGL_3D& operator=(OpenGL_3D&&) = delete;
+
 	float fTimeSinceStart = 0.0f;
 	bool bFirstMouse = true;
 
@@ -84,19 +119,19 @@ public:
 	glm::mat4 matProjection;
 	float fFov = 80.0f;
 
-	// Using a Uniform Buffer Object(UBO) to store the projection & view matrices 
+	// Using a Uniform Buffer Object (UBO) to store the projection & view matrices 
 	// in VRAM allows multiple shaders to access this matrix directly, 
 	// eliminating the need for repeated CPU - GPU calls each time
 	// The actual definition of uboMatrices is defined in Main.cpp
 	unsigned int uboMatrices;
 
-	int ScreenWidth() const { return m_width; }
-	int ScreenHeight() const { return m_height; }
-	float GetMousePosX() const { return m_mousePosX; }
-	float GetMousePosY() const { return m_mousePosY; }
-	Mouse GetMouseScroll() const { return (Mouse)m_mouseScroll; }
-	sKeyState GetMouseButton(Mouse button) const { return m_mouse[(int)button]; }
-	sKeyState GetKey(int nKeyID) const { return m_keys[nKeyID]; }
+	[[nodiscard]] int ScreenWidth() const noexcept { return m_width; }
+	[[nodiscard]] int ScreenHeight() const noexcept { return m_height; }
+	[[nodiscard]] float GetMousePosX() const noexcept { return m_mousePosX; }
+	[[nodiscard]] float GetMousePosY() const noexcept { return m_mousePosY; }
+	[[nodiscard]] Mouse GetMouseScroll() const noexcept { return (Mouse)m_mouseScrollFrame; }
+	[[nodiscard]] sKeyState GetMouseButton(Mouse button) const { return m_mouse[(int)button]; }
+	[[nodiscard]] sKeyState GetKey(int nKeyID) const { return m_keys[nKeyID]; }
 
 	OpenGL_3D() : window(nullptr), m_width(0), m_height(0) {}
 
@@ -108,7 +143,7 @@ public:
 
 	void ErrorLog(const std::string& str = "");
 
-// Virtual functions
+	// Virtual functions
 protected:
 	// Has to be overridden by subclasses
 	virtual bool Setup() = 0;
@@ -117,10 +152,13 @@ protected:
 	// Optional to override
 	virtual void Destroy() {}
 
-// Private functions
+	// Private functions
 private:
 	void Error(const std::string& message);
 	void DisplayGPU();
+
+	// Called from main thread - captures key strokes
+	void PollKeys();
 
 	// Callback functions used by GLFW
 	static void mouse_callback(GLFWwindow* window, double xPos, double yPos);

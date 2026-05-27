@@ -14,14 +14,11 @@ public:
 		DOWN
 	};
 
-	glm::vec3 position;
-	glm::vec3 front;
+	glm::vec3 position = glm::vec3(0.0f);
+	glm::vec3 front = glm::vec3(0.0f);
 	glm::vec3 up = glm::vec3(0.0f, 1.0f, 0.0f);
-	float fLastX;
-	float fLastY;
-
-	static float CAMERA_FAST_SPEED;
-	static float CAMERA_NORMAL_SPEED;
+	float fLastX = 0.0f;
+	float fLastY = 0.0f;
 
 private:
 	float fPitch = 0.0f;
@@ -35,7 +32,7 @@ public:
 
 	Camera() = default;	
 
-	void init(glm::vec3 vPos, glm::vec3 vFront, int screenWidth, int screenHeight);
+	void Init(glm::vec3 vPos, glm::vec3 vFront, int screenWidth, int screenHeight);
 	const glm::mat4& getLookAt();
 
 	// We essentially change vCamPos using vCamFront and vCamUp

@@ -48,12 +48,12 @@ void ChunkDebug::DrawChunkBoundary(const glm::vec3& playerPos)
     };
 
     // Lazy init box VAO once
-    if (boxVAO == 0)
+    if (m_boxVAO == 0)
     {
-        glGenVertexArrays(1, &boxVAO);
-        glGenBuffers(1, &boxVBO);
-        glBindVertexArray(boxVAO);
-        glBindBuffer(GL_ARRAY_BUFFER, boxVBO);
+        glGenVertexArrays(1, &m_boxVAO);
+        glGenBuffers(1, &m_boxVBO);
+        glBindVertexArray(m_boxVAO);
+        glBindBuffer(GL_ARRAY_BUFFER, m_boxVBO);
         glBufferData(GL_ARRAY_BUFFER, sizeof(verts), nullptr, GL_DYNAMIC_DRAW);
         glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
         glEnableVertexAttribArray(0);
@@ -61,22 +61,22 @@ void ChunkDebug::DrawChunkBoundary(const glm::vec3& playerPos)
     }
 
     // Update verts every frame (player moves)
-    glBindBuffer(GL_ARRAY_BUFFER, boxVBO);
+    glBindBuffer(GL_ARRAY_BUFFER, m_boxVBO);
     glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(verts), verts);
     glBindBuffer(GL_ARRAY_BUFFER, 0);
 
     m_shader.use();
     m_shader.setVec4("uColor", glm::vec4(1.0f, 1.0f, 0.0f, 1.0f));
 
-    glBindVertexArray(boxVAO);
+    glBindVertexArray(m_boxVAO);
     glLineWidth(2.0f);
     glDrawArrays(GL_LINES, 0, 24);
     glLineWidth(1.0f);
     glBindVertexArray(0);
 }
 
-void ChunkDebug::Destroy()
+ChunkDebug::~ChunkDebug()
 {
-    if (boxVAO) glDeleteVertexArrays(1, &boxVAO);
-    if (boxVBO) glDeleteBuffers(1, &boxVBO);
+    if (m_boxVAO) glDeleteVertexArrays(1, &m_boxVAO);
+    if (m_boxVBO) glDeleteBuffers(1, &m_boxVBO);
 }

@@ -36,11 +36,18 @@ void OpenGL_3D::RendererThread()
 		float fElapsedTime = elapsedTime.count();
 		fTimeSinceStart += fElapsedTime;
 
+		// Capture scroll atomic once per frame into a stable snapshot
+		// This also resets the atomic to 0, so the main thread can update it for the next frame without worrying about synchronization
+		m_mouseScrollFrame = m_mouseScroll.exchange(0, std::memory_order_relaxed);
+
+		if (m_keySwapReady.exchange(false, std::memory_order_acquire))
+			std::swap(m_keyRaw, m_keyRawPending);		// Swap the raw state buffers when the main thread signals a fresh snapshot is ready
+
 		// Update key and mouse states on each frame, they may be used later by the programmer
 		// 1. Update key states
-		for (int i = 0; i < MAX_KEYS; i++)
+		for (int i = 0; i < MAX_KEYS; ++i)
 		{
-			m_keyNewState[i] = glfwGetKey(window, i) == GLFW_PRESS;
+			m_keyNewState[i] = m_keyRaw[i];		// Use the raw state captured by the main thread callback
 
 			m_keys[i].bPressed = false;
 			m_keys[i].bReleased = false;
@@ -63,9 +70,10 @@ void OpenGL_3D::RendererThread()
 		}
 
 		// 2. Update mouse states
-		for (int i = 0; i < MAX_MOUSE_BUTTONS; i++)
+		for (int i = 0; i < MAX_MOUSE_BUTTONS; ++i)
 		{
-			m_mouseNewState[i] = m_bMouseButtonHeld[i];
+			// Drain the atomic button held states into the new state array for processing
+			m_mouseNewState[i] = m_bMouseButtonHeld[i].load(std::memory_order_relaxed);
 
 			m_mouse[i].bPressed = false;
 			m_mouse[i].bReleased = false;
@@ -86,9 +94,6 @@ void OpenGL_3D::RendererThread()
 			}
 		}
 
-		// Control inputs - Change Projection and View matrices & handle keyboard inputs
-		HandleInputs(fElapsedTime);
-
 		// Pause/resume the renderer
 		if (GetKey(GLFW_KEY_P).bPressed)
 		{
@@ -96,10 +101,14 @@ void OpenGL_3D::RendererThread()
 
 			if (bIsPaused)
 			{
+				shouldUpdateCamera = false;
+
 				std::cout << "Engine: paused\n";
 			}
 			else
 			{
+				shouldUpdateCamera = true;
+
 				camera.fLastX = (float)GetMousePosX();
 				camera.fLastY = (float)GetMousePosY();
 				std::cout << "Engine: unpaused\n";
@@ -111,8 +120,11 @@ void OpenGL_3D::RendererThread()
 			m_bIsRunning = false;
 		}
 
+		// Control inputs - Change Projection and View matrices & handle keyboard inputs
+		UpdateCameraControls(fElapsedTime);
+
 		// FPS calculation
-		iFrameCount++;
+		++iFrameCount;
 		fAccumulatedTime += fElapsedTime;
 
 		// Update FPS every 0.5 seconds
@@ -123,16 +135,13 @@ void OpenGL_3D::RendererThread()
 			if (window)
 			{
 				char s[32];
-				sprintf_s(s, 32, "%s : %d FPS", m_sAppName.c_str(), fps);
+				snprintf(s, 32, "%s : %d FPS", m_sAppName.c_str(), fps);
 				glfwSetWindowTitle(window, s);
 			}
 
 			fAccumulatedTime = 0.0f;
 			iFrameCount = 0;
 		}
-
-		m_mouseScroll = 0;
-		m_mouse[2].bReleased = false;
 
 		// Swap buffers
 		glfwSwapBuffers(window);
@@ -144,9 +153,9 @@ void OpenGL_3D::RendererThread()
 	glfwMakeContextCurrent(nullptr);
 }
 
-void OpenGL_3D::HandleInputs(float fElapsedTime)
+void OpenGL_3D::UpdateCameraControls(float fElapsedTime)
 {
-	if (!bIsPaused)
+	if (shouldUpdateCamera)
 	{
 		if (GetKey('C').bHeld)
 		{
@@ -162,17 +171,15 @@ void OpenGL_3D::HandleInputs(float fElapsedTime)
 			UpdateProjectionMatrix();
 		}
 
-		if (GetKey(GLFW_KEY_LEFT_CONTROL).bHeld)
-			camera.fCameraSpeed = Camera::CAMERA_FAST_SPEED;
-		else
-			camera.fCameraSpeed = Camera::CAMERA_NORMAL_SPEED;
-
 		if (GetKey(GLFW_KEY_HOME).bPressed)
-			camera.init(glm::vec3(0.0f, 0.0f, 3.0f), glm::vec3(0.0f, 0.0f, -1.0f), ScreenWidth(), ScreenHeight());
+			camera.Init(glm::vec3(0.0f, 0.0f, 3.0f), glm::vec3(0.0f, 0.0f, -1.0f), ScreenWidth(), ScreenHeight());
 
 		/* ------------------------------------------ - Mouse Control - ------------------------------------------ */
 		camera.ProcessMouse(GetMousePosX(), GetMousePosY(), ScreenWidth(), ScreenHeight(), bFirstMouse);
 	}
+
+	if (!shouldUpdateCamera && !bIsPaused)
+		camera.ProcessMouse(camera.fLastX, camera.fLastY, ScreenWidth(), ScreenHeight(), bFirstMouse);
 
 	UpdateViewMatrix();
 }
@@ -222,7 +229,6 @@ void OpenGL_3D::ConstructWindow(int width, int height, std::string windowName)
 
 	// Disable cursor
 	glfwSetCursorPos(window, m_width / 2.0f, m_height / 2.0f);
-	//glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
 
 	// Disable V-Sync (to achieve 60+ fps)
 	// Comment this out to get 60 fps (max)
@@ -239,13 +245,13 @@ void OpenGL_3D::ConstructWindow(int width, int height, std::string windowName)
 	glEnable(GL_DEPTH_TEST);          // Enable depth testing
 	glDepthFunc(GL_LESS);
 
-	// Enable face-culling
-	//glEnable(GL_CULL_FACE);         // Enable face culling
-	//glCullFace(GL_BACK);            // Cull back faces
-	//glFrontFace(GL_CCW);            // Define front faces as counter-clockwise
-
 	// Enable multi-sampling (usually enabled, good to enable it ourselves anyways)
 	glEnable(GL_MULTISAMPLE);
+
+	// Make the image loading library flip textures on load by default since 
+	// OpenGL's texture coordinate system has the y-axis going 
+	// upwards, while images usually have it downwards
+	stbi_set_flip_vertically_on_load(true);
 
 	// Display GPU info
 	DisplayGPU();
@@ -279,13 +285,14 @@ void OpenGL_3D::Start()
 		}
 
 		// Set cursor mode
-		glfwSetInputMode(window, GLFW_CURSOR, (bIsPaused ? GLFW_CURSOR_NORMAL : GLFW_CURSOR_DISABLED));
-
+		glfwSetInputMode(window, GLFW_CURSOR, m_cursorVisible.load(std::memory_order_relaxed) ? GLFW_CURSOR_NORMAL : GLFW_CURSOR_DISABLED);
+		
+		// Initiate shutdown when window is closed
 		if (glfwWindowShouldClose(window))
 			m_bIsRunning = false;
 
-		//glfwPollEvents();
-		glfwWaitEvents();
+		glfwPollEvents();
+		PollKeys();
 	}
 
 	// Wait until the renderer thread exits
@@ -302,8 +309,8 @@ void OpenGL_3D::ErrorLog(const std::string& str)
 	GLenum err;
 	while ((err = glGetError()) != GL_NO_ERROR)
 	{
-		std::cout << "OpenGL error - main: " << err << std::endl;
-		std::cout << "in: " << str << '\n';
+		std::cerr << "OpenGL error - main: " << err << std::endl;
+		std::cerr << "in: " << str << '\n';
 	}
 }
 
@@ -313,6 +320,16 @@ void OpenGL_3D::Error(const std::string& message)
 	Destroy();
 	glfwTerminate();
 	exit(EXIT_FAILURE);
+}
+
+void OpenGL_3D::PollKeys()
+{
+	// Called from main thread - defined behavior
+	for (int i = 0; i < MAX_KEYS; ++i)
+		m_keyRawPending[i] = (glfwGetKey(window, i) == GLFW_PRESS);
+
+	// Signal renderer that a fresh snapshot is ready for swapping
+	m_keySwapReady.store(true, std::memory_order_release);
 }
 
 void OpenGL_3D::mouse_callback(GLFWwindow* window, double xPos, double yPos)
@@ -327,18 +344,18 @@ void OpenGL_3D::mouse_callback(GLFWwindow* window, double xPos, double yPos)
 void OpenGL_3D::scroll_callback(GLFWwindow* window, double xOffset, double yOffset)
 {
 	OpenGL_3D* instance = static_cast<OpenGL_3D*>(glfwGetWindowUserPointer(window));
+
 	if ((int)yOffset == 1)
-		instance->m_mouseScroll = (int)Mouse::SCROLL_UP;
+		instance->m_mouseScroll.store((int)Mouse::SCROLL_UP, std::memory_order_relaxed);
 	else if ((int)yOffset == -1)
-		instance->m_mouseScroll = (int)Mouse::SCROLL_DOWN;
-	else
-		instance->m_mouseScroll = 0;
+		instance->m_mouseScroll.store((int)Mouse::SCROLL_DOWN, std::memory_order_relaxed);
 }
 
 void OpenGL_3D::mouse_button_callback(GLFWwindow* window, int button, int action, int mods)
 {
 	OpenGL_3D* instance = static_cast<OpenGL_3D*>(glfwGetWindowUserPointer(window));
-	instance->m_bMouseButtonHeld[button] = action;
+	if (button < MAX_MOUSE_BUTTONS)
+		instance->m_bMouseButtonHeld[button].store(action != GLFW_RELEASE, std::memory_order_relaxed);
 }
 
 void OpenGL_3D::DisplayGPU()
@@ -430,5 +447,3 @@ OpenGL_3D::~OpenGL_3D()
 	glDeleteBuffers(1, &uboMatrices);
 	std::cout << "Destructor called" << std::endl;
 }
-
-std::atomic<bool> OpenGL_3D::m_bIsRunning(false);

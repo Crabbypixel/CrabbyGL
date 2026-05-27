@@ -1,4 +1,5 @@
 #include "world/BlockRegistry.h"
+#include "world/Chunk.h"
 
 using namespace Tiles;
 
@@ -11,7 +12,7 @@ const BlockDef BLOCK_DEFS[] =
 /* 3*/	{ "Stone", { STONE, STONE, STONE, STONE, STONE, STONE }, -1, { 1, 1, 1 }, BLOCK_OPAQUE | BLOCK_SOLID, 1.5f, false },
 /* 4*/	{ "Bedrock", { BEDROCK, BEDROCK, BEDROCK, BEDROCK, BEDROCK, BEDROCK }, -1, { 1, 1, 1 }, BLOCK_OPAQUE | BLOCK_SOLID, 10000.0f, false },
 /* 5*/	{ "Brick", { BRICK, BRICK, BRICK, BRICK, BRICK, BRICK }, -1, { 1, 1, 1 }, BLOCK_OPAQUE | BLOCK_SOLID, 1.5f, false },
-/* 6*/	{ "Log", { TREE_LOG_TOP, TREE_LOG_TOP, TREE_LOG_SIDES, TREE_LOG_SIDES, TREE_LOG_SIDES, TREE_LOG_SIDES }, -1, { 1, 1, 1 }, BLOCK_OPAQUE | BLOCK_SOLID, 1.5f, false },
+/* 6*/	{ "Log", { TREE_LOG_TOP, TREE_LOG_TOP, TREE_LOG_SIDES_1, TREE_LOG_SIDES_1, TREE_LOG_SIDES_1, TREE_LOG_SIDES_1 }, -1, { 1, 1, 1 }, BLOCK_OPAQUE | BLOCK_SOLID, 1.5f, false },
 /* 7*/	{ "Leaves", { TREE_LEAVES, TREE_LEAVES, TREE_LEAVES, TREE_LEAVES, TREE_LEAVES, TREE_LEAVES }, -1, { 1, 1, 1 }, BLOCK_TRANSLUCENT | BLOCK_SOLID, 10000.0f, false },
 /* 8*/	{ "Cobblestone", { COBBLESTONE, COBBLESTONE, COBBLESTONE, COBBLESTONE, COBBLESTONE, COBBLESTONE }, -1, { 1, 1, 1 }, BLOCK_OPAQUE | BLOCK_SOLID, 1.5f, false },
 /* 9*/	{ "Planks", { PLANK, PLANK, PLANK, PLANK, PLANK, PLANK }, -1, { 1, 1, 1 }, BLOCK_OPAQUE | BLOCK_SOLID, 1.5f, false },
@@ -31,36 +32,38 @@ const BlockDef BLOCK_DEFS[] =
 /*22*/  { "Red mushroom",  {RED_MUSHROOM, RED_MUSHROOM, RED_MUSHROOM, RED_MUSHROOM, RED_MUSHROOM, RED_MUSHROOM }, -1, {1,1,1}, BLOCK_TRANSPARENT | BLOCK_CROSS, 0.0f, false },
 /*23*/  { "Grass",  {GRASS, GRASS, GRASS, GRASS, GRASS, GRASS }, -1, { 0.592f, 0.902f, 0.239f }, BLOCK_TRANSPARENT | BLOCK_CROSS, 0.0f, false },
 
-/*23*/  { "Log X", { TREE_LOG_SIDES, TREE_LOG_SIDES, TREE_LOG_TOP, TREE_LOG_TOP, TREE_LOG_SIDES, TREE_LOG_SIDES }, -1, {1,1,1}, BLOCK_OPAQUE | BLOCK_SOLID, 1.5f, false },
-/*24*/  { "Log Z", { TREE_LOG_SIDES, TREE_LOG_SIDES, TREE_LOG_SIDES, TREE_LOG_SIDES, TREE_LOG_TOP, TREE_LOG_TOP }, -1, {1,1,1}, BLOCK_OPAQUE | BLOCK_SOLID, 1.5f, false },
+/*24*/  { "Log", { TREE_LOG_SIDES_2, TREE_LOG_SIDES_2, TREE_LOG_TOP, TREE_LOG_TOP, TREE_LOG_SIDES_2, TREE_LOG_SIDES_2 }, -1, {1,1,1}, BLOCK_OPAQUE | BLOCK_SOLID, 1.5f, false },
+/*25*/  { "Log", { TREE_LOG_SIDES_1, TREE_LOG_SIDES_1, TREE_LOG_SIDES_2, TREE_LOG_SIDES_2, TREE_LOG_TOP, TREE_LOG_TOP }, -1, {1,1,1}, BLOCK_OPAQUE | BLOCK_SOLID, 1.5f, false },
 };
 
-const BlockDef& GetDef(BlockType t)
+static_assert(std::size(BLOCK_DEFS) == (size_t)BlockType::MAX_VALUE, "BlockType enum and BLOCK_DEFS[] out of sync");
+
+const BlockDef& GetDef(BlockType t) noexcept
 {
 	return BLOCK_DEFS[(uint8_t)t];
 }
 
-bool IsCross(BlockType t)
+bool IsCross(BlockType t) noexcept
 {
 	return GetDef(t).flags & BLOCK_CROSS;
 }
 
-bool IsOpaque(BlockType t)
+bool IsOpaque(BlockType t) noexcept
 {
 	return GetDef(t).flags & BLOCK_OPAQUE;
 }
 
-bool IsTransparent(BlockType t)
+bool IsTransparent(BlockType t) noexcept
 {
 	return GetDef(t).flags & BLOCK_TRANSPARENT;
 }
 
-bool IsSolid(BlockType t)
+bool IsSolid(BlockType t) noexcept
 {
 	return GetDef(t).flags & BLOCK_SOLID;
 }
 
-bool IsTranslucent(BlockType t)
+bool IsTranslucent(BlockType t) noexcept
 {
 	return GetDef(t).flags & BLOCK_TRANSLUCENT;
 }
