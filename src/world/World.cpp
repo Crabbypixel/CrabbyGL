@@ -271,26 +271,10 @@ bool World::PlaceBlock(const RaycastHit& hit, BlockType type)
 
     if (isLog)
     {
-        //type =
-        //    hit.normal.x != 0 ? BlockType::TREE_LOG_X :
-        //    hit.normal.z != 0 ? BlockType::TREE_LOG_Z :
-        //    BlockType::TREE_LOG; // Y orientation
-
-        if (hit.normal.x != 0)
-        {
-            type = BlockType::TREE_LOG_X;
-            std::cout << "log x\n";
-        }
-        else if (hit.normal.z != 0)
-        {
-            type = BlockType::TREE_LOG_Z;
-            std::cout << "log z\n";
-        }
-        else
-        {
-            type = BlockType::TREE_LOG_Y;
-            std::cout << "log y\n";
-        }
+        type =
+            hit.normal.x != 0 ? BlockType::TREE_LOG_X :
+            hit.normal.z != 0 ? BlockType::TREE_LOG_Z :
+            BlockType::TREE_LOG_Y;
     }
 
     SetBlock(target.x, target.y, target.z, type);
