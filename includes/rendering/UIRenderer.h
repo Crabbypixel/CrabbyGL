@@ -99,7 +99,7 @@ public:
 	void DrawInventoryIcons(const Inventory& inv) noexcept;
 	void DrawHotbarIcons(const Inventory& inv) noexcept;
 	void DrawHeldItem(const Inventory& inv, float mouseX, float mouseY) noexcept;
-	void DrawDebugRect(float x, float y, float w, float h, const glm::vec4& color) noexcept;
+	void DrawHighlightRect(float x, float y, float w, float h, const glm::vec4& color) noexcept;
 	void DrawText(float x, float y, float scale, const std::string& text, glm::vec4 color) noexcept;
 	void DrawTextBold(float x, float y, float scale, const std::string& text, glm::vec4 color) noexcept;
 };

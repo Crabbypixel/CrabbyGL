@@ -10,7 +10,7 @@
 struct ItemStack
 {
 	BlockType type = BlockType::AIR;
-	uint8_t count = 0;		// Not that important
+	uint8_t count = 0;		// Not that important, placeholder for now
 	[[nodiscard]] bool IsEmpty() const noexcept { return count == 0 || type == BlockType::AIR; }
 };
 

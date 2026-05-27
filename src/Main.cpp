@@ -51,23 +51,21 @@ private:
 	VertexBuffer<float> crosshairVBO;
 	BufferLayout crosshairLayout;
 
-	// Player
-	Player player;
-
-	// World
-	World world;
-
-	// Chunk outlines for debugging
-	ChunkDebug chunkDebug;
-
 	// Shaders
 	Shader axesShader;
 	Shader framebufferShader;
 	Shader crosshairShader;
 	Shader chunkMeshShader;
 
-	// Physics
+	// Player
+	Player player;
+
+	// World
+	World world;
 	WorldPhysics worldPhysics;
+
+	// Chunk outlines for debugging
+	ChunkDebug chunkDebug;
 
 	// Hotbar & Inventory
 	UIRenderer UIRenderer;
@@ -77,12 +75,6 @@ private:
 	unsigned int framebuffer = 0;
 	unsigned int textureColorBuffer = 0;
 	unsigned int rbo = 0;
-
-	// Constants
-	const float tickSpeed = 0.05f;
-
-	// Other variables
-	float fDebugTimer = 0.0f;
 
 	// Jump fly
 	const float DOUBLE_TAP_WINDOW = 0.3f;
@@ -95,8 +87,8 @@ private:
 public:
 	bool Setup() override
 	{
-		player.pos = glm::vec3(20.0f, 39.0f, 78.0f);
-		camera.Init(glm::vec3(24.0f, 37.0f, 56.0f), glm::vec3(0.0f, 0.0f, -1.0f), ScreenWidth(), ScreenHeight());
+		player.SetPos(glm::vec3(20.0f, 39.0f, 78.0f));
+		camera.Init(player.GetPos(), glm::vec3(0.0f, 0.0f, -1.0f), ScreenWidth(), ScreenHeight());
 
 		// Axes
 		axesVAO.generate();
@@ -128,7 +120,8 @@ public:
 		UIRenderer.LoadASCII("assets/textures/ascii.png");
 
 		// Inventory
-		inventory.Load("saves/player_inventory.bin");
+		if (inventory.Load("saves/player_inventory.bin"))
+			std::cout << "Error loading player inventory\n";
 
 		// ───── World ──────────────────────────────────────────────────
 		auto dt1 = std::chrono::system_clock::now();
@@ -177,7 +170,7 @@ public:
 
 			// Check if the custom framebuffer is complete
 			if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
-				std::cout << "ERROR::FRAMEBUFFER:: Framebuffer is not complete!" << std::endl;
+				std::cerr << "ERROR::FRAMEBUFFER:: Framebuffer is not complete!" << std::endl;
 
 			// Bind back to the default framebuffer
 			glBindFramebuffer(GL_FRAMEBUFFER, 0);
@@ -259,14 +252,14 @@ public:
 			// Camera tracks player head
 			camera.position = player.EyePos();
 
-			// Physics test - ge
+			// Physics test - generate a gravel platform to test physics (in development - prone to bugs)
 			if (GetKey('U').bPressed)
 			{
 				for (int i = 200; i < 220; ++i)
 				{
 					for (int j = 200; j < 220; ++j)
 					{
-						world.SetBlock(i, 150, j, BlockType::SAND);
+						world.SetBlock(i, 150, j, BlockType::GRAVEL);
 					}
 				}
 			}
@@ -274,7 +267,7 @@ public:
 
 		RaycastHit m_currentHit = RaycastDDA(camera.position, camera.front, world);
 		glm::ivec3 raycastPlacePos = m_currentHit.blockPos + m_currentHit.normal;
-		glm::ivec3 playerPos = { (int)floor(player.pos.x), (int)floor(player.pos.y), (int)floor(player.pos.z) };
+		glm::ivec3 playerPos = { (int)floor(player.GetPos().x), (int)floor(player.GetPos().y), (int)floor(player.GetPos().z)};
 
 		// Select block
 		if (!bIsPaused && shouldUpdateCamera && GetMouseButton(Mouse::MIDDLE).bPressed && m_currentHit.hit)
@@ -308,7 +301,7 @@ public:
 		// - Enqueue new chunks for generation within view distance
 		// - Identify chunks outside unload distance for removal
 		// - Maintains streaming window around the player
-		world.UpdateChunkStreaming(player.pos);
+		world.UpdateChunkStreaming(player.GetPos());
 
 		// Promote fully generated chunks from staging into the main world: 
 		// - Transfers ownership into `chunks` map (main thread)
@@ -361,29 +354,24 @@ public:
 
 		// Hotbar selector
 		UIRenderer.DrawHotbarCursor(inventory.GetHotbarIndex());
-		
-		// Draw text over hotbar
-		/*
-		for (int i = 0; i < 9; ++i)
-		{
-			glm::vec2 pos = UIRenderer::GetHotbarSlotPos(i);
-			UIRenderer.DrawTextBold(pos.x + 23.0f, pos.y - 2.0f, 2.0f, std::to_string(i), glm::vec4(1.0f, 1.0f, 1.0f, 1.0f));
-		}
-		*/
 
 		// Inventory
 		if (inventory.IsOpen())
 		{
+			// Draw inventory screen
 			UIRenderer.DrawInventory();
 
-			// Item icons
+			// Draw items
 			UIRenderer.DrawInventoryIcons(inventory);
 
+			// Get inventory slot under mouse cursor
 			int inventoryMouseHoverIndex = UIRenderer::GetMouseInventorySlot(GetMousePosX(), ScreenHeight() - GetMousePosY());
 			if (inventoryMouseHoverIndex != -1)
 			{
 				glm::vec2 highlightPos = UIRenderer.GetInventorySlotPos(inventoryMouseHoverIndex);
-				UIRenderer.DrawDebugRect(highlightPos.x, highlightPos.y, 32, 32, glm::vec4(0.7f, 0.7f, 0.7f, 0.6f));
+				
+				// Highlight the slot under the mouse cursor
+				UIRenderer.DrawHighlightRect(highlightPos.x, highlightPos.y, 32, 32, glm::vec4(0.7f, 0.7f, 0.7f, 0.6f));
 
 				// Remove item if Q selected while hovering over inventory slot
 				if (GetKey('Q').bPressed)
@@ -405,6 +393,7 @@ public:
 				if (slot >= 0) inventory.ClickSlot(slot);
 			}
 
+			// Draw held item above all
 			UIRenderer.DrawHeldItem(inventory, mouseX, mouseY);
 		}
 
@@ -427,7 +416,7 @@ public:
 		glDrawArrays(GL_TRIANGLES, 0, 6);
 
 		// ───── ImGui ───────────────────────────────────────────────
-		glm::ivec2 playerChunk = World::ChunkCoord(player.pos.x, player.pos.z);
+		glm::ivec2 playerChunk = World::ChunkCoord(player.GetPos().x, player.GetPos().z);
 		ImGui::Begin("Debug Console");
 		ImGui::Text("Hello World!");
 		ImGui::Text("Player Position: %d %d %d", (int)camera.position.x, (int)camera.position.y, (int)camera.position.z);
@@ -447,9 +436,7 @@ public:
 		ImGui::InputInt("Z", &teleportZ);
 
 		if (ImGui::Button("Teleport"))
-		{
-			player.pos = glm::vec3(teleportX, teleportY, teleportZ);
-		}
+			player.SetPos(glm::vec3(teleportX, teleportY, teleportZ));
 
 		ImGui::End();
 		ImGui::Render();
@@ -468,7 +455,7 @@ public:
 				if (spaceTimer <= DOUBLE_TAP_WINDOW)
 				{
 					// Double
-					player.canFly = !player.canFly;
+					player.ToggleFly();
 
 					waitingForSecondTap = false;
 					spaceTimer = DOUBLE_TAP_WINDOW + 1.0f;	// invalidate
@@ -529,19 +516,13 @@ public:
 
 		// Remove item from hotbar
 		if (GetKey('Q').bPressed && !inventory.IsOpen())
-		{
 			inventory.RemoveFromSlot(inventory.GetHotbarIndex());
-		}
 
 		// Scroll hotbar cursor
 		if (GetMouseScroll() == Mouse::SCROLL_DOWN)
-		{
 			inventory.Scroll(1);
-		}
 		else if (GetMouseScroll() == Mouse::SCROLL_UP)
-		{
 			inventory.Scroll(-1);
-		}
 
 		RequestCursor(bIsPaused || inventory.IsOpen());
 	}
@@ -556,6 +537,8 @@ public:
 
 	void Debug(float dt, const World& world)
 	{
+		static float fDebugTimer = 0.5f;
+
 		// Prints on the screen every 500ms
 		// Nothing as of now - be happy!
 		fDebugTimer += dt;
@@ -620,7 +603,8 @@ public:
 		if(inventory.IsOpen())
 			inventory.Dump();
 
-		inventory.Save();
+		if (inventory.Save())
+			std::cerr << "Error saving player inventory\n";
 
 		world.StopAllWorkers();			// Stop all threads
 		world.UnloadChunks();			// Unload all chunks

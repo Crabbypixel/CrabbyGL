@@ -4,7 +4,7 @@ layout(location = 0) in vec3  aPos;
 layout(location = 1) in vec2  aBaseUV;
 layout(location = 2) in vec2  aOverlayUV;
 layout(location = 3) in vec3  aNormal;
-layout(location = 4) in vec3  aBlockOrigin;
+layout(location = 4) in ivec3  aBlockOrigin;
 layout(location = 5) in vec3  aTint;
 layout(location = 6) in float aUseOverlay;
 layout(location = 7) in float a_ao;
@@ -19,7 +19,7 @@ out vec3  fNormal;
 out vec2  fBaseUV;
 out vec2  fOverlayUV;
 out vec3  fWorldPos;
-out vec3  fBlockOrigin;
+flat out ivec3  fBlockOrigin;
 out float fUseOverlay;
 out float f_ao;
 
@@ -43,7 +43,7 @@ in vec2  fBaseUV;
 in vec2  fOverlayUV;
 in vec3  fNormal;
 in vec3  fWorldPos;
-in vec3  fBlockOrigin;
+flat in ivec3  fBlockOrigin;
 in vec3  fTint;
 in float fUseOverlay;
 in float f_ao;
@@ -63,8 +63,8 @@ out vec4 FragColor;
 
 float FaceBrightness(vec3 normal) {
     float sides = 1.0f;
-    if (normal.y >  0.5f) return 1.3f;   // top    — full sky
-    if (normal.y < -0.5f) return 0.50f;     // bottom — never sees sky
+    if (normal.y >  0.5f) return 1.3f;          // top — full sky
+    if (normal.y < -0.5f) return 0.50f;         // bottom — never sees sky
     if (abs(normal.x) > 0.5f) return sides;     // X sides
     return sides;                               // Z sides
 }
@@ -103,12 +103,9 @@ void main() {
 
     if(u_isAOEnabled)
     {
-
-        float ao_curved = f_ao * f_ao;   // square darkens corners more naturally
+        float ao_curved = f_ao * f_ao;              // square darkens corners more naturally
         FragColor.rgb *= mix(0.7f, 1.0f, ao_curved);
     }
-
-    //FragColor.rgb = pow(FragColor.rgb, vec3(1.0f / 2.2f));
 }
 
 #endif

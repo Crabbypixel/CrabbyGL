@@ -103,7 +103,7 @@ void World::SetBlock(int worldX, int worldY, int worldZ, BlockType type)
     auto l = ChunkLocalCoord(worldX, worldY, worldZ);
     chunk->SetUnchecked(l.x, l.y, l.z, type);
 
-    //TODO: Mark this & neighboring chunks dirty - this is the reason for seam issue in world physics, to be done later
+    // TODO: Mark this & neighboring chunks dirty - this is the reason for seam issue in world physics, to be done later
     // NOTE: This still has a visual bug
 	MarkAdjacentChunksDirty(worldX, worldY, worldZ);
 }
@@ -186,7 +186,7 @@ void World::SaveChunkToDisk(const Chunk& chunk)
 
     if (!file)
     {
-        std::cout << "Failed to open chunk file for writing: " << path << '\n';
+        std::cerr << "Failed to open chunk file for writing: " << path << '\n';
         return;
     }
 
@@ -194,7 +194,7 @@ void World::SaveChunkToDisk(const Chunk& chunk)
 
     if (!file)
     {
-        std::cout << "Error writing chunk file: " << path << '\n';
+        std::cerr << "Error writing chunk file: " << path << '\n';
     }
 }
 
@@ -211,7 +211,7 @@ bool World::LoadChunkFromDisk(Chunk& chunk, glm::ivec2& coord)
 
     if (file.gcount() != sizeof(chunk.blocks))
     {
-        std::cout << "Chunk file corrupted: " << path << '\n';
+        std::cerr << "Chunk file corrupted: " << path << '\n';
 
         return false;
     }
@@ -253,39 +253,48 @@ bool World::PlaceBlock(const RaycastHit& hit, BlockType type)
     if (!hit.hit)
         return false;
 
-	// Prevent placing beside non-solid blocks (cross face blocks)
-    if(GetDef(GetBlock(hit.blockPos.x, hit.blockPos.y, hit.blockPos.z)).flags & BLOCK_CROSS)
-		return false;
+    // Prevent placing beside non-solid blocks (cross-face blocks)
+    if (GetDef(GetBlock(hit.blockPos.x, hit.blockPos.y, hit.blockPos.z)).flags & BLOCK_CROSS)
+        return false;
 
     glm::ivec3 target = hit.blockPos + hit.normal;
 
-	// No placing inside solid blocks
+    // Prevent placing inside solid blocks
     if (IsSolid(target.x, target.y, target.z))
         return false;
 
-    // TODO - ACTIVE DEVELOPMENT
-	// Log blocks have directional variants based on placement face
-    if (type == BlockType::TREE_LOG || type == BlockType::TREE_LOG_X || type == BlockType::TREE_LOG_Z)
+    // TODO
+    // Log blocks have directional variants based on placement face
+    const bool isLog = type == BlockType::TREE_LOG_Y ||
+                       type == BlockType::TREE_LOG_X ||
+                       type == BlockType::TREE_LOG_Z;
+
+    if (isLog)
     {
+        //type =
+        //    hit.normal.x != 0 ? BlockType::TREE_LOG_X :
+        //    hit.normal.z != 0 ? BlockType::TREE_LOG_Z :
+        //    BlockType::TREE_LOG; // Y orientation
+
         if (hit.normal.x != 0)
         {
             type = BlockType::TREE_LOG_X;
-			std::cout << "log x\n"; 
+            std::cout << "log x\n";
         }
         else if (hit.normal.z != 0)
         {
             type = BlockType::TREE_LOG_Z;
-			std::cout << "log z\n";
+            std::cout << "log z\n";
         }
         else
         {
-            type = BlockType::TREE_LOG;   // default Y orientation for top/bottom face placement
+            type = BlockType::TREE_LOG_Y;
             std::cout << "log y\n";
         }
     }
 
     SetBlock(target.x, target.y, target.z, type);
-    MarkAdjacentChunksDirty(hit.blockPos.x, hit.blockPos.y, hit.blockPos.z);
+    MarkAdjacentChunksDirty(target.x, target.y, target.z);
 
     return true;
 }
@@ -411,7 +420,7 @@ void World::LoadAtlasTexture(const char* path)
     unsigned char* data = stbi_load(path, &w, &h, &channels, 0);
     if (!data)
     {
-        std::cout << "Atlas load failed: " << path << '\n';
+        std::cerr << "Atlas load failed: " << path << '\n';
         return;
     }
 

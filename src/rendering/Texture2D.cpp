@@ -27,7 +27,7 @@ void Texture2D::load(GLenum wrapType, GLint minFilter, GLint magFilter, const st
     }
     else
     {
-        std::cout << "Failed to load texture: " << textureFile << std::endl;
+        std::cerr << "Failed to load texture: " << textureFile << std::endl;
     }
 
     stbi_image_free(data);
@@ -84,7 +84,7 @@ void Texture2D::loadTexture(char const* path)
     }
     else
     {
-        std::cout << "Texture failed to load at path: " << path << std::endl;
+        std::cerr << "Texture failed to load at path: " << path << std::endl;
         stbi_image_free(data);
     }
 }

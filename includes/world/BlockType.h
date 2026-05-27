@@ -9,7 +9,7 @@ enum class BlockType : uint8_t
 	/* 3*/	STONE,
 	/* 4*/	BEDROCK,
 	/* 5*/	BRICK,
-	/* 6*/	TREE_LOG,
+	/* 6*/	TREE_LOG_Y,
 	/* 7*/	TREE_LEAVES,
 	/* 8*/	COBBLESTONE,
 	/* 9*/	PLANK,

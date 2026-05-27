@@ -57,7 +57,8 @@ void Shader::load(const std::string& shaderPath)
 	id = glCreateProgram();
 	glAttachShader(id, vs);
 	glAttachShader(id, fs);
-	if (isGeometryShaderPresent) glAttachShader(id, gs);
+	if (isGeometryShaderPresent)
+		glAttachShader(id, gs);
 
 	glLinkProgram(id);
 	glValidateProgram(id);
@@ -74,8 +75,8 @@ void Shader::load(const std::string& shaderPath)
 		std::string message(length, '\0');
 		glGetShaderInfoLog(id, length, &length, message.data());
 
-		std::cout << "[OpenGL Error] Linking error in \'" << shaderPath << "\'" << std::endl;
-		std::cout << "Log: " << message << std::endl;
+		std::cerr << "[OpenGL Error] Linking error in \'" << shaderPath << "\'" << std::endl;
+		std::cerr << "Log: " << message << std::endl;
 
 		glDeleteShader(vs);
 		glDeleteShader(fs);
@@ -199,17 +200,17 @@ unsigned int Shader::CompileShader(unsigned int type, const std::string& source,
 		std::string message(length, '\0');
 		glGetShaderInfoLog(shader, length, &length, message.data());
 
-		std::cout << "[OpenGL Error] Failed to compile ";
+		std::cerr << "[OpenGL Error] Failed to compile ";
 
 		if (type == GL_VERTEX_SHADER)
-			std::cout << "vertex";
+			std::cerr << "vertex";
 		else if (type == GL_FRAGMENT_SHADER)
-			std::cout << "fragment";
+			std::cerr << "fragment";
 		else if (type == GL_GEOMETRY_SHADER)
-			std::cout << "geometry";
+			std::cerr << "geometry";
 
-		std::cout << " shader in \'" << shaderPath << "\'" << std::endl;
-		std::cout << "Log: " << message << std::endl;
+		std::cerr << " shader in \'" << shaderPath << "\'" << std::endl;
+		std::cerr << "Log: " << message << std::endl;
 
 		glDeleteShader(shader);
 

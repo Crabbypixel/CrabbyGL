@@ -309,8 +309,8 @@ void OpenGL_3D::ErrorLog(const std::string& str)
 	GLenum err;
 	while ((err = glGetError()) != GL_NO_ERROR)
 	{
-		std::cout << "OpenGL error - main: " << err << std::endl;
-		std::cout << "in: " << str << '\n';
+		std::cerr << "OpenGL error - main: " << err << std::endl;
+		std::cerr << "in: " << str << '\n';
 	}
 }
 

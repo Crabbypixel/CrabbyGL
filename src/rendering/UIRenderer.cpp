@@ -31,7 +31,7 @@ void UIRenderer::LoadIcons(const char* path)
 	unsigned char* data = stbi_load(path, &w, &h, &channels, 0);
 	if (!data)
 	{
-		std::cout << "Atlas load failed: " << path << '\n';
+		std::cerr << "Atlas load failed: " << path << '\n';
 		return;
 	}
 
@@ -62,7 +62,7 @@ void UIRenderer::LoadASCII(const char* path)
 
 	if (!data)
 	{
-		std::cout << "Atlas load failed: " << path << '\n';
+		std::cerr << "Atlas load failed: " << path << '\n';
 		return;
 	}
 
@@ -167,7 +167,7 @@ static int GetIconIndex(BlockType t) noexcept
 		return 6;
 	case BlockType::TREE_LEAVES:
 		return 7;
-	case BlockType::TREE_LOG:
+	case BlockType::TREE_LOG_Y:
 	case BlockType::TREE_LOG_X:
 	case BlockType::TREE_LOG_Z:
 		return 8;
@@ -346,7 +346,7 @@ void UIRenderer::InitHotbar()
 	}
 	else
 	{
-		std::cout << "Failed to load texture" << std::endl;
+		std::cerr << "Failed to load texture" << std::endl;
 	}
 	stbi_image_free(data);
 
@@ -415,7 +415,7 @@ void UIRenderer::InitHotbarCursor()
 	}
 	else
 	{
-		std::cout << "Failed to load texture" << std::endl;
+		std::cerr << "Failed to load texture" << std::endl;
 	}
 	stbi_image_free(data);
 
@@ -484,7 +484,7 @@ void UIRenderer::InitInventory()
 	}
 	else
 	{
-		std::cout << "Failed to load texture" << std::endl;
+		std::cerr << "Failed to load texture" << std::endl;
 	}
 	stbi_image_free(data);
 
@@ -676,7 +676,7 @@ void UIRenderer::DrawInventory() noexcept
 	glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
 }
 
-void UIRenderer::DrawDebugRect(float x, float y, float w, float h, const glm::vec4& color) noexcept
+void UIRenderer::DrawHighlightRect(float x, float y, float w, float h, const glm::vec4& color) noexcept
 {
 	float verts[] =
 	{

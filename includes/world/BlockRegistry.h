@@ -13,7 +13,7 @@ namespace Tiles
 	constexpr int STONE = 3;
 	constexpr int BEDROCK = 4;
 	constexpr int BRICK = 5;
-	constexpr int TREE_LOG_SIDES = 6;
+	constexpr int TREE_LOG_SIDES_1 = 6;
 	constexpr int TREE_LOG_TOP = 7;
 	constexpr int TREE_LEAVES = 8;
 	constexpr int COBBLESTONE = 9;
@@ -21,6 +21,7 @@ namespace Tiles
 	constexpr int PLANK = 10;
 	constexpr int SAND = 16;
 	constexpr int GRAVEL = 17;
+	constexpr int TREE_LOG_SIDES_2 = 22;
 	constexpr int GLASS = 11;
 	constexpr int SMOOTH_STONE = 12;
 	constexpr int ORE_GOLD = 32;
