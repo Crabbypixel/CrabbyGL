@@ -21,7 +21,7 @@
 class Shader;
 
 class Chunk;
-class RaycastHit;
+struct RaycastHit;
 
 enum class BlockType : uint8_t;
 

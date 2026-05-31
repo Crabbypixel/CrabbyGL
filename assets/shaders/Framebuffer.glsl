@@ -19,11 +19,11 @@ void main()
 out vec4 FragColor;
 in vec2 TexCoords;
 
-uniform sampler2D screenTexture;
+uniform sampler2D uScreenTexture;
 
 void main()
 {
-	FragColor = texture(screenTexture, TexCoords);
+	FragColor = texture(uScreenTexture, TexCoords);
 }
 
 #endif

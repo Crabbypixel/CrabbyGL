@@ -18,11 +18,11 @@ out vec4 FragColor;
 
 in vec2 fTexCoord;
 
-uniform sampler2D hotbarTexture;
+uniform sampler2D uHotbarTexture;
 
 void main()
 {
-    vec4 texColor = texture(hotbarTexture, fTexCoord);
+    vec4 texColor = texture(uHotbarTexture, fTexCoord);
     FragColor = vec4(texColor.x, texColor.y, texColor.z, 1.0f);
 }
 #endif

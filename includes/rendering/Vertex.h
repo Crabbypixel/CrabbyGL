@@ -3,12 +3,14 @@
 #include <glm/glm.hpp>
 
 struct Vertex {
-    glm::vec3 pos;               // world position of vertex
-    glm::vec2 baseUV;            // base UV
-    glm::vec2 overlayUV;         // overlay UV
-    glm::vec3 normal;            // face normal
-    glm::ivec3 blockOrigin;      // integer world position
-    glm::vec3 tint;              // Tint for greyshade textures
-    float useOverlay;            // 1.0 for grass, 0.0 for others
-    float ao;                    // ambient occlusion
+    glm::vec3 pos;          // worldPos + FACE_VERTS[face][k]
+    glm::vec2 baseUV;       // tile-local 0..N
+    glm::vec2 uvTileMin;    // baseRect.min  <- was missing here
+    glm::vec2 uvTileMax;    // baseRect.max  <- was missing here
+    glm::vec2 overlayUV;    // overlay atlas coords
+    glm::vec3 normal;       // face normal
+    //glm::vec3 blockOrigin;  // worldPos
+    glm::vec3 tint;         
+    float     useOverlay;   
+    float     ao;         
 };

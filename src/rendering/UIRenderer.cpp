@@ -598,8 +598,8 @@ void UIRenderer::DrawText(float x, float y, float scale, const std::string& text
 
 	asciiShader.use();
 	asciiShader.setMat4("matProjection", matProjection);
-	asciiShader.setInt("asciiTexture", 6);
-	asciiShader.setVec4("color", color);
+	asciiShader.setInt("uAsciiTexture", 6);
+	asciiShader.setVec4("uColor", color);
 
 	glActiveTexture(GL_TEXTURE6);
 	glBindTexture(GL_TEXTURE_2D, m_asciiTexture);
@@ -621,7 +621,7 @@ void UIRenderer::DrawTextBold(float x, float y, float scale, const std::string& 
 void UIRenderer::DrawHotbar() noexcept
 {
 	hotbarShader.use();
-	hotbarShader.setInt("hotbarTexture", 2);
+	hotbarShader.setInt("uHotbarTexture", 2);
 	hotbarShader.setMat4("matProjection", matProjection);
 
 	glActiveTexture(GL_TEXTURE2);
@@ -653,7 +653,7 @@ void UIRenderer::DrawHotbarCursor(int index) noexcept
 	glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(verts), verts);
 
 	hotbarCursorShader.use();
-	hotbarCursorShader.setInt("hotbarSelectorTexture", 3);
+	hotbarCursorShader.setInt("uHotbarSelectorTexture", 3);
 	hotbarCursorShader.setMat4("matProjection", matProjection);
 
 	glActiveTexture(GL_TEXTURE3);
@@ -666,7 +666,7 @@ void UIRenderer::DrawHotbarCursor(int index) noexcept
 void UIRenderer::DrawInventory() noexcept
 {
 	inventoryShader.use();
-	inventoryShader.setInt("inventoryTexture", 4);
+	inventoryShader.setInt("uInventoryTexture", 4);
 	inventoryShader.setMat4("matProjection", matProjection);
 
 	glActiveTexture(GL_TEXTURE4);
@@ -692,7 +692,7 @@ void UIRenderer::DrawHighlightRect(float x, float y, float w, float h, const glm
 	debugRectShader.use();
 
 	debugRectShader.setMat4("matProjection", matProjection);
-	debugRectShader.setVec4("color", color);
+	debugRectShader.setVec4("uColor", color);
 
 	glBindVertexArray(m_debugRectVAO);
 	glBindBuffer(GL_ARRAY_BUFFER, m_debugRectVBO);
@@ -742,7 +742,7 @@ void UIRenderer::DrawTexturedQuad(float x, float y, float w, float h, glm::vec2 
 
 	iconShader.use();
 	iconShader.setMat4("matProjection", matProjection);
-	iconShader.setInt("iconTexture", 5);
+	iconShader.setInt("uIconTexture", 5);
 
 	glActiveTexture(GL_TEXTURE5);
 	glBindTexture(GL_TEXTURE_2D, texID);

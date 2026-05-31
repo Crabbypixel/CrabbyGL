@@ -120,7 +120,7 @@ public:
 		UIRenderer.LoadASCII("assets/textures/ascii.png");
 
 		// Inventory
-		if (inventory.Load("saves/player_inventory.bin"))
+		if (!inventory.Load("saves/player_inventory.bin"))
 			std::cout << "Error loading player inventory\n";
 
 		// ───── World ──────────────────────────────────────────────────
@@ -205,6 +205,7 @@ public:
 
 		// Enable transparency
 		glEnable(GL_BLEND);
+		//glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
 		return true;
 	}
@@ -256,12 +257,10 @@ public:
 			if (GetKey('U').bPressed)
 			{
 				for (int i = 200; i < 220; ++i)
-				{
 					for (int j = 200; j < 220; ++j)
-					{
 						world.SetBlock(i, 150, j, BlockType::GRAVEL);
-					}
-				}
+
+				world.SetBlock(0, 100, 0, BlockType::BROWN_MUSHROOM);
 			}
 		}
 
@@ -329,8 +328,11 @@ public:
 
 		chunkMeshShader.setBool("u_isAOEnabled", isAOEnabled);
 
+		// Draw world
+
 		world.DrawAll(matProjection, camera.getLookAt());
 
+		// Draw chunk boundaries if enabled
 		chunkDebug.DrawChunkBoundary(camera.position);
 
 		// Coordinate axis
@@ -409,18 +411,21 @@ public:
 
 		quadVAO.bind();
 		framebufferShader.use();
-		framebufferShader.setInt("screenTexture", 0);
+		framebufferShader.setInt("uScreenTexture", 0);
 		glActiveTexture(GL_TEXTURE0);
 		glBindTexture(GL_TEXTURE_2D, textureColorBuffer);
 
 		glDrawArrays(GL_TRIANGLES, 0, 6);
 
 		// ───── ImGui ───────────────────────────────────────────────
+
 		glm::ivec2 playerChunk = World::ChunkCoord(player.GetPos().x, player.GetPos().z);
+		glm::ivec3 playerLocalChunk = World::ChunkLocalCoord(player.GetPos().x, player.GetPos().y, player.GetPos().z);
 		ImGui::Begin("Debug Console");
 		ImGui::Text("Hello World!");
 		ImGui::Text("Player Position: %d %d %d", (int)camera.position.x, (int)camera.position.y, (int)camera.position.z);
 		ImGui::Text("Currently at chunk: %d %d", playerChunk.x, playerChunk.y);
+		ImGui::Text("Local chunk coord: %d %d", playerLocalChunk.x, playerLocalChunk.z);
 
 		ImGui::Text("Selected Block: %s", GetDef(inventory.GetHeldBlock()).name);
 		ImGui::Text("Raycast place position: %d %d %d", raycastPlacePos.x, raycastPlacePos.y, raycastPlacePos.z);
@@ -447,41 +452,43 @@ public:
 
 	void UserControls(float dt)
 	{
-		// Fly toggle
-		if (GetKey(GLFW_KEY_SPACE).bPressed)
+		// Fly & jump mechanics
 		{
-			if (waitingForSecondTap)
+			if (GetKey(GLFW_KEY_SPACE).bPressed)
 			{
-				if (spaceTimer <= DOUBLE_TAP_WINDOW)
+				if (waitingForSecondTap)
 				{
-					// Double
-					player.ToggleFly();
+					if (spaceTimer <= DOUBLE_TAP_WINDOW)
+					{
+						// Double
+						player.ToggleFly();
 
-					waitingForSecondTap = false;
-					spaceTimer = DOUBLE_TAP_WINDOW + 1.0f;	// invalidate
+						waitingForSecondTap = false;
+						spaceTimer = DOUBLE_TAP_WINDOW + 1.0f;	// invalidate
+					}
+					else
+					{
+						// Too late -> restart as first tap
+						spaceTimer = 0.0f;
+					}
 				}
 				else
 				{
-					// Too late -> restart as first tap
+					// First tap
+					waitingForSecondTap = true;
 					spaceTimer = 0.0f;
 				}
 			}
-			else
-			{
-				// First tap
-				waitingForSecondTap = true;
-				spaceTimer = 0.0f;
-			}
-		}
 
-		// Fly toggle - timer update
-		if (waitingForSecondTap)
-		{
-			spaceTimer += dt;
-
-			if (spaceTimer > DOUBLE_TAP_WINDOW)
+			// Fly toggle - timer update
+			if (waitingForSecondTap)
 			{
-				waitingForSecondTap = false;
+				spaceTimer += dt;
+
+				if (spaceTimer > DOUBLE_TAP_WINDOW)
+				{
+					waitingForSecondTap = false;
+				}
 			}
 		}
 
@@ -572,11 +579,11 @@ public:
 		glLineWidth(2.0f);
 
 		// Draw axes lines
-		axesShader.setVec3("vColor", 1.0f, 0.0f, 0.0f);
+		axesShader.setVec3("uColor", 1.0f, 0.0f, 0.0f);
 		glDrawArrays(GL_LINES, 0, 2);
-		axesShader.setVec3("vColor", 0.0f, 1.0f, 0.0f);
+		axesShader.setVec3("uColor", 0.0f, 1.0f, 0.0f);
 		glDrawArrays(GL_LINES, 2, 2);
-		axesShader.setVec3("vColor", 0.0f, 0.0f, 1.0f);
+		axesShader.setVec3("uColor", 0.0f, 0.0f, 1.0f);
 		glDrawArrays(GL_LINES, 4, 2);
 
 		// Set line width back to normal
@@ -590,7 +597,7 @@ public:
 
 		crosshairShader.use();
 		crosshairVAO.bind();
-		crosshairShader.setFloat("aspect", static_cast<float>(ScreenWidth()) / static_cast<float>(ScreenHeight()));
+		crosshairShader.setFloat("uAspect", static_cast<float>(ScreenWidth()) / static_cast<float>(ScreenHeight()));
 
 		glDrawArrays(GL_LINES, 0, 4);
 		glEnable(GL_DEPTH_TEST);
@@ -603,8 +610,8 @@ public:
 		if(inventory.IsOpen())
 			inventory.Dump();
 
-		if (inventory.Save())
-			std::cerr << "Error saving player inventory\n";
+		if (!inventory.Save())
+			std::cerr << "Error saving player inventory.\n";
 
 		world.StopAllWorkers();			// Stop all threads
 		world.UnloadChunks();			// Unload all chunks
@@ -627,8 +634,6 @@ public:
 int main()
 {
 	Window window;
-	//window.ConstructWindow(800, 450, "OpenGL");
-	//window.ConstructWindow(1600, 900, "OpenGL");
 	window.ConstructWindow(1200, 675, "OpenGL");
 	window.Start();
 

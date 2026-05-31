@@ -20,4 +20,4 @@ assets/textures/test
 saves/
 
 # Dependencies (if vendored and large)
-# vendor/  ← only ignore if deps are huge
+# vendor/  <- only ignore if deps are huge

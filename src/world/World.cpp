@@ -436,7 +436,8 @@ void World::DrawAll(const glm::mat4& proj, const glm::mat4& view)
     m_chunkShader->use();
 
     // Bind textures once — shared across all chunk draw calls
-    glActiveTexture(GL_TEXTURE1); glBindTexture(GL_TEXTURE_2D, m_atlasTexture);
+    glActiveTexture(GL_TEXTURE1);
+    glBindTexture(GL_TEXTURE_2D, m_atlasTexture);
 
     // Extract frustum planes
     m_frustum.Extract(proj * view);

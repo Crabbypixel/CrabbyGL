@@ -16,10 +16,10 @@ void main()
 in vec2 fUV;
 out vec4 FragColor;
 
-uniform sampler2D iconTexture;
+uniform sampler2D uIconTexture;
 void main()
 {
-	FragColor = texture(iconTexture, fUV);
+	FragColor = texture(uIconTexture, fUV);
 
 	if(FragColor.a < 0.5f)
 		discard;
