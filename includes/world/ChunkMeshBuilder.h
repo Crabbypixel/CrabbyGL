@@ -24,7 +24,7 @@ public:
     // Builds mesh for chunk, queries world for cross-chunk neighbors
     // The pointers point to neighboring chunks, caching for performance (no need of map lookups)
     static void Build(
-        const Chunk& chunk,
+        Chunk& chunk,
         const Chunk* nPX, const Chunk* nNX,
         const Chunk* nPZ, const Chunk* nNZ,
         const Chunk* nPX_PZ, const Chunk* nPX_NZ,
@@ -70,7 +70,7 @@ private:
         std::vector<Vertex>& out);
 
     static void BuildLayer(
-        const Chunk& chunk,
+        Chunk& chunk,
         const Chunk* nPX, const Chunk* nNX,
         const Chunk* nPZ, const Chunk* nNZ,
         const Chunk* nPX_PZ, const Chunk* nPX_NZ,

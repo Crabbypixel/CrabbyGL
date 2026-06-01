@@ -105,7 +105,8 @@ void World::SetBlock(int worldX, int worldY, int worldZ, BlockType type)
 
     // TODO: Mark this & neighboring chunks dirty - this is the reason for seam issue in world physics, to be done later
     // NOTE: This still has a visual bug
-	MarkAdjacentChunksDirty(worldX, worldY, worldZ);
+    MarkAdjacentChunksDirty(worldX, worldY, worldZ);
+    MarkAdjacentChunksAODirty(worldX, worldY, worldZ);
 }
 
 // ───── World generation ────────────────────────────────────────────────────
@@ -132,8 +133,8 @@ void World::FillChunkData(Chunk& chunk, glm::ivec2 coord)
     // Try loading from disk first
     if (LoadChunkFromDisk(chunk, coord))
     {
-        chunk.dirty = true;
-        chunk.modified = false;
+        //chunk.dirty = true;
+        //chunk.modified = false;
         return;
     }
 
@@ -166,8 +167,8 @@ void World::FillChunkData(Chunk& chunk, glm::ivec2 coord)
         }
     }   
 
-    chunk.dirty = true;
-    chunk.modified = false;
+    //chunk.dirty = true;
+    //chunk.modified = false;
 }
 
 // ───── File IO ──────────────────────────────────────────────────
@@ -278,7 +279,9 @@ bool World::PlaceBlock(const RaycastHit& hit, BlockType type)
     }
 
     SetBlock(target.x, target.y, target.z, type);
-    MarkAdjacentChunksDirty(target.x, target.y, target.z);
+    
+    //MarkAdjacentChunksDirty(target.x, target.y, target.z);
+    //MarkAdjacentChunksAODirty(target.x, target.y, target.z);
 
     return true;
 }
@@ -291,9 +294,41 @@ bool World::BreakBlock(const RaycastHit& hit)
     const BlockType& blockType = GetBlock(hit.blockPos.x, hit.blockPos.y, hit.blockPos.z);
 
     SetBlock(hit.blockPos.x, hit.blockPos.y, hit.blockPos.z, BlockType::AIR);
-    MarkAdjacentChunksDirty(hit.blockPos.x, hit.blockPos.y, hit.blockPos.z);
+
+    //MarkAdjacentChunksDirty(hit.blockPos.x, hit.blockPos.y, hit.blockPos.z);
+    //MarkAdjacentChunksAODirty(hit.blockPos.x, hit.blockPos.y, hit.blockPos.z);
 
     return true;
+}
+
+void World::MarkAdjacentChunksAODirty(int wx, int wy, int wz)
+{
+    glm::ivec3 local = ChunkLocalCoord(wx, wy, wz);
+
+    const bool minX = (local.x == 0);
+    const bool maxX = (local.x == CX - 1);
+
+    const bool minZ = (local.z == 0);
+    const bool maxZ = (local.z == CZ - 1);
+
+    auto markAODirty = [&](int dx, int dz) {
+        if (Chunk* c = GetChunk(wx + dx, wz + dz))
+            c->aoDirty = true;
+    };
+
+    // Cross neighbors
+    if (minX) markAODirty(-1, 0);
+    if (maxX) markAODirty(1, 0);
+
+    if (minZ) markAODirty(0, -1);
+    if (maxZ) markAODirty(0, 1);
+
+    // Diagonal neighbors
+    if (minX && minZ) markAODirty(-1, -1);
+    if (minX && maxZ) markAODirty(-1, 1);
+
+    if (maxX && minZ) markAODirty(1, -1);
+    if (maxX && maxZ) markAODirty(1, 1);
 }
 
 void World::MarkAdjacentChunksDirty(int wx, int wy, int wz)
@@ -545,7 +580,7 @@ void World::UpdateChunkStreaming(const glm::vec3& playerPos)
                 continue;               // Deferred, retry unloading this chunk next time when worker is done
         }
 
-        // Else, proceed with unloading (only modified chunks)
+        // Else, proceed with unloading (only modified chunk
         auto it = chunks.find(chunkCoord);
         if (it != chunks.end() && it->second->modified)
         {
@@ -621,6 +656,10 @@ void World::CommitGeneratedChunks()
     // Mark the chunks dirty for meshing
     for (auto& [coord, chunkPtr] : queued)
     {
+        // TODO
+        chunkPtr->dirty = true;
+        chunkPtr->modified = false;
+
         chunks[coord] = std::move(chunkPtr);
 
 		m_chunkMeshes.try_emplace(coord);   // default construct mesh for this chunk

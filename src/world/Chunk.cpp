@@ -31,6 +31,7 @@ void Chunk::Set(int x, int y, int z, BlockType type)
 	blocks[x][y][z] = type;
 	dirty = true;
 	modified = true;
+	aoDirty = true;
 }
 
 void Chunk::SetUnchecked(int x, int y, int z, BlockType type)
@@ -40,4 +41,5 @@ void Chunk::SetUnchecked(int x, int y, int z, BlockType type)
 	blocks[x][y][z] = type;
 	dirty = true;
 	modified = true;
+	aoDirty = true;
 }

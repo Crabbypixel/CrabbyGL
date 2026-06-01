@@ -83,6 +83,7 @@ private:
 
 	// Ambient occlusion toggle
 	bool isAOEnabled = true;
+	bool shouldDrawAsWireframe = false;
 
 public:
 	bool Setup() override
@@ -205,7 +206,6 @@ public:
 
 		// Enable transparency
 		glEnable(GL_BLEND);
-		//glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
 		return true;
 	}
@@ -328,9 +328,11 @@ public:
 
 		chunkMeshShader.setBool("u_isAOEnabled", isAOEnabled);
 
-		// Draw world
 
+		// Draw world
+		glPolygonMode(GL_FRONT_AND_BACK, shouldDrawAsWireframe ? GL_LINE : GL_FILL);
 		world.DrawAll(matProjection, camera.getLookAt());
+		glPolygonMode(GL_FRONT_AND_BACK, GL_FILL); // restore for UI/other draws
 
 		// Draw chunk boundaries if enabled
 		chunkDebug.DrawChunkBoundary(camera.position);
@@ -530,6 +532,9 @@ public:
 			inventory.Scroll(1);
 		else if (GetMouseScroll() == Mouse::SCROLL_UP)
 			inventory.Scroll(-1);
+
+		if (GetKey('J').bPressed)
+			shouldDrawAsWireframe = !shouldDrawAsWireframe;
 
 		RequestCursor(bIsPaused || inventory.IsOpen());
 	}

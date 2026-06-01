@@ -281,7 +281,7 @@ static void ComputeAO(
     const glm::ivec3& V = TANGENT_V[face];
     const glm::ivec3& N = NORMALS[face];
 
-    for (int i = 0; i < 4; i++)
+    for (int i = 0; i < 4; ++i)
     {
         const glm::ivec3& v = FACE_VERTS[face][i];
         const int du = (glm::dot(glm::vec3(v), glm::vec3(U)) > 0.5f) ?  1 : -1;
@@ -356,7 +356,7 @@ void ChunkMeshBuilder::AddTranslucentFace(
     };
     const int* idx = flip ? tri[1] : tri[0];
 
-    for (int i = 0; i < 6; i++)
+    for (int i = 0; i < 6; ++i)
     {
         const int k = idx[i];
         verts.emplace_back(Vertex{
@@ -403,7 +403,7 @@ void ChunkMeshBuilder::EmitCross(
     constexpr int REV[6] = {0,2,1, 0,3,2};
 
     auto emit = [&](const glm::ivec3 quad[4], const int idx[6]) {
-        for (int i = 0; i < 6; i++)
+        for (int i = 0; i < 6; ++i)
             verts.emplace_back(Vertex{
                 glm::vec3(worldPos + quad[idx[i]]),
                 uvs[idx[i]],
@@ -482,7 +482,7 @@ void ChunkMeshBuilder::EmitGreedyQuad(
 
     // Build 4 vertex positions and UVs
     Vertex verts[4] = {};
-    for (int k = 0; k < 4; k++)
+    for (int k = 0; k < 4; ++k)
     {
         const int rowDelta = ROW_MAX[face][k] ? H : 0;
         const int colDelta = COL_MAX[face][k] ? W : 0;
@@ -516,7 +516,7 @@ void ChunkMeshBuilder::EmitGreedyQuad(
     static constexpr int TRI_NORM[6] = {0,1,2, 0,2,3};
     static constexpr int TRI_FLIP[6] = {0,1,3, 1,2,3};
     const int* tri = flip ? TRI_FLIP : TRI_NORM;
-    for (int i = 0; i < 6; i++)
+    for (int i = 0; i < 6; ++i)
         out.push_back(verts[tri[i]]);
 }
 
@@ -528,7 +528,7 @@ void ChunkMeshBuilder::EmitGreedyQuad(
 // =========================================================================
 
 void ChunkMeshBuilder::BuildLayer(
-    const Chunk& chunk,
+    Chunk& chunk,
     const Chunk* nPX, const Chunk* nNX,
     const Chunk* nPZ, const Chunk* nNZ,
     const Chunk* nPX_PZ, const Chunk* nPX_NZ,
@@ -553,10 +553,10 @@ void ChunkMeshBuilder::BuildLayer(
     // Step 1: Populate cell grid
     // =========================================================================
 
-    for (int row = 0; row < rowCount; row++)
+    for (int row = 0; row < rowCount; ++row)
     {
         rowMask[row] = 0u;
-        for (int col = 0; col < colCount; col++)
+        for (int col = 0; col < colCount; ++col)
         {
             grid[row][col].key = 0u;
 
@@ -576,9 +576,27 @@ void ChunkMeshBuilder::BuildLayer(
             if (IsNeighborOpaque(chunk, nPX, nNX, nPZ, nNZ, neighborBlock.x, neighborBlock.y, neighborBlock.z))
                 continue;
 
-            // AO for all 4 vertices
+            // On demand AO computation
             uint8_t ao[4];
-            ComputeAO(chunk, nPX, nNX, nPZ, nNZ, nPX_PZ, nPX_NZ, nNX_PZ, nNX_NZ, { localX, localY, localZ }, face, ao);
+            if (chunk.aoDirty)
+            {
+                // First build, compute fresh, write to cache
+                ComputeAO(chunk, nPX, nNX, nPZ, nNZ, nPX_PZ, nPX_NZ, nNX_PZ, nNX_NZ, { localX, localY, localZ }, face, ao);
+
+                chunk.aoCache[localX][localY][localZ][face] = (ao[0] & 3)
+                                                           | ((ao[1] & 3) << 2)
+                                                           | ((ao[2] & 3) << 4)
+                                                           | ((ao[3] & 3) << 6);
+            }
+            else
+            {
+                // Subsequent builds — read cache, zero ComputeAO cost
+                const uint8_t p = chunk.aoCache[localX][localY][localZ][face];
+                ao[0] = p & 3;
+                ao[1] = (p >> 2) & 3;
+                ao[2] = (p >> 4) & 3;
+                ao[3] = (p >> 6) & 3;
+            }
 
             const bool flip  = (ao[0] + ao[2] > ao[1] + ao[3]);
             const BlockType bt = chunk.GetUnchecked(localX, localY, localZ);
@@ -600,7 +618,7 @@ void ChunkMeshBuilder::BuildLayer(
     // Step 2: Greedy sweep
     // =========================================================================
 
-    for (int row = 0; row < rowCount; row++)
+    for (int row = 0; row < rowCount; ++row)
     {
         uint16_t mask = rowMask[row];
 
@@ -613,7 +631,7 @@ void ChunkMeshBuilder::BuildLayer(
             // Expand width W: consecutive set bits at the same key
             int W = 1;
             while (col + W < colCount && ((mask >> (col + W)) & 1u) && grid[row][col + W].key == cellKey)
-                W++;
+                ++W;
 
             // Bitmask representing the W-wide column run
             const uint16_t runMask = static_cast<uint16_t>(((1u << W) - 1u) << col);
@@ -627,20 +645,20 @@ void ChunkMeshBuilder::BuildLayer(
                 if ((rowMask[row + H] & runMask) != runMask) break;
 
                 bool keysMatch = true;
-                for (int c = col; c < col + W && keysMatch; c++)
+                for (int c = col; c < col + W && keysMatch; ++c)
                     if (grid[row + H][c].key != cellKey) keysMatch = false;
 
                 if (!keysMatch)
                     break;
 
-                H++;
+                ++H;
             }
 
             // Emit one quad for (H rows × W cols)
             EmitGreedyQuad(face, layer, row, col, H, W, grid, chunkWX, chunkWZ, out);
 
             // Clear consumed bits in every merged row
-            for (int r = row; r < row + H; r++)
+            for (int r = row; r < row + H; ++r)
                 rowMask[r] &= ~runMask;
 
             mask &= ~runMask;
@@ -654,7 +672,7 @@ void ChunkMeshBuilder::BuildLayer(
 //   Pass 2 — opaque blocks: binary greedy meshing per face per layer
 // =========================================================================
 void ChunkMeshBuilder::Build(
-    const Chunk& chunk,
+    Chunk& chunk,
     const Chunk* nPX, const Chunk* nNX,
     const Chunk* nPZ, const Chunk* nNZ,
     const Chunk* nPX_PZ, const Chunk* nPX_NZ,
@@ -684,17 +702,19 @@ void ChunkMeshBuilder::Build(
     const int chunkWX = chunk.chunkPos.x * CX;
     const int chunkWZ = chunk.chunkPos.y * CZ;
 
-    static thread_local uint8_t aoCached[CX][CZ][CY][6];
-
     // ================================================================================
     // Pass 1: Non-opaque blocks (cross + translucent) - Create vertices normally
     // ================================================================================
 
-    for (int x = 0; x < CX; x++)
-    for (int y = 0; y < CY; y++)
-    for (int z = 0; z < CZ; z++)
+    for (int x = 0; x < CX; ++x)
+    for (int z = 0; z < CZ; ++z)
+    for (int y = 0; y < CY; ++y)
     {
         const BlockType blockType = chunk.GetUnchecked(x, y, z);
+        const glm::ivec3 worldPos{ chunkWX + x, y, chunkWZ + z };
+        const glm::ivec3 localPos{ x, y, z };
+
+        // Skip if the block is air, which is most likely (most of the chunk is filled with air
         if (blockType == BlockType::AIR) [[likely]]
             continue;
 
@@ -708,10 +728,7 @@ void ChunkMeshBuilder::Build(
         // Translucent blocks (glass, leaves)
         if (IsTranslucent(blockType)) [[unlikely]]
         {
-            const glm::ivec3 worldPos{chunkWX + x, y, chunkWZ + z};
-            const glm::ivec3 localPos{x, y, z};
-
-            for (int face = 0; face < 6; face++)
+            for (int face = 0; face < 6; ++face)
             {
                 const int neighborX = x + NORMALS[face].x;
                 const int neighborY = y + NORMALS[face].y;
@@ -754,6 +771,7 @@ void ChunkMeshBuilder::Build(
                     AddTranslucentFace(outVertices, worldPos, localPos, static_cast<Face>(face), blockType, chunk, nPX, nNX, nPZ, nNZ, nPX_PZ, nPX_NZ, nNX_PZ, nNX_NZ);
             }
         }
+
         // Opaque blocks are handled in Pass 2 (binary greedy meshing)
     }
 
@@ -766,12 +784,14 @@ void ChunkMeshBuilder::Build(
     // Total layers processed: 6 × (CY + CX + CX + CZ + CZ) = 6 × (256+16+16+16+16)
     // = worst case 1920 layer passes, each on a 16× (16 or 256) grid
 
-    for (int face = 0; face < 6; face++)
+    for (int face = 0; face < 6; ++face)
     {
         const int layerCount = FACE_AXES[face].layerCount;
-        for (int layer = 0; layer < layerCount; layer++)
+        for (int layer = 0; layer < layerCount; ++layer)
         {
             BuildLayer(chunk, nPX, nNX, nPZ, nNZ, nPX_PZ, nPX_NZ, nNX_PZ, nNX_NZ, face, layer, chunkWX, chunkWZ, outVertices);
         }
     }
+
+    chunk.aoDirty = false;
 }
