@@ -36,25 +36,29 @@ void ChunkMesh::Upload(const std::vector<Vertex>& vertices) noexcept
     glVertexAttribPointer(3, 2, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, uvTileMax));
     glEnableVertexAttribArray(3);
 
-    // 4: overlayUV (vec2)
-    glVertexAttribPointer(4, 2, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, overlayUV));
+    // 4: overlayTileMin (vec2)
+    glVertexAttribPointer(4, 2, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, overlayTileMin));
     glEnableVertexAttribArray(4);
 
-    // 5: normal (vec3)
-    glVertexAttribPointer(5, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, normal));
+    // 5: overlayTileMax (vec2)
+	glVertexAttribPointer(5, 2, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, overlayTileMax));
     glEnableVertexAttribArray(5);
 
-    // 6: tint (vec3)
-    glVertexAttribPointer(6, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, tint));
+    // 6: normal (vec3)
+    glVertexAttribPointer(6, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, normal));
     glEnableVertexAttribArray(6);
 
-    // 7: useOverlay (float)
-    glVertexAttribPointer(7, 1, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, useOverlay));
+    // 7: tint (vec3)
+    glVertexAttribPointer(7, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, tint));
     glEnableVertexAttribArray(7);
 
-    // 8: ao (float)
-    glVertexAttribPointer(8, 1, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, ao));
+    // 8: useOverlay (float)
+    glVertexAttribPointer(8, 1, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, useOverlay));
     glEnableVertexAttribArray(8);
+
+    // 9: ao (float)
+    glVertexAttribPointer(9, 1, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, ao));
+    glEnableVertexAttribArray(9);
 
     glBindVertexArray(0);
     valid = true;

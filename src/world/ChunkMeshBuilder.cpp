@@ -46,8 +46,6 @@
 // Non-opaque blocks
 //   Translucent (glass, leaves) and cross (flowers, saplings) blocks bypass
 //   greedy and use the original per-face / EmitCross path unchanged.
-//   Overlay faces (grass sides) are uniquified in their key so they never
-//   merge with each other — simplest fix for the overlay-stretch problem.
 
 #include <glm/glm.hpp>
 #include <bit>          // std::countr_zero — C++20
@@ -193,8 +191,7 @@ struct alignas(4) FaceCell {
 
 [[nodiscard]] static uint32_t MakeKey(
     BlockType type, const uint8_t ao[4],
-    bool useOverlay, bool flip,
-    uint16_t uniquifier = 0) noexcept
+    bool useOverlay, bool flip) noexcept
 {
     const uint32_t aoPacked = ((uint32_t)ao[0] & 3u)
                             | (((uint32_t)ao[1] & 3u) << 2)
@@ -204,8 +201,7 @@ struct alignas(4) FaceCell {
     const uint32_t k = (uint32_t)(uint8_t)type
                             | (aoPacked                    <<  8)
                             | ((useOverlay ? 1u : 0u)      << 16)
-                            | ((flip       ? 1u : 0u)      << 17)
-                            | ((uint32_t)uniquifier        << 18);
+                            | ((flip       ? 1u : 0u)      << 17);
 
     return k == 0u ? 1u : k;  // key=0 means invisible; shift non-zero AIR edge case
 }
@@ -363,8 +359,10 @@ void ChunkMeshBuilder::AddTranslucentFace(
             worldPos + FACE_VERTS[face][k],
             baseUVs[k],            // tile-local (0..1 for 1×1 face)
             baseRect.min,          // uvTileMin
-            baseRect.max,          // uvTileMax
-            overlayUVs[k],         // overlay still in atlas space for translucent
+            baseRect.max,          // uvTileMax 
+            //overlayUVs[k],         // overlay still in atlas space for translucent
+            overlayRect.min,
+            overlayRect.max,
             NORMALS[face],
             blockInfo.tint,
             useOverlay ? 1.0f : 0.0f,
@@ -409,6 +407,7 @@ void ChunkMeshBuilder::EmitCross(
                 uvs[idx[i]],
                 uv.min,      // uvTileMin
                 uv.max,      // uvTileMax
+                NO_OVERLAY,
                 NO_OVERLAY,
                 DUMMY_NORMAL,
                 tint,
@@ -471,15 +470,6 @@ void ChunkMeshBuilder::EmitGreedyQuad(
         blockOrigin = {(float)(chunkWX + bc[0]), (float) bc[1], (float)(chunkWZ + bc[2])};
     }
 
-    // Overlay UVs are kept in atlas space (no tiling) — overlay faces are
-    // uniquified so they never appear in a W>1 or H>1 merged quad.
-    const glm::vec2 overlayUV[4] = {
-        {overlayTile.min.x, overlayTile.min.y},
-        {overlayTile.max.x, overlayTile.min.y},
-        {overlayTile.max.x, overlayTile.max.y},
-        {overlayTile.min.x, overlayTile.max.y},
-    };
-
     // Build 4 vertex positions and UVs
     Vertex verts[4] = {};
     for (int k = 0; k < 4; ++k)
@@ -505,7 +495,8 @@ void ChunkMeshBuilder::EmitGreedyQuad(
 
         verts[k].uvTileMin   = baseTile.min;
         verts[k].uvTileMax   = baseTile.max;
-        verts[k].overlayUV   = useOverlay ? overlayUV[k] : glm::vec2{0.0f, 0.0f};
+        verts[k].overlayTileMin = useOverlay ? overlayTile.min : glm::vec2(0.0f, 0.0f);
+        verts[k].overlayTileMax = useOverlay ? overlayTile.max : glm::vec2(0.0f, 0.0f);
         verts[k].normal      = normal;
         verts[k].tint        = (face == BOTTOM) ? glm::vec3(1.0f) : def.tint;
         verts[k].useOverlay  = useOverlay ? 1.0f : 0.0f;
@@ -603,10 +594,7 @@ void ChunkMeshBuilder::BuildLayer(
             const BlockDef& def = GetDef(bt);
             const bool useOverlay = def.useOverlay && face > 1;
 
-            // Overlay faces get a unique key component so they never merge
-            // This prevents the overlay texture from stretching across merged quads
-            const uint16_t uniquifier = useOverlay ? static_cast<uint16_t>(row * colCount + col) : 0u;
-            grid[row][col].key  = MakeKey(bt, ao, useOverlay, flip, uniquifier);
+            grid[row][col].key  = MakeKey(bt, ao, useOverlay, flip);
             grid[row][col].type = bt;
             memcpy(grid[row][col].ao, ao, 4);
 

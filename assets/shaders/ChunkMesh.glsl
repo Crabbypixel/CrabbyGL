@@ -3,11 +3,12 @@ layout (location = 0) in vec3  aPos;
 layout (location = 1) in vec2  aUV;
 layout (location = 2) in vec2  aUVTileMin;
 layout (location = 3) in vec2  aUVTileMax;
-layout (location = 4) in vec2  aOverlayUV;
-layout (location = 5) in vec3  aNormal;
-layout (location = 6) in vec3  aTint;
-layout (location = 7) in float aUseOverlay;
-layout (location = 8) in float aAo;
+layout (location = 4) in vec2  aOverlayTileMin;
+layout (location = 5) in vec2  aOverlayTileMax;
+layout (location = 6) in vec3  aNormal;
+layout (location = 7) in vec3  aTint;
+layout (location = 8) in float aUseOverlay;
+layout (location = 9) in float aAo;
 
 // Shared projection + view matrices via UBO
 layout (std140) uniform Matrices {
@@ -19,7 +20,13 @@ out vec3  fWorldPos;
 out vec2  fUV;
 out vec2  fUVTileMin;
 out vec2  fUVTileMax;
-out vec2  fOverlayUV;
+
+
+//out vec2  fOverlayUV;
+out vec2  fOverlayTileMin;
+out vec2  fOverlayTileMax;
+
+
 out vec3  fNormal;
 out vec3  fTint;
 out float fUseOverlay;
@@ -31,7 +38,13 @@ void main()
     fUV          = aUV;
     fUVTileMin   = aUVTileMin;
     fUVTileMax   = aUVTileMax;
-    fOverlayUV   = aOverlayUV;
+    
+
+    //fOverlayUV   = aOverlayUV;
+    fOverlayTileMin = aOverlayTileMin;
+    fOverlayTileMax = aOverlayTileMax;
+
+
     fNormal      = aNormal;
     fTint        = aTint;
     fUseOverlay  = aUseOverlay;
@@ -60,7 +73,11 @@ in vec3  fWorldPos;
 in vec2  fUV;
 in vec2  fUVTileMin;
 in vec2  fUVTileMax;
-in vec2  fOverlayUV;
+
+//in vec2  fOverlayUV;
+in vec2  fOverlayTileMin;
+in vec2  fOverlayTileMax;
+
 in vec3  fNormal;
 in vec3  fTint;
 in float fUseOverlay;
@@ -103,9 +120,18 @@ void main()
 
     vec3 color = baseTex.rgb;
     
+    // Overlay
     if (fUseOverlay > 0.5f) {
-        vec4 overlay = textureGrad(u_atlas, fOverlayUV, dFdx(fOverlayUV), dFdy(fOverlayUV));
-        color = mix(color, overlay.rgb * fTint, overlay.a);
+        // TODO:
+        //vec4 overlay = textureGrad(u_atlas, fOverlayUV, dFdx(fOverlayUV), dFdy(fOverlayUV));
+        //color = mix(color, overlay.rgb * fTint, overlay.a);
+
+        vec2 overlayAtlasUV = tileUV(fUV, fOverlayTileMin, fOverlayTileMax);
+        vec2 overlaySize = fOverlayTileMax - fOverlayTileMin;
+        vec2 overlayDx = dFdx(fUV) * overlaySize;
+        vec2 overlayDy = dFdy(fUV) * overlaySize;
+        vec4 overlayTex = textureGrad(u_atlas, overlayAtlasUV, overlayDx, overlayDy);
+        color = mix(color, overlayTex.rgb * fTint, overlayTex.a);
     } else {
         color *= fTint;
     }
