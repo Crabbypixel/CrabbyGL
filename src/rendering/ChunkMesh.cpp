@@ -28,37 +28,29 @@ void ChunkMesh::Upload(const std::vector<Vertex>& vertices) noexcept
     glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, baseUV));
     glEnableVertexAttribArray(1);
 
-    // 2: uvTileMin (vec2) - tile bottom-left
-    glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, uvTileMin));
+	// 2: tileBase (uint8_t) - unsigned byte
+    glVertexAttribIPointer(2, 1, GL_UNSIGNED_BYTE, sizeof(Vertex), (void*)offsetof(Vertex, tileBase));
     glEnableVertexAttribArray(2);
 
-    // 3: uvTileMax (vec2) — atlas tile top-right
-    glVertexAttribPointer(3, 2, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, uvTileMax));
+    // 3: tileOverlay (uint8_t) — unsigned byte
+    glVertexAttribIPointer(3, 1, GL_UNSIGNED_BYTE, sizeof(Vertex), (void*)offsetof(Vertex, tileOverlay));
     glEnableVertexAttribArray(3);
 
-    // 4: overlayTileMin (vec2)
-    glVertexAttribPointer(4, 2, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, overlayTileMin));
+	// 4: normal (uint8_t) - unsigned byte
+    glVertexAttribIPointer(4, 1, GL_UNSIGNED_BYTE, sizeof(Vertex), (void*)offsetof(Vertex, normal));
     glEnableVertexAttribArray(4);
 
-    // 5: overlayTileMax (vec2)
-	glVertexAttribPointer(5, 2, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, overlayTileMax));
+    // 5: useOverlay (float)
+    glVertexAttribPointer(5, 1, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, useOverlay));
     glEnableVertexAttribArray(5);
 
-    // 6: normal (vec3)
-    glVertexAttribPointer(6, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, normal));
+    // 6: ao (float)
+    glVertexAttribPointer(6, 1, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, ao));
     glEnableVertexAttribArray(6);
 
     // 7: tint (vec3)
     glVertexAttribPointer(7, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, tint));
     glEnableVertexAttribArray(7);
-
-    // 8: useOverlay (float)
-    glVertexAttribPointer(8, 1, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, useOverlay));
-    glEnableVertexAttribArray(8);
-
-    // 9: ao (float)
-    glVertexAttribPointer(9, 1, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, ao));
-    glEnableVertexAttribArray(9);
 
     glBindVertexArray(0);
     valid = true;

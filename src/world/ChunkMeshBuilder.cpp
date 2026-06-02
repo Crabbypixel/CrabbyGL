@@ -193,10 +193,10 @@ struct alignas(4) FaceCell {
     BlockType type, const uint8_t ao[4],
     bool useOverlay, bool flip) noexcept
 {
-    const uint32_t aoPacked = ((uint32_t)ao[0] & 3u)
-                            | (((uint32_t)ao[1] & 3u) << 2)
-                            | (((uint32_t)ao[2] & 3u) << 4)
-                            | (((uint32_t)ao[3] & 3u) << 6);
+    const uint32_t aoPacked =  ((uint32_t)ao[0] & 0x3)
+                            | (((uint32_t)ao[1] & 0x3) << 2)
+                            | (((uint32_t)ao[2] & 0x3) << 4)
+                            | (((uint32_t)ao[3] & 0x3) << 6);
 
     const uint32_t k = (uint32_t)(uint8_t)type
                             | (aoPacked                    <<  8)
@@ -325,21 +325,11 @@ void ChunkMeshBuilder::AddTranslucentFace(
     const BlockDef& blockInfo = GetDef(type);
     const bool useOverlay     = blockInfo.useOverlay && face > 1;
 
-    const UVRect baseRect    = Tile(blockInfo.faces[face]);
-    const UVRect overlayRect = useOverlay ? Tile(blockInfo.overlay) : UVRect{{0,0},{0,0}};
-
     const glm::vec2 baseUVs[4] = {
         {0.0f, 0.0f},
         {1.0f, 0.0f},
         {1.0f, 1.0f},
         {0.0f, 1.0f},
-    };
-
-    const glm::vec2 overlayUVs[4] = {
-        {overlayRect.min.x, overlayRect.min.y},
-        {overlayRect.max.x, overlayRect.min.y},
-        {overlayRect.max.x, overlayRect.max.y},
-        {overlayRect.min.x, overlayRect.max.y},
     };
 
     uint8_t aoRaw[4];
@@ -355,18 +345,29 @@ void ChunkMeshBuilder::AddTranslucentFace(
     for (int i = 0; i < 6; ++i)
     {
         const int k = idx[i];
+
+        /*
+        packed: normal (3b), useOverlay(1b), ao(2b)
+		uint8_t packed = ((uint8_t)face & 0x7)                  // lowest 3 bits
+					   | ((useOverlay ? 1u : 0u) << 3)          // next bit
+					   | ((aoRaw[k] & 3u) << 4);                // next 2 bits
+                                                                // 2 spare bits left
+
+        // For unpacking
+        uint8_t normal = packed & 0x7;
+        bool useOverlay (packed >> 0x3) & 0x1;
+        uint8_t ao = (packed >> 0x4) & 0x3;
+        */
+
         verts.emplace_back(Vertex{
-            worldPos + FACE_VERTS[face][k],
-            baseUVs[k],            // tile-local (0..1 for 1×1 face)
-            baseRect.min,          // uvTileMin
-            baseRect.max,          // uvTileMax 
-            //overlayUVs[k],         // overlay still in atlas space for translucent
-            overlayRect.min,
-            overlayRect.max,
-            NORMALS[face],
-            blockInfo.tint,
-            useOverlay ? 1.0f : 0.0f,
-            aoRaw[k] / 3.0f
+            .pos         = worldPos + FACE_VERTS[face][k],
+            .baseUV      = baseUVs[k],            // tile-local (0..1 for 1×1 face)
+            .tileBase    = (uint8_t)blockInfo.faces[face],
+            .tileOverlay = (uint8_t)blockInfo.overlay,
+            .normal      = (uint8_t)face,
+            .useOverlay  = useOverlay ? 1.0f : 0.0f,
+            .ao          = aoRaw[k] / 3.0f,
+            .tint        = blockInfo.tint,
         });
     }
 }
@@ -382,7 +383,6 @@ void ChunkMeshBuilder::EmitCross(
     BlockType type)
 {
     const BlockDef crossItem = GetDef(type);
-    const UVRect   uv        = Tile(crossItem.faces[0]);
     const glm::vec3 tint     = crossItem.tint;
 
     const glm::vec2 uvs[4] = {
@@ -392,7 +392,6 @@ void ChunkMeshBuilder::EmitCross(
         {0.0f, 1.0f},
     };
 
-    static const glm::vec2 NO_OVERLAY = {};
     static const glm::ivec3 DUMMY_NORMAL = {0,1,0};
     static const glm::ivec3 CROSS_VERTS1[4] = {{0,0,1},{1,0,0},{1,1,0},{0,1,1}};
     static const glm::ivec3 CROSS_VERTS2[4] = {{0,0,0},{1,0,1},{1,1,1},{0,1,0}};
@@ -402,18 +401,22 @@ void ChunkMeshBuilder::EmitCross(
 
     auto emit = [&](const glm::ivec3 quad[4], const int idx[6]) {
         for (int i = 0; i < 6; ++i)
+        {
+            uint8_t packed = ((uint8_t)0 & 0x7)
+                | (false) << 3
+                | ((uint8_t)1 & 0x3) << 4;
+
             verts.emplace_back(Vertex{
-                glm::vec3(worldPos + quad[idx[i]]),
-                uvs[idx[i]],
-                uv.min,      // uvTileMin
-                uv.max,      // uvTileMax
-                NO_OVERLAY,
-                NO_OVERLAY,
-                DUMMY_NORMAL,
-                tint,
-                false,
-                0.6f
+                .pos         = glm::vec3(worldPos + quad[idx[i]]),
+                .baseUV      = uvs[idx[i]],
+                .tileBase    = (uint8_t)crossItem.faces[0],
+                .tileOverlay = (uint8_t)0,
+                .normal      = (uint8_t)0,
+                .useOverlay  = false,
+                .ao          = 0.6f,
+                .tint        = tint,
             });
+        }
     };
 
     emit(CROSS_VERTS1, FWD);  emit(CROSS_VERTS1, REV);
@@ -439,9 +442,12 @@ void ChunkMeshBuilder::EmitGreedyQuad(
     const FaceCell&  ref = grid[row0][col0];
     const BlockDef&  def = GetDef(ref.type);
 
-    const UVRect baseTile = Tile(def.faces[face]);
+    uint8_t temp = (uint8_t)def.faces[face];
+
+
+    //const UVRect baseTile = Tile(def.faces[face]);
     const bool   useOverlay = def.useOverlay && face > 1;
-    const UVRect overlayTile  = (useOverlay && def.overlay >= 0) ? Tile(def.overlay) : UVRect{{0,0},{0,0}};
+    //const UVRect overlayTile  = (useOverlay && def.overlay >= 0) ? Tile(def.overlay) : UVRect{{0,0},{0,0}};
 
     // Face-plane layer coord: positive normal -> one step forward
     const int layerFace = layer + (axes.normalDir > 0 ? 1 : 0);
@@ -455,7 +461,7 @@ void ChunkMeshBuilder::EmitGreedyQuad(
     };
     const bool flip = (ref.ao[0] + ref.ao[2] > ref.ao[1] + ref.ao[3]);
 
-    const glm::vec3 normal(NORMALS[face]);
+    //const glm::vec3 normal(NORMALS[face]);
 
     // blockOrigin = world position of the origin block (row0, col0)
     // NOTE: for greedy quads this is the quad's block origin, not the exact
@@ -491,16 +497,16 @@ void ChunkMeshBuilder::EmitGreedyQuad(
         // colUV inverted for negative-normal faces to preserve texture orientation
         const float colUV = UV_INV_COL[face] ? (float)(W - colDelta) : (float)colDelta;
         const float rowUV = (float)rowDelta;
-        verts[k].baseUV = UV_ROW_IS_U[face] ? glm::vec2{rowUV, colUV} : glm::vec2{colUV, rowUV};
+        verts[k].baseUV      = UV_ROW_IS_U[face] ? glm::vec2{rowUV, colUV} : glm::vec2{colUV, rowUV};
 
-        verts[k].uvTileMin   = baseTile.min;
-        verts[k].uvTileMax   = baseTile.max;
-        verts[k].overlayTileMin = useOverlay ? overlayTile.min : glm::vec2(0.0f, 0.0f);
-        verts[k].overlayTileMax = useOverlay ? overlayTile.max : glm::vec2(0.0f, 0.0f);
-        verts[k].normal      = normal;
-        verts[k].tint        = (face == BOTTOM) ? glm::vec3(1.0f) : def.tint;
+        verts[k].tileBase    = def.faces[face];
+        verts[k].tileOverlay = def.overlay;
+
+        verts[k].normal      = (uint8_t)face;
         verts[k].useOverlay  = useOverlay ? 1.0f : 0.0f;
         verts[k].ao          = ao[k];
+
+        verts[k].tint        = (face == BOTTOM) ? glm::vec3(1.0f) : def.tint;
     }
 
     // Emit triangles — flip diagonal based on AO to minimize gradient banding
@@ -574,19 +580,19 @@ void ChunkMeshBuilder::BuildLayer(
                 // First build, compute fresh, write to cache
                 ComputeAO(chunk, nPX, nNX, nPZ, nNZ, nPX_PZ, nPX_NZ, nNX_PZ, nNX_NZ, { localX, localY, localZ }, face, ao);
 
-                chunk.aoCache[localX][localY][localZ][face] = (ao[0] & 3)
-                                                           | ((ao[1] & 3) << 2)
-                                                           | ((ao[2] & 3) << 4)
-                                                           | ((ao[3] & 3) << 6);
+                chunk.aoCache[localX][localY][localZ][face] = (ao[0] & 0x3)
+                                                           | ((ao[1] & 0x3) << 2)
+                                                           | ((ao[2] & 0x3) << 4)
+                                                           | ((ao[3] & 0x3) << 6);
             }
             else
             {
                 // Subsequent builds — read cache, zero ComputeAO cost
                 const uint8_t p = chunk.aoCache[localX][localY][localZ][face];
-                ao[0] = p & 3;
-                ao[1] = (p >> 2) & 3;
-                ao[2] = (p >> 4) & 3;
-                ao[3] = (p >> 6) & 3;
+                ao[0] = p & 0x3;
+                ao[1] = (p >> 2) & 0x3;
+                ao[2] = (p >> 4) & 0x3;
+                ao[3] = (p >> 6) & 0x3;
             }
 
             const bool flip  = (ao[0] + ao[2] > ao[1] + ao[3]);
