@@ -20,7 +20,7 @@ void ChunkMesh::Upload(const std::vector<Vertex>& vertices) noexcept
     glBindBuffer(GL_ARRAY_BUFFER, m_VBO);
     glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(Vertex), vertices.data(), GL_DYNAMIC_DRAW);
 
-    // 0: pos (vec3)
+    // 0: vertex pos (vec3)
     glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, pos));
     glEnableVertexAttribArray(0);
 
@@ -36,21 +36,13 @@ void ChunkMesh::Upload(const std::vector<Vertex>& vertices) noexcept
     glVertexAttribIPointer(3, 1, GL_UNSIGNED_BYTE, sizeof(Vertex), (void*)offsetof(Vertex, tileOverlay));
     glEnableVertexAttribArray(3);
 
-	// 4: normal (uint8_t) - unsigned byte
-    glVertexAttribIPointer(4, 1, GL_UNSIGNED_BYTE, sizeof(Vertex), (void*)offsetof(Vertex, normal));
+	// 4: packed (uint8_t) - unsigned byte (3 bits normal, 1 bit useOverlay, 2 bits ao, 2 bits free)
+    glVertexAttribIPointer(4, 1, GL_UNSIGNED_BYTE, sizeof(Vertex), (void*)offsetof(Vertex, packed));
     glEnableVertexAttribArray(4);
 
-    // 5: useOverlay (float)
-    glVertexAttribPointer(5, 1, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, useOverlay));
+    // 5: tint (vec3)
+    glVertexAttribPointer(5, 4, GL_UNSIGNED_BYTE, GL_TRUE, sizeof(Vertex), (void*)offsetof(Vertex, tint));
     glEnableVertexAttribArray(5);
-
-    // 6: ao (float)
-    glVertexAttribPointer(6, 1, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, ao));
-    glEnableVertexAttribArray(6);
-
-    // 7: tint (vec3)
-    glVertexAttribPointer(7, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, tint));
-    glEnableVertexAttribArray(7);
 
     glBindVertexArray(0);
     valid = true;

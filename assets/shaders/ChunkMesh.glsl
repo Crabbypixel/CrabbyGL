@@ -1,15 +1,16 @@
 #ifdef SHADER_VERTEX
+
+// Vertex attributes
 layout (location = 0) in vec3  aPos;
 layout (location = 1) in vec2  aUV;
 layout (location = 2) in uint  aTileBase;
 layout (location = 3) in uint  aTileOverlay;
-layout (location = 4) in uint  aNormalIndex;
-layout (location = 5) in float aUseOverlay;
-layout (location = 6) in float aAo;
-layout (location = 7) in vec3  aTint;
+layout (location = 4) in uint  aPacked;
+layout (location = 5) in vec4  aTint;
 
-// Shared projection + view matrices via UBO
-layout (std140) uniform Matrices {
+// Shared camera matrices
+layout (std140) uniform Matrices
+{
     mat4 matProjection;
     mat4 matView;
 };
@@ -17,28 +18,40 @@ layout (std140) uniform Matrices {
 out vec3  fWorldPos;
 out vec2  fUV;
 out vec3  fTint;
-out float fUseOverlay;
 out float fAo;
+
+flat out uint fUseOverlay;
+flat out uint fNormalIndex;
 flat out uint fTileBase;
 flat out uint fTileOverlay;
-flat out uint fNormalIndex;
 
 void main()
 {
     fWorldPos    = aPos;
     fUV          = aUV;
+
+    // Atlas tile indices
     fTileBase    = aTileBase;
     fTileOverlay = aTileOverlay;
-    fNormalIndex      = aNormalIndex;
-    fTint        = aTint;
-    fUseOverlay  = aUseOverlay;
-    fAo          = aAo;
+
+    // Packed face metadata:
+    // bits 0-2 : normal index
+    // bit  3   : overlay enabled
+    // bits 4-5 : AO level (0-3)
+    fNormalIndex = aPacked & 0x7u;
+    fUseOverlay  = (aPacked >> 3u) & 0x1u;
+    fAo          = float((aPacked >> 4u) & 0x3u) / 3.0f;
+
+    // RGBA8 tint arrives normalized to 0..1
+    fTint = aTint.rgb;
 
     gl_Position = matProjection * matView * vec4(aPos, 1.0f);
 }
+
 #endif
 
 #ifdef SHADER_FRAGMENT
+
 struct UVRect
 {
     vec2 _min;
@@ -46,47 +59,59 @@ struct UVRect
 };
 
 uniform sampler2D u_atlas;
+
+// Directional lighting
 uniform vec3 u_lightDir;
 uniform vec3 u_ambient;
 uniform vec3 u_diffuse;
 
-// Selection highlight
+// Block selection highlight
 uniform bool  u_isSelected;
 uniform ivec3 u_selectedBlock;
 
-// Feature flags
+// Runtime feature toggles
 uniform bool u_isAOEnabled;
 
 in vec3  fWorldPos;
 in vec2  fUV;
 in vec3  fTint;
-in float fUseOverlay;
 in float fAo;
+
+flat in uint fUseOverlay;
+flat in uint fNormalIndex;
 flat in uint fTileBase;
 flat in uint fTileOverlay;
-flat in uint fNormalIndex;
 
 out vec4 FragColor;
 
-// FIXED: Defined array properly with vec3 constructors and moved above functions
+// Face normals:
 // +Y -Y +X -X +Z -Z
 const vec3 NORMALS[6] = vec3[6](
-    vec3( 0.0f,  1.0f,  0.0f), vec3( 0.0f, -1.0f,  0.0f),   // +Y -Y 
-    vec3( 1.0f,  0.0f,  0.0f), vec3(-1.0f,  0.0f,  0.0f),   // +X -X 
-    vec3( 0.0f,  0.0f,  1.0f), vec3( 0.0f,  0.0f, -1.0f)    // +Z -Z 
+    vec3( 0.0f,  1.0f,  0.0f),
+    vec3( 0.0f, -1.0f,  0.0f),
+
+    vec3( 1.0f,  0.0f,  0.0f),
+    vec3(-1.0f,  0.0f,  0.0f),
+
+    vec3( 0.0f,  0.0f,  1.0f),
+    vec3( 0.0f,  0.0f, -1.0f)
 );
 
-// --- Tile-local UV -> atlas UV -------------------------------------
+// Convert greedy-mesh UVs into atlas UVs
+// fract() repeats the texture across merged quads
 vec2 tileUV(vec2 tileLocal, vec2 tileMin, vec2 tileMax)
 {
     return tileMin + fract(tileLocal) * (tileMax - tileMin);
 }
 
+// Recover the block owning this fragment
+// Used by the block selection highlight
 ivec3 fragBlockPos()
 {
     return ivec3(floor(fWorldPos - NORMALS[fNormalIndex] * 0.01f));
 }
 
+// Atlas tile lookup (16x16 atlas)
 UVRect Tile(uint i)
 {
     const float TILE_W = 0.0625f;
@@ -107,54 +132,63 @@ UVRect Tile(uint i)
 
 void main()
 {
-    // Construct baseTileMin, baseTileMax, overlayTileMin, overlayTileMax
-    UVRect baseUV = Tile(fTileBase);
+    // Fetch atlas rectangles
+    UVRect baseUV    = Tile(fTileBase);
     UVRect overlayUV = Tile(fTileOverlay);
 
-    vec2 baseTileMin = baseUV._min;
-    vec2 baseTileMax = baseUV._max;
+    vec2 baseTileMin    = baseUV._min;
+    vec2 baseTileMax    = baseUV._max;
+
     vec2 overlayTileMin = overlayUV._min;
     vec2 overlayTileMax = overlayUV._max;
 
-    // --- Base texture -------------------------------------
+    // Base texture sample
     vec2 atlasUV = tileUV(fUV, baseTileMin, baseTileMax);
 
-    // Correct mipmap derivatives — from smooth tile-local
+    // Preserve mipmap correctness when repeating UVs
     vec2 tileSize = baseTileMax - baseTileMin;
     vec2 dx = dFdx(fUV) * tileSize;
     vec2 dy = dFdy(fUV) * tileSize;
 
     vec4 baseTex = textureGrad(u_atlas, atlasUV, dx, dy);
 
-    if (baseTex.a < 0.1)
+    if (baseTex.a < 0.1f)
         discard;
 
     vec3 color = baseTex.rgb;
-    
-    // Overlay
-    if (fUseOverlay > 0.5f) {
+
+    // Overlay texture (grass sides, etc.)
+    if (fUseOverlay == 1u)
+    {
         vec2 overlayAtlasUV = tileUV(fUV, overlayTileMin, overlayTileMax);
         vec2 overlaySize = overlayTileMax - overlayTileMin;
         vec2 overlayDx = dFdx(fUV) * overlaySize;
         vec2 overlayDy = dFdy(fUV) * overlaySize;
         vec4 overlayTex = textureGrad(u_atlas, overlayAtlasUV, overlayDx, overlayDy);
+
         color = mix(color, overlayTex.rgb * fTint, overlayTex.a);
-    } else {
+    }
+    else
+    {
         color *= fTint;
     }
 
-    // --- Diffuse lighting (flat per-face) -------------------------------------
+    // Flat per-face directional lighting
     float NdotL = max(dot(normalize(NORMALS[fNormalIndex]), -normalize(u_lightDir)), 0.0f);
+
     color *= u_ambient + u_diffuse * NdotL;
 
-    // --- Ambient occlusion -------------------------------------
+    // Ambient occlusion
     if (u_isAOEnabled)
         color *= mix(0.5f, 1.0f, fAo);
 
-    // Selection highlight 
-    if(u_isSelected && fragBlockPos() == u_selectedBlock)
-        color.rgb /= 0.85f;
+    // Selected block highlight
+    if (u_isSelected && fragBlockPos() == u_selectedBlock)
+    {
+        color /= 0.85f;
+    }
 
     FragColor = vec4(color, baseTex.a);
 }
+
 #endif

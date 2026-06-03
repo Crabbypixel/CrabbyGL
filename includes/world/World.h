@@ -133,7 +133,7 @@ private:
 	// World-player variables
     // TODO: Make this dynamic and make user to control - to be done later
     int m_viewDist = 8;			// Chunk load boundary
-    int m_unloadDist = 12;		// Chunk unload boundary
+    int m_unloadDist = 8;		// Chunk unload boundary
     glm::ivec2 m_lastPlayerChunk = { INT_MAX, INT_MAX };	// Previous frame player chunk pos
 
 	// Global atomic shutdown flag for workers to exit

@@ -157,16 +157,25 @@ void World::FillChunkData(Chunk& chunk, glm::ivec2 coord)
             int   thickness = 4 + (int)((1.0f - n) * 10.0f);
             int   base = std::max(1, height - thickness);
 
-            chunk.blocks[x][0][z] = BlockType::BEDROCK;
-            for (int y = 1; y < base; ++y) chunk.blocks[x][y][z] = BlockType::STONE;
-            for (int y = base; y < height; ++y) chunk.blocks[x][y][z] = BlockType::DIRT;
-            chunk.blocks[x][height][z] = BlockType::GRASS_BLOCK;
+            chunk.SetUnchecked(x, 0, z, BlockType::BEDROCK);
+
+            for (int y = 1; y < base; ++y)
+                chunk.SetUnchecked(x, y, z, BlockType::STONE);
+
+            for (int y = base; y < height; ++y)
+                chunk.SetUnchecked(x, y, z, BlockType::DIRT);
+
+            chunk.SetUnchecked(x, height, z, BlockType::GRASS_BLOCK);
 
             if (cx * CX + x == 0 || cz * CZ + z == 0)
-                chunk.blocks[x][height + 1][z] = BlockType::BRICK;
+                chunk.SetUnchecked(x, height + 1, z, BlockType::BRICK);
         }
     }   
-
+    
+	// Uncomment these lines to make all generated chunks dirty -> so that they can be stored to disk
+	// But this causes a huge performance drop because of the disk IO, so only enable this when you want
+    // to test the chunk saving/loading functionality
+    // 
     //chunk.dirty = true;
     //chunk.modified = false;
 }
@@ -191,12 +200,7 @@ void World::SaveChunkToDisk(const Chunk& chunk)
         return;
     }
 
-    file.write(reinterpret_cast<const char*>(chunk.blocks), sizeof(chunk.blocks));
-
-    if (!file)
-    {
-        std::cerr << "Error writing chunk file: " << path << '\n';
-    }
+	chunk.Serialize(file);
 }
 
 bool World::LoadChunkFromDisk(Chunk& chunk, glm::ivec2& coord)
@@ -208,16 +212,11 @@ bool World::LoadChunkFromDisk(Chunk& chunk, glm::ivec2& coord)
     if (!file)
         return false;
 
-    file.read(reinterpret_cast<char*>(chunk.blocks), sizeof(chunk.blocks));
-
-    if (file.gcount() != sizeof(chunk.blocks))
+    if (!chunk.Deserialize(file))
     {
-        std::cerr << "Chunk file corrupted: " << path << '\n';
-
+        std::cerr << "Chunk file corrupted at: " << path << '\n';
         return false;
     }
-
-    chunk.chunkPos = coord;
 
     return true;
 }

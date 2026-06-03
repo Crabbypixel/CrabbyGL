@@ -59,24 +59,6 @@
 #include "rendering/Vertex.h"
 
 // =========================================================================
-// Atlas UV helpers
-// =========================================================================
-
-struct UVRect { glm::vec2 min, max; };
-
-static constexpr float TILE_W = 16.0f / 256.0f;
-static constexpr float TILE_H = 16.0f / 256.0f;
-
-static UVRect Tile(int i) noexcept
-{
-    const int col = i % 16, row = i / 16;
-    const float u0 = col * TILE_W;
-    const float v0 = 1.0f - (row + 1) * TILE_H;
-
-    return { {u0, v0}, {u0 + TILE_W, v0 + TILE_H} };
-}
-
-// =========================================================================
 // Face geometry tables
 // =========================================================================
 
@@ -204,6 +186,37 @@ struct alignas(4) FaceCell {
                             | ((flip       ? 1u : 0u)      << 17);
 
     return k == 0u ? 1u : k;  // key=0 means invisible; shift non-zero AIR edge case
+}
+
+
+// =========================================================================
+// Helpers
+// =========================================================================
+static uint32_t PackRGBA(float r, float g, float b, float a) noexcept
+{
+    // Clamp to [0.0, 1.0], multiply, add 0.5f for perfect rounding, then cast
+    uint32_t R = static_cast<uint32_t>((std::clamp(r, 0.0f, 1.0f) * 255.0f) + 0.5f);
+    uint32_t G = static_cast<uint32_t>((std::clamp(g, 0.0f, 1.0f) * 255.0f) + 0.5f);
+    uint32_t B = static_cast<uint32_t>((std::clamp(b, 0.0f, 1.0f) * 255.0f) + 0.5f);
+    uint32_t A = static_cast<uint32_t>((std::clamp(a, 0.0f, 1.0f) * 255.0f) + 0.5f);
+
+    return ((uint32_t)A << 24) | ((uint32_t)B << 16) | ((uint32_t)G << 8) | (uint32_t)R;
+}
+
+static uint8_t PackAO(const uint8_t ao[4]) noexcept
+{
+    return (ao[0] & 0x3)
+        | ((ao[1] & 0x3) << 2)
+        | ((ao[2] & 0x3) << 4)
+        | ((ao[3] & 0x3) << 6);
+}
+
+static void UnpackAO(uint8_t packed, uint8_t ao[4]) noexcept
+{
+    ao[0] = packed & 0x3;
+    ao[1] = (packed >> 2) & 0x3;
+    ao[2] = (packed >> 4) & 0x3;
+    ao[3] = (packed >> 6) & 0x3;
 }
 
 
@@ -346,28 +359,18 @@ void ChunkMeshBuilder::AddTranslucentFace(
     {
         const int k = idx[i];
 
-        /*
-        packed: normal (3b), useOverlay(1b), ao(2b)
+        //packed: normal (3b), useOverlay(1b), ao(2b)
 		uint8_t packed = ((uint8_t)face & 0x7)                  // lowest 3 bits
 					   | ((useOverlay ? 1u : 0u) << 3)          // next bit
 					   | ((aoRaw[k] & 3u) << 4);                // next 2 bits
-                                                                // 2 spare bits left
-
-        // For unpacking
-        uint8_t normal = packed & 0x7;
-        bool useOverlay (packed >> 0x3) & 0x1;
-        uint8_t ao = (packed >> 0x4) & 0x3;
-        */
 
         verts.emplace_back(Vertex{
             .pos         = worldPos + FACE_VERTS[face][k],
             .baseUV      = baseUVs[k],            // tile-local (0..1 for 1×1 face)
             .tileBase    = (uint8_t)blockInfo.faces[face],
             .tileOverlay = (uint8_t)blockInfo.overlay,
-            .normal      = (uint8_t)face,
-            .useOverlay  = useOverlay ? 1.0f : 0.0f,
-            .ao          = aoRaw[k] / 3.0f,
-            .tint        = blockInfo.tint,
+            .packed      = packed,
+            .tint        = PackRGBA(blockInfo.tint.x, blockInfo.tint.y, blockInfo.tint.z, 1.0f),
         });
     }
 }
@@ -382,7 +385,7 @@ void ChunkMeshBuilder::EmitCross(
     const glm::ivec3& worldPos,
     BlockType type)
 {
-    const BlockDef crossItem = GetDef(type);
+    const BlockDef& crossItem = GetDef(type);
     const glm::vec3 tint     = crossItem.tint;
 
     const glm::vec2 uvs[4] = {
@@ -392,7 +395,6 @@ void ChunkMeshBuilder::EmitCross(
         {0.0f, 1.0f},
     };
 
-    static const glm::ivec3 DUMMY_NORMAL = {0,1,0};
     static const glm::ivec3 CROSS_VERTS1[4] = {{0,0,1},{1,0,0},{1,1,0},{0,1,1}};
     static const glm::ivec3 CROSS_VERTS2[4] = {{0,0,0},{1,0,1},{1,1,1},{0,1,0}};
 
@@ -403,18 +405,16 @@ void ChunkMeshBuilder::EmitCross(
         for (int i = 0; i < 6; ++i)
         {
             uint8_t packed = ((uint8_t)0 & 0x7)
-                | (false) << 3
-                | ((uint8_t)1 & 0x3) << 4;
+                            | (false) << 3
+                            | ((uint8_t)1 & 0x3) << 4;
 
             verts.emplace_back(Vertex{
                 .pos         = glm::vec3(worldPos + quad[idx[i]]),
                 .baseUV      = uvs[idx[i]],
                 .tileBase    = (uint8_t)crossItem.faces[0],
                 .tileOverlay = (uint8_t)0,
-                .normal      = (uint8_t)0,
-                .useOverlay  = false,
-                .ao          = 0.6f,
-                .tint        = tint,
+                .packed      = packed, 
+                .tint        = PackRGBA(tint.x, tint.y, tint.z, 1.0f),
             });
         }
     };
@@ -441,40 +441,18 @@ void ChunkMeshBuilder::EmitGreedyQuad(
     const FaceAxis&  axes  = FACE_AXES[face];
     const FaceCell&  ref = grid[row0][col0];
     const BlockDef&  def = GetDef(ref.type);
-
-    uint8_t temp = (uint8_t)def.faces[face];
-
-
-    //const UVRect baseTile = Tile(def.faces[face]);
     const bool   useOverlay = def.useOverlay && face > 1;
-    //const UVRect overlayTile  = (useOverlay && def.overlay >= 0) ? Tile(def.overlay) : UVRect{{0,0},{0,0}};
+    
+    // Grass uses a green tint for its top and side overlay
+    // The bottom face is dirt and must remain untinted
+    uint32_t tint = (face == BOTTOM)
+        ? PackRGBA(1.0f, 1.0f, 1.0f, 1.0f) : PackRGBA(def.tint.x, def.tint.y, def.tint.z, 1.0f);
 
-    // Face-plane layer coord: positive normal -> one step forward
+    // Face-plane layer coord: positive normal, one step forward
     const int layerFace = layer + (axes.normalDir > 0 ? 1 : 0);
 
-    // AO: all merged cells identical -> use ref directly
-    const float ao[4] = {
-        ref.ao[0] / 3.0f,
-        ref.ao[1] / 3.0f,
-        ref.ao[2] / 3.0f,
-        ref.ao[3] / 3.0f
-    };
+    // AO: all merged cells identical, use ref directly
     const bool flip = (ref.ao[0] + ref.ao[2] > ref.ao[1] + ref.ao[3]);
-
-    //const glm::vec3 normal(NORMALS[face]);
-
-    // blockOrigin = world position of the origin block (row0, col0)
-    // NOTE: for greedy quads this is the quad's block origin, not the exact
-    // ray-hit block. The shader should use ivec3(floor(v_pos - v_normal*0.01))
-    // for per-pixel block selection instead of blockOrigin comparison
-    glm::vec3 blockOrigin;
-    {
-        int bc[3] = {0, 0, 0};
-        bc[axes.layerAxis] = layer;      // the block, not the face plane
-        bc[axes.rowAxis]   = row0;
-        bc[axes.colAxis]   = col0;
-        blockOrigin = {(float)(chunkWX + bc[0]), (float) bc[1], (float)(chunkWZ + bc[2])};
-    }
 
     // Build 4 vertex positions and UVs
     Vertex verts[4] = {};
@@ -500,19 +478,18 @@ void ChunkMeshBuilder::EmitGreedyQuad(
         verts[k].baseUV      = UV_ROW_IS_U[face] ? glm::vec2{rowUV, colUV} : glm::vec2{colUV, rowUV};
 
         verts[k].tileBase    = def.faces[face];
-        verts[k].tileOverlay = def.overlay;
+        verts[k].tileOverlay = static_cast<uint8_t>(def.overlay);
 
-        verts[k].normal      = (uint8_t)face;
-        verts[k].useOverlay  = useOverlay ? 1.0f : 0.0f;
-        verts[k].ao          = ao[k];
-
-        verts[k].tint        = (face == BOTTOM) ? glm::vec3(1.0f) : def.tint;
+		uint8_t packed = ((uint8_t)face & 0x7) | (useOverlay << 3) | ((ref.ao[k] & 0x3) << 4);
+        verts[k].packed      = packed;
+        verts[k].tint        = tint;
     }
 
     // Emit triangles — flip diagonal based on AO to minimize gradient banding
     static constexpr int TRI_NORM[6] = {0,1,2, 0,2,3};
     static constexpr int TRI_FLIP[6] = {0,1,3, 1,2,3};
     const int* tri = flip ? TRI_FLIP : TRI_NORM;
+
     for (int i = 0; i < 6; ++i)
         out.push_back(verts[tri[i]]);
 }
@@ -580,19 +557,13 @@ void ChunkMeshBuilder::BuildLayer(
                 // First build, compute fresh, write to cache
                 ComputeAO(chunk, nPX, nNX, nPZ, nNZ, nPX_PZ, nPX_NZ, nNX_PZ, nNX_NZ, { localX, localY, localZ }, face, ao);
 
-                chunk.aoCache[localX][localY][localZ][face] = (ao[0] & 0x3)
-                                                           | ((ao[1] & 0x3) << 2)
-                                                           | ((ao[2] & 0x3) << 4)
-                                                           | ((ao[3] & 0x3) << 6);
+                chunk.aoCache[localX][localY][localZ][face] = PackAO(ao);
             }
             else
             {
                 // Subsequent builds — read cache, zero ComputeAO cost
-                const uint8_t p = chunk.aoCache[localX][localY][localZ][face];
-                ao[0] = p & 0x3;
-                ao[1] = (p >> 2) & 0x3;
-                ao[2] = (p >> 4) & 0x3;
-                ao[3] = (p >> 6) & 0x3;
+                // Just extract AO from cache
+				UnpackAO(chunk.aoCache[localX][localY][localZ][face], ao);
             }
 
             const bool flip  = (ao[0] + ao[2] > ao[1] + ao[3]);
@@ -701,8 +672,8 @@ void ChunkMeshBuilder::Build(
     // ================================================================================
 
     for (int x = 0; x < CX; ++x)
-    for (int z = 0; z < CZ; ++z)
     for (int y = 0; y < CY; ++y)
+    for (int z = 0; z < CZ; ++z)
     {
         const BlockType blockType = chunk.GetUnchecked(x, y, z);
         const glm::ivec3 worldPos{ chunkWX + x, y, chunkWZ + z };
