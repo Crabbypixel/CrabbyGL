@@ -529,7 +529,25 @@ void ChunkMeshBuilder::BuildLayer(
     uint16_t rowMask[CY] = {};
     
     // Rebild AO if chunk is AO dirty - instead of looking up atomic flag - which is slow
-    const bool rebuildAO = chunk.aoDirty.load(std::memory_order_relaxed);
+    //const bool rebuildAO = chunk.aoDirty.load(std::memory_order_relaxed)
+    //       || (nPX    &&    nPX->aoDirty.load(std::memory_order_relaxed))
+    //       || (nNX    &&    nNX->aoDirty.load(std::memory_order_relaxed))
+    //       || (nNX    &&    nNX->aoDirty.load(std::memory_order_relaxed))
+    //       || (nNX    &&    nNX->aoDirty.load(std::memory_order_relaxed))
+		  // || (nPX_PZ && nPX_PZ->aoDirty.load(std::memory_order_relaxed))
+    //       || (nPX_NZ && nPX_NZ->aoDirty.load(std::memory_order_relaxed))
+    //       || (nNX_PZ && nNX_PZ->aoDirty.load(std::memory_order_relaxed))
+    //       || (nNX_NZ && nNX_NZ->aoDirty.load(std::memory_order_relaxed));
+
+    const bool rebuildAO = chunk.aoDirty
+                 || (nPX && nPX->aoDirty)
+                 || (nNX && nNX->aoDirty)
+                 || (nPZ && nPZ->aoDirty)
+                 || (nNZ && nNZ->aoDirty)
+                 || (nPX_PZ && nPX_PZ->aoDirty)
+                 || (nPX_NZ && nPX_NZ->aoDirty)
+                 || (nNX_PZ && nNX_PZ->aoDirty)
+                 || (nNX_NZ && nNX_NZ->aoDirty);
 
     // =========================================================================
     // Step 1: Populate cell grid

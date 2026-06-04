@@ -278,9 +278,6 @@ bool World::PlaceBlock(const RaycastHit& hit, BlockType type)
     }
 
     SetBlock(target.x, target.y, target.z, type);
-    
-    //MarkAdjacentChunksDirty(target.x, target.y, target.z);
-    //MarkAdjacentChunksAODirty(target.x, target.y, target.z);
 
     return true;
 }
@@ -293,9 +290,6 @@ bool World::BreakBlock(const RaycastHit& hit)
     const BlockType& blockType = GetBlock(hit.blockPos.x, hit.blockPos.y, hit.blockPos.z);
 
     SetBlock(hit.blockPos.x, hit.blockPos.y, hit.blockPos.z, BlockType::AIR);
-
-    //MarkAdjacentChunksDirty(hit.blockPos.x, hit.blockPos.y, hit.blockPos.z);
-    //MarkAdjacentChunksAODirty(hit.blockPos.x, hit.blockPos.y, hit.blockPos.z);
 
     return true;
 }
@@ -614,6 +608,19 @@ void World::UpdateChunkStreaming(const glm::vec3& playerPos)
         }
     }
 
+	// Sort based on the distance to player - closer chunks get loaded first for better player experience
+    std::sort(
+        chunksToLoad.begin(),
+        chunksToLoad.end(),
+        [&playerChunkCoord](const glm::ivec2& a, const glm::ivec2& b)
+        {
+            float da = glm::length(glm::vec2(a - playerChunkCoord));
+            float db = glm::length(glm::vec2(b - playerChunkCoord));
+
+            return da < db;
+        }
+    );
+
     // Actually load
     {
         std::lock_guard<std::mutex> lockQ(m_chunkLoadJobMutex);
@@ -632,10 +639,17 @@ void World::UpdateChunkStreaming(const glm::vec3& playerPos)
             // Mark neighboring chunks dirty because faces at chunk borders depend on adjacent chunk data
             // When a chunk changes, neighbors may need to rebuild meshes for correct face culling
             // Hence mark them dirty so the renderer will re-build the neighbor chunk meshes
-            auto it = chunks.find(chunkCoord + glm::ivec2{ 1, 0 }); if (it != chunks.end()) it->second->dirty = true;
-                 it = chunks.find(chunkCoord + glm::ivec2{ 0, 1 }); if (it != chunks.end()) it->second->dirty = true;
-                 it = chunks.find(chunkCoord + glm::ivec2{-1, 0 }); if (it != chunks.end()) it->second->dirty = true;
-                 it = chunks.find(chunkCoord + glm::ivec2{ 0,-1 }); if (it != chunks.end()) it->second->dirty = true;
+            // Neighboring chunks
+            auto it = chunks.find(chunkCoord + glm::ivec2{ 1, 0 }); if (it != chunks.end()) { it->second->dirty = true; it->second->aoDirty = true; }
+                 it = chunks.find(chunkCoord + glm::ivec2{ 0, 1 }); if (it != chunks.end()) { it->second->dirty = true; it->second->aoDirty = true; }
+                 it = chunks.find(chunkCoord + glm::ivec2{-1, 0 }); if (it != chunks.end()) { it->second->dirty = true; it->second->aoDirty = true; }
+                 it = chunks.find(chunkCoord + glm::ivec2{ 0,-1 }); if (it != chunks.end()) { it->second->dirty = true; it->second->aoDirty = true; }
+
+            // Diagonal neighbors
+                 it = chunks.find(chunkCoord + glm::ivec2{ 1, 1 }); if (it != chunks.end()) { it->second->dirty = true; it->second->aoDirty = true; }
+                 it = chunks.find(chunkCoord + glm::ivec2{ 1,-1 }); if (it != chunks.end()) { it->second->dirty = true; it->second->aoDirty = true; }
+                 it = chunks.find(chunkCoord + glm::ivec2{-1, 1 }); if (it != chunks.end()) { it->second->dirty = true; it->second->aoDirty = true; }
+                 it = chunks.find(chunkCoord + glm::ivec2{-1,-1 }); if (it != chunks.end()) { it->second->dirty = true; it->second->aoDirty = true; }
         }
     }
     m_chunkLoadJobCV.notify_all();
@@ -658,6 +672,7 @@ void World::CommitGeneratedChunks()
         // TODO
         chunkPtr->dirty = true;
         chunkPtr->modified = false;
+        chunkPtr->aoDirty = true;
 
         chunks[coord] = std::move(chunkPtr);
 

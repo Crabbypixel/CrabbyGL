@@ -66,22 +66,4 @@ bool Chunk::Deserialize(std::ifstream& f)
 
 	f.read(reinterpret_cast<char*>(blocks.data()), sizeof(blocks));
 	return f.gcount() == sizeof(blocks);
-
-	// present: blocks[z + CZ * y + (CZ * CY) * x]
-	// convert: blocks[y * (CX * CZ) + x * CZ + z]
-	// ! Convert to [y][x][z]
-	//for (int x = 0; x < CX; ++x)
-	//{
-	//	for (int y = 0; y < CY; ++y)
-	//	{
-	//		for (int z = 0; z < CZ; ++z)
-	//		{
-	//			int presentIndex = z + CZ * y + (CZ * CY) * x;
-	//			int newIndex = y * (CX * CZ) + x * CZ + z;
-	//			blocks[newIndex] = temp[presentIndex];
-	//		}
-	//	}
-	//}
-
-	//return f.gcount() == sizeof(blocks);
 }
