@@ -2,6 +2,13 @@
 
 #include <vector>
 #include <mutex>
+#include <fstream>
+
+static int GetIndex(int x, int y, int z)
+{
+	// YZX ordering!!!
+	return (y * CX * CZ) + (x * CZ) + z;
+}
 
 constexpr bool Chunk::InBounds(int x, int y, int z) noexcept
 {
@@ -13,31 +20,50 @@ BlockType Chunk::Get(int x, int y, int z) const noexcept
 	if (!InBounds(x, y, z))
 		return BlockType::AIR;
 
-	return blocks[x][y][z];
-}
+	std::shared_lock lock(chunkMutex);
 
-BlockType Chunk::GetUnchecked(int x, int y, int z) const
-{
-	return blocks[x][y][z];
+	return GetUnchecked(x, y, z);
 }
 
 void Chunk::Set(int x, int y, int z, BlockType type)
 {
 	if (!InBounds(x, y, z))
 		return;
-
+	
 	std::unique_lock lock(chunkMutex);
 
-	blocks[x][y][z] = type;
-	dirty = true;
-	modified = true;
+	SetUnchecked(x, y, z, type);
+}
+
+BlockType Chunk::GetUnchecked(int x, int y, int z) const
+{
+	// YZX ordering!!!
+	return blocks[GetIndex(x, y, z)];
 }
 
 void Chunk::SetUnchecked(int x, int y, int z, BlockType type)
 {
-	std::unique_lock lock(chunkMutex);
+	// YZX ordering!!!
+	blocks[GetIndex(x, y, z)] = type;
 
-	blocks[x][y][z] = type;
 	dirty = true;
 	modified = true;
+	aoDirty = true;
+}
+
+void Chunk::Serialize(std::ofstream& f) const
+{
+	if (!f)
+		return;
+
+	f.write(reinterpret_cast<const char*>(blocks.data()), sizeof(blocks));
+}
+
+bool Chunk::Deserialize(std::ifstream& f)
+{
+	if (!f)
+		return false;
+
+	f.read(reinterpret_cast<char*>(blocks.data()), sizeof(blocks));
+	return f.gcount() == sizeof(blocks);
 }

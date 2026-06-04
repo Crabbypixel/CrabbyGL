@@ -3,13 +3,13 @@ layout(location = 0) in vec3 aPos;
 
 layout(std140) uniform Matrices
 {
-    mat4 projection;
-    mat4 view;
+    mat4 matProjection;
+    mat4 matView;
 };
 
 void main()
 {
-    gl_Position = projection * view * vec4(aPos, 1.0f);
+    gl_Position = matProjection * matView * vec4(aPos, 1.0f);
 }
 
 #endif

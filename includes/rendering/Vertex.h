@@ -2,13 +2,17 @@
 
 #include <glm/glm.hpp>
 
-struct Vertex {
-    glm::vec3 pos;               // world position of vertex
-    glm::vec2 baseUV;            // base UV
-    glm::vec2 overlayUV;         // overlay UV
-    glm::vec3 normal;            // face normal
-    glm::ivec3 blockOrigin;      // integer world position
-    glm::vec3 tint;              // Tint for greyshade textures
-    float useOverlay;            // 1.0 for grass, 0.0 for others
-    float ao;                    // ambient occlusion
+// Exactly 32 bytes per vertex, tightly packed for optimal GPU upload and cache performance
+struct Vertex
+{
+    glm::vec3 pos;          // World-space vertex position
+    glm::vec2 baseUV;       // Greedy-mesh UV coordinates
+
+    uint8_t   tileBase;     // Atlas tile for base texture
+    uint8_t   tileOverlay;  // Atlas tile for overlay texture
+	uint8_t   packed;       // [0-2] normal, [3] overlay, [4-5] AO, [6-7] unused
+    uint8_t  _padding1;
+
+    uint32_t  tint;         // RGBA8 tint color
+	uint32_t  _padding2;
 };

@@ -1,11 +1,11 @@
 #ifdef SHADER_VERTEX
 layout (location  = 0) in vec2 aPos;
-uniform float aspect;
+uniform float uAspect;
 
 void main()
 {
     vec2 pos = aPos;
-	pos.y *= aspect;
+	pos.y *= uAspect;
 	gl_Position = vec4(pos, 0.0f, 1.0f);
 }
 #endif

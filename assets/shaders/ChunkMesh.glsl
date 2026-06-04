@@ -1,111 +1,193 @@
-#ifdef VERTEX_SHADER
+#ifdef SHADER_VERTEX
 
-layout(location = 0) in vec3  aPos;
-layout(location = 1) in vec2  aBaseUV;
-layout(location = 2) in vec2  aOverlayUV;
-layout(location = 3) in vec3  aNormal;
-layout(location = 4) in ivec3  aBlockOrigin;
-layout(location = 5) in vec3  aTint;
-layout(location = 6) in float aUseOverlay;
-layout(location = 7) in float a_ao;
+// Vertex attributes
+layout (location = 0) in vec3  aPos;
+layout (location = 1) in vec2  aUV;
+layout (location = 2) in uint  aTileBase;
+layout (location = 3) in uint  aTileOverlay;
+layout (location = 4) in uint  aPacked;
+layout (location = 5) in vec4  aTint;
 
-layout(std140) uniform Matrices {
-    mat4 projection;
-    mat4 view;
+// Shared camera matrices
+layout (std140) uniform Matrices
+{
+    mat4 matProjection;
+    mat4 matView;
 };
 
-out vec3  fTint;
-out vec3  fNormal;
-out vec2  fBaseUV;
-out vec2  fOverlayUV;
 out vec3  fWorldPos;
-flat out ivec3  fBlockOrigin;
-out float fUseOverlay;
-out float f_ao;
+out vec2  fUV;
+out vec3  fTint;
+out float fAo;
 
-void main() {
-    fTint        = aTint;
-    fNormal      = aNormal;
-    fBaseUV      = aBaseUV;
-    fOverlayUV   = aOverlayUV;
+flat out uint fUseOverlay;          // GLSL version 330 doesn't support flat bools, so we use uint instead
+flat out uint fNormalIndex;
+flat out uint fTileBase;
+flat out uint fTileOverlay;
+
+void main()
+{
     fWorldPos    = aPos;
-    fUseOverlay  = aUseOverlay;
-    fBlockOrigin = aBlockOrigin;
-    f_ao = a_ao;
-    gl_Position  = projection * view * vec4(aPos, 1.0f);
+    fUV          = aUV;
+
+    // Atlas tile indices
+    fTileBase    = aTileBase;
+    fTileOverlay = aTileOverlay;
+
+    // Packed face metadata:
+    // bits 0-2 : normal index
+    // bit  3   : overlay enabled
+    // bits 4-5 : AO level (0-3)
+    fNormalIndex = aPacked & 0x7u;
+    fUseOverlay  = (aPacked >> 3u) & 0x1u;
+    fAo          = float((aPacked >> 4u) & 0x3u) / 3.0f;
+
+    // RGBA8 tint arrives normalized to 0..1
+    fTint = aTint.rgb;
+
+    gl_Position = matProjection * matView * vec4(aPos, 1.0f);
 }
 
 #endif
 
-#ifdef FRAGMENT_SHADER
+#ifdef SHADER_FRAGMENT
 
-in vec2  fBaseUV;
-in vec2  fOverlayUV;
-in vec3  fNormal;
-in vec3  fWorldPos;
-flat in ivec3  fBlockOrigin;
-in vec3  fTint;
-in float fUseOverlay;
-in float f_ao;
+struct UVRect
+{
+    vec2 _min;
+    vec2 _max;
+};
 
-uniform sampler2D u_atlas;   // unit 2
+uniform sampler2D u_atlas;
 
-// Directional light
+// Directional lighting
 uniform vec3 u_lightDir;
 uniform vec3 u_ambient;
 uniform vec3 u_diffuse;
 
+// Block selection highlight
 uniform bool  u_isSelected;
 uniform ivec3 u_selectedBlock;
+
+// Runtime feature toggles
 uniform bool u_isAOEnabled;
+
+in vec3  fWorldPos;
+in vec2  fUV;
+in vec3  fTint;
+in float fAo;
+
+flat in uint fUseOverlay;
+flat in uint fNormalIndex;
+flat in uint fTileBase;
+flat in uint fTileOverlay;
 
 out vec4 FragColor;
 
-float FaceBrightness(vec3 normal) {
-    float sides = 1.0f;
-    if (normal.y >  0.5f) return 1.3f;          // top — full sky
-    if (normal.y < -0.5f) return 0.50f;         // bottom — never sees sky
-    if (abs(normal.x) > 0.5f) return sides;     // X sides
-    return sides;                               // Z sides
+// Face normals:
+// +Y -Y +X -X +Z -Z
+const vec3 NORMALS[6] = vec3[6](
+    vec3( 0.0f,  1.0f,  0.0f),
+    vec3( 0.0f, -1.0f,  0.0f),
+
+    vec3( 1.0f,  0.0f,  0.0f),
+    vec3(-1.0f,  0.0f,  0.0f),
+
+    vec3( 0.0f,  0.0f,  1.0f),
+    vec3( 0.0f,  0.0f, -1.0f)
+);
+
+// Convert greedy-mesh UVs into atlas UVs
+// fract() repeats the texture across merged quads
+vec2 tileUV(vec2 tileLocal, vec2 tileMin, vec2 tileMax)
+{
+    return tileMin + fract(tileLocal) * (tileMax - tileMin);
 }
 
-void main() {
-    // Sample texture by block type
-    vec4 base = texture(u_atlas, fBaseUV);
+// Recover the block owning this fragment
+// Used by the block selection highlight
+ivec3 fragBlockPos()
+{
+    return ivec3(floor(fWorldPos - NORMALS[fNormalIndex] * 0.01f));
+}
 
-    if (base.a < 0.5)
-       discard;
+// Atlas tile lookup (16x16 atlas)
+UVRect Tile(uint i)
+{
+    const float TILE_W = 0.0625f;
+    const float TILE_H = 0.0625f;
 
-    if(fUseOverlay > 0.5f)
+    uint col = i % 16u;
+    uint row = i / 16u;
+
+    float u0 = float(col) * TILE_W;
+    float v0 = 1.0f - (float(row) + 1.0f) * TILE_H;
+
+    UVRect uv;
+    uv._min = vec2(u0, v0);
+    uv._max = vec2(u0 + TILE_W, v0 + TILE_H);
+
+    return uv;
+}
+
+void main()
+{
+    // Fetch atlas rectangles
+    UVRect baseUV    = Tile(fTileBase);
+    UVRect overlayUV = Tile(fTileOverlay);
+
+    vec2 baseTileMin    = baseUV._min;
+    vec2 baseTileMax    = baseUV._max;
+
+    vec2 overlayTileMin = overlayUV._min;
+    vec2 overlayTileMax = overlayUV._max;
+
+    // Base texture sample
+    vec2 atlasUV = tileUV(fUV, baseTileMin, baseTileMax);
+
+    // Preserve mipmap correctness when repeating UVs
+    vec2 tileSize = baseTileMax - baseTileMin;
+    vec2 dx = dFdx(fUV) * tileSize;
+    vec2 dy = dFdy(fUV) * tileSize;
+
+    vec4 baseTex = textureGrad(u_atlas, atlasUV, dx, dy);
+
+    if (baseTex.a < 0.1f)
+        discard;
+
+    vec3 color = baseTex.rgb;
+
+    // Overlay texture (grass sides, etc.)
+    if (fUseOverlay == 1u)
     {
-        vec4 overlay = texture(u_atlas, fOverlayUV);
-        vec3 tinted = overlay.rgb * fTint;
-        base.rgb = mix(base.rgb, tinted, overlay.a);
+        vec2 overlayAtlasUV = tileUV(fUV, overlayTileMin, overlayTileMax);
+        vec2 overlaySize = overlayTileMax - overlayTileMin;
+        vec2 overlayDx = dFdx(fUV) * overlaySize;
+        vec2 overlayDy = dFdy(fUV) * overlaySize;
+        vec4 overlayTex = textureGrad(u_atlas, overlayAtlasUV, overlayDx, overlayDy);
+
+        color = mix(color, overlayTex.rgb * fTint, overlayTex.a);
     }
     else
     {
-        base.rgb *= fTint;
+        color *= fTint;
     }
-    
-    // Simple directional light
-    float face = FaceBrightness(fNormal);
-    float diff = max(dot(normalize(fNormal), -normalize(u_lightDir)), 0.0);
-    
-    // Face is base, diffuse adds on top — not stacked multipliers
-    vec3 lighting = u_ambient * face + u_diffuse * diff;
 
-    // Highlight selected block
-    if(u_isSelected)
-        if(ivec3(fBlockOrigin) == u_selectedBlock)
-            base.rgb /= 0.85f;
+    // Flat per-face directional lighting
+    float NdotL = max(dot(normalize(NORMALS[fNormalIndex]), -normalize(u_lightDir)), 0.0f);
 
-    FragColor = vec4(base.rgb * lighting, base.a);
+    color *= u_ambient + u_diffuse * NdotL;
 
-    if(u_isAOEnabled)
+    // Ambient occlusion
+    color *= mix(0.5f, 1.0f, fAo);
+
+    // Selected block highlight
+    if (u_isSelected && fragBlockPos() == u_selectedBlock)
     {
-        float ao_curved = f_ao * f_ao;              // square darkens corners more naturally
-        FragColor.rgb *= mix(0.7f, 1.0f, ao_curved);
+        color /= 0.85f;
     }
+
+    FragColor = vec4(color, baseTex.a);
 }
 
 #endif

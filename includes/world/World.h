@@ -21,7 +21,7 @@
 class Shader;
 
 class Chunk;
-class RaycastHit;
+struct RaycastHit;
 
 enum class BlockType : uint8_t;
 
@@ -133,7 +133,7 @@ private:
 	// World-player variables
     // TODO: Make this dynamic and make user to control - to be done later
     int m_viewDist = 8;			// Chunk load boundary
-    int m_unloadDist = 12;		// Chunk unload boundary
+    int m_unloadDist = 8;		// Chunk unload boundary
     glm::ivec2 m_lastPlayerChunk = { INT_MAX, INT_MAX };	// Previous frame player chunk pos
 
 	// Global atomic shutdown flag for workers to exit
@@ -143,8 +143,9 @@ private:
     [[nodiscard]] Chunk* GetChunk(int worldX, int worldZ);
     [[nodiscard]] const Chunk* GetChunk(int worldX, int worldZ) const;
 
-    // Mark the adjacent chunk dirty if the world coord passed is at a chunk boundary 
+    // Mark the adjacent chunk dirty if the world coord passed is at a chunk boundary (same with AO)
     void MarkAdjacentChunksDirty(int wx, int wy, int wz);
+    void MarkAdjacentChunksAODirty(int wx, int wy, int wz);
 
     // Returns height at location using Perlin noise
     [[nodiscard]] static float GetTerrainHeight(int wx, int wz);

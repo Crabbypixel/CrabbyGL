@@ -16,13 +16,13 @@ void main()
 in vec2 fUV;
 out vec4 FragColor;
 
-uniform sampler2D asciiTexture;
-uniform vec4 color;
+uniform sampler2D uAsciiTexture;
+uniform vec4 uColor;
 
 void main()
 {
-	float brightness = texture(asciiTexture, fUV).a;
+	float brightness = texture(uAsciiTexture, fUV).a;
 	if (brightness < 0.05) discard;
-	FragColor = vec4(color.rgb, color.a * brightness);
+	FragColor = vec4(uColor.rgb, uColor.a * brightness);
 }
 #endif

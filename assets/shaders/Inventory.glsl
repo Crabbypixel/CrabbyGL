@@ -18,11 +18,11 @@ out vec4 FragColor;
 
 in vec2 fTexCoord;
 
-uniform sampler2D inventoryTexture;
+uniform sampler2D uInventoryTexture;
 
 void main()
 {
-	FragColor = texture(inventoryTexture, fTexCoord);
+	FragColor = texture(uInventoryTexture, fTexCoord);
 
 	if(FragColor.a < 0.1f)
 		discard;

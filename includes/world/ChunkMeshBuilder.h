@@ -1,9 +1,14 @@
 #pragma once
+#include <glm/glm.hpp>
+
+#include "world/BlockRegistry.h"
+
 #include <vector>
 
 class Chunk;
 class ChunkMesh;
 struct Vertex;
+struct FaceCell;
 
 class ChunkMeshBuilder
 {
@@ -19,7 +24,7 @@ public:
     // Builds mesh for chunk, queries world for cross-chunk neighbors
     // The pointers point to neighboring chunks, caching for performance (no need of map lookups)
     static void Build(
-        const Chunk& chunk,
+        Chunk& chunk,
         const Chunk* nPX, const Chunk* nNX,
         const Chunk* nPZ, const Chunk* nNZ,
         const Chunk* nPX_PZ, const Chunk* nPX_NZ,
@@ -36,30 +41,41 @@ private:
         POS_Z = 4,
         NEG_Z = 5
     };
+    using GridArray = std::array<std::array<FaceCell, CX>, CY>;     // For heap-allocating the 2D grid array
 
-    static void AddFace(
+    static void AddTranslucentFace(
         std::vector<Vertex>& verts,
-        const glm::ivec3& pos,
+        const glm::ivec3& worldPos,
         const glm::ivec3& chunkLocalPos,
-        Face face,
-        BlockType type, const Chunk& chunk,
+        int face,
+        BlockType type,
+        const Chunk& chunk,
         const Chunk* nPX, const Chunk* nNX,
         const Chunk* nPZ, const Chunk* nNZ,
         const Chunk* nPX_PZ, const Chunk* nPX_NZ,
         const Chunk* nNX_PZ, const Chunk* nNX_NZ
     );
 
-    [[nodiscard]]
-    static bool IsSolidLocal(const Chunk& chunk,
-        int x, int y, int z,
-        const Chunk* nPX, const Chunk* nNX,
-        const Chunk* nPZ, const Chunk* nNZ,
-        const Chunk* nPX_PZ, const Chunk* nPX_NZ,
-        const Chunk* nNX_PZ, const Chunk* nNX_NZ
-    );
-
-    static void EmitCross(std::vector<Vertex>& verts,
+    static void EmitCross(
+        std::vector<Vertex>& verts,
         const glm::ivec3& worldPos,
         BlockType type
+    );
+
+    static void EmitGreedyQuad(
+        int face, int layer,
+        int row0, int col0, int H, int W,
+        const GridArray& grid,
+        int chunkWX, int chunkWZ,
+        std::vector<Vertex>& out);
+
+    static void BuildLayer(
+        Chunk& chunk,
+        const Chunk* nPX, const Chunk* nNX,
+        const Chunk* nPZ, const Chunk* nNZ,
+        const Chunk* nPX_PZ, const Chunk* nPX_NZ,
+        const Chunk* nNX_PZ, const Chunk* nNX_NZ,
+        int face, int layer, int chunkWX, int chunkWZ,
+        std::vector<Vertex>& out
     );
 };

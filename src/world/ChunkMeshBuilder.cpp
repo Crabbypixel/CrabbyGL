@@ -1,160 +1,425 @@
+// ChunkMeshBuilder.cpp — Binary Greedy Meshing
+//
+// ALGORITHM OVERVIEW
+// // ===============
+// For each face direction (6) and each layer along the normal axis:
+//   1. Build Cell Grid: scan every (row, col) in the layer.
+//      Each visible opaque face gets a FaceCell with:
+//        > key   — packed {blockType, ao[4], useOverlay, flip} identical key ⟹ safe to merge
+//        > ao[4] — raw [0..3] AO per vertex (same across all merged cells)
+//        > type  — for texture/tint lookup at emit time
+//      Simultaneously build rowMask[row] — a uint16_t bitmask where bit col
+//      is set iff grid[row][col].key != 0.
+//
+//   2. Binary Greed Sweep:
+//      For each row:
+//        while rowMask[row] != 0:
+//          col = ctz(rowMask[row] <- O(1) jump to first unprocessed bit
+//          W   = run of consecutive 1-bits with same key starting at col
+//          H   = consecutive rows where the W-wide run exists with the same key
+//          emit one quad for (layer, row, col, H, W)
+//          clear consumed bits from rowMask
+//
+// WHY uint16_t bitmasks?
+//   CX = CZ = 16 always. The "col" dimension (Z for Y-faces, Z for X-faces,
+//   X for Z-faces) is always 16 wide -> fits exactly in uint16_t.
+//   "row" dimension is CX=16 for Y-faces or CY=256 for X/Z-faces.
+//   We always have 16-bit masks regardless of face direction.
+//
+// AO + Greedy compatibility
+//   Two faces merge only if ALL of {blockType, ao[0..3], useOverlay, flip}
+//   are identical (packed into key). This preserves AO visual fidelity at the
+//   cost of ~30-40% fewer merges vs. ignoring AO — an acceptable trade-off
+//   since large uniform surfaces (the common case) still merge perfectly.
+//
+//   Because all cells in a merged rectangle share the same key (same ao[]),
+//   the 4 outer-corner AO values are just ref.ao[0..3] directly — no per-corner
+//   block lookup needed.
+//
+// UB Tiling
+//   Tile-local UV goes 0..W (col direction) × 0..H (row direction).
+//   Shader samples: atlasUV = uvTileMin + fract(uv) * (uvTileMax - uvTileMin)
+//   This tiles the 16×16 atlas tile W×H times across the merged quad.
+//   Col UV is inverted for negative-normal faces (−Y, −X, −Z) to preserve
+//   the original winding-order UV orientation.
+//
+// Non-opaque blocks
+//   Translucent (glass, leaves) and cross (flowers, saplings) blocks bypass
+//   greedy and use the original per-face / EmitCross path unchanged.
+
 #include <glm/glm.hpp>
+#include <bit>          // std::countr_zero — C++20
+#include <cstring>      // memcpy
 
 #include "world/BlockRegistry.h"
 #include "world/Chunk.h"
 #include "rendering/ChunkMesh.h"
 #include "world/ChunkMeshBuilder.h"
 #include "world/World.h"
+#include "rendering/Vertex.h"
 
-// UV rect per face
-struct UVRect { glm::vec2 min, max; };
+// =========================================================================
+// Face geometry tables
+// =========================================================================
 
-// Atlas constants
-static constexpr float TILE_WIDTH = 16.0f;
-static constexpr float TILE_HEIGHT = 16.0f;
-static constexpr float TEXTURE_MAP_WIDTH = 256.0f;
-static constexpr float TEXTURE_MAP_HEIGHT = 256.0f;
-static constexpr float SCREEN_TILE_WIDTH = TILE_WIDTH / TEXTURE_MAP_WIDTH;      // 16/256 = 0.0625 — tile width
-static constexpr float SCREEN_TILE_HEIGHT = TILE_HEIGHT / TEXTURE_MAP_HEIGHT;   // 16/256 = 0.0625 — tile height
+// 6 faces: +Y −Y +X −X +Z −Z
+static const glm::ivec3 NORMALS[6] = {
+    { 0, 1, 0}, { 0,-1, 0},
+    { 1, 0, 0}, {-1, 0, 0},
+    { 0, 0, 1}, { 0, 0,-1}
+};
 
-// Get the position of texture block based on block type
-static UVRect Tile(int i)
+// Used for AO sampling only (unchanged from original)
+static const glm::ivec3 TANGENT_U[6] = {
+    {1,0,0},{1,0,0},  {0,0,1},{0,0,1},  {1,0,0},{1,0,0}
+};
+static const glm::ivec3 TANGENT_V[6] = {
+    {0,0,1},{0,0,1},  {0,1,0},{0,1,0},  {0,1,0},{0,1,0}
+};
+
+// 4 local vertex offsets per face — define winding order (CCW from outside)
+static const glm::ivec3 FACE_VERTS[6][4] = {
+    {{0,1,0},{1,1,0},{1,1,1},{0,1,1}},  // +Y
+    {{0,0,1},{1,0,1},{1,0,0},{0,0,0}},  // −Y
+    {{1,0,0},{1,0,1},{1,1,1},{1,1,0}},  // +X
+    {{0,0,1},{0,0,0},{0,1,0},{0,1,1}},  // −X
+    {{0,0,1},{1,0,1},{1,1,1},{0,1,1}},  // +Z
+    {{1,0,0},{0,0,0},{0,1,0},{1,1,0}}   // −Z
+};
+
+// =========================================================================
+// Axis configuration per face
+//
+// For each face we define three in/out axes:
+//   layerAxis — the axis the normal points along (we iterate layers along this)
+//   rowAxis   — first in-plane axis (up to CY=256 rows)
+//   colAxis   — second in-plane axis (always 16 wide -> uint16_t bitmask)
+//
+// Face/Axis  layerAxis rowAxis colAxis  normalDir layerCount rowCount
+// +Y           Y(1)     X(0)   Z(2)      +1       CY=256    CX=16
+// -Y           Y(1)     X(0)   Z(2)      -1       CY=256    CX=16
+// +X           X(0)     Y(1)   Z(2)      +1       CX=16     CY=256
+// -X           X(0)     Y(1)   Z(2)      -1       CX=16     CY=256
+// +Z           Z(2)     Y(1)   X(0)      +1       CZ=16     CY=256
+// -Z           Z(2)     Y(1)   X(0)      -1       CZ=16     CY=256
+// =========================================================================
+
+struct FaceAxis {
+    int layerAxis, rowAxis, colAxis;
+    int normalDir;
+    int layerCount, rowCount;
+};
+
+static constexpr FaceAxis FACE_AXES[6] = {
+    {1, 0, 2, +1, CY, CX},  // +Y
+    {1, 0, 2, -1, CY, CX},  // -Y
+    {0, 1, 2, +1, CX, CY},  // +X
+    {0, 1, 2, -1, CX, CY},  // -X
+    {2, 1, 0, +1, CZ, CY},  // +Z
+    {2, 1, 0, -1, CZ, CY},  // -Z
+};
+
+// =========================================================================
+// Per-face vertex layout
+// For a merged quad at (layer, row0, col0) with H rows and W cols, vertex k is at:
+//   world[rowAxis]   = row0 + (ROW_MAX[face][k] ? H : 0)
+//   world[colAxis]   = col0 + (COL_MAX[face][k] ? W : 0)
+//   world[layerAxis] = layer + (normalDir > 0 ? 1 : 0)
+//
+// Positive-normal faces start at (rmin,cmin); negative-normal faces
+// reverse the col order so winding stays CCW from outside
+//
+// UV derivation per face (verified against original FACE_VERTS):
+//   UV_ROW_IS_U: if true -> uv = (rowDelta, colUV); else -> uv = (colUV, rowDelta)
+//   UV_INV_COL:  if true -> colUV = W - colDelta (col reversed in UV space)
+//                else   -> colUV = colDelta
+// =========================================================================
+
+static constexpr bool ROW_MAX[6][4] = {
+    // v0    v1     v2     v3
+    {false, true,  true,  false},  // +Y
+    {false, true,  true,  false},  // -Y
+    {false, false, true,  true },  // +X
+    {false, false, true,  true },  // -X
+    {false, false, true,  true },  // +Z
+    {false, false, true,  true },  // -Z
+};
+
+static constexpr bool COL_MAX[6][4] = {
+    {false, false, true,  true },  // +Y   positive col
+    {true,  true,  false, false},  // -Y   col reversed (negative face)
+    {false, true,  true,  false},  // +X   positive col
+    {true,  false, false, true },  // -X   col reversed
+    {false, true,  true,  false},  // +Z   positive col
+    {true,  false, false, true },  // -Z   col reversed
+};
+
+// Y faces: uv = (rowDelta, colUV);  X/Z faces: uv = (colUV, rowDelta)
+static constexpr bool UV_ROW_IS_U[6] = { true, true, false, false, false, false };
+
+// Negative-normal faces reverse col in UV space to keep texture orientation
+static constexpr bool UV_INV_COL[6]  = { false, true, false, true, false, true };
+
+// =========================================================================
+// Face cell
+// =========================================================================
+struct alignas(4) FaceCell {
+    uint32_t  key;    // 0 = invisible; packed key used for merge decisions
+    uint8_t   ao[4];  // raw AO [0..3] for vertices 0..3
+    BlockType type;   // block type at this cell
+    uint8_t   _pad[2];
+};
+
+
+[[nodiscard]] static uint32_t MakeKey(
+    BlockType type, const uint8_t ao[4],
+    bool useOverlay, bool flip) noexcept
 {
-    const int SIZE = 16;
-    int col = i % SIZE;
-    int row = i / SIZE;
+    const uint32_t aoPacked =  ((uint32_t)ao[0] & 0x3)
+                            | (((uint32_t)ao[1] & 0x3) << 2)
+                            | (((uint32_t)ao[2] & 0x3) << 4)
+                            | (((uint32_t)ao[3] & 0x3) << 6);
 
-    float u0 = col * SCREEN_TILE_WIDTH;
-    float u1 = (col + 1) * SCREEN_TILE_WIDTH;
+    const uint32_t k = (uint32_t)(uint8_t)type
+                            | (aoPacked                    <<  8)
+                            | ((useOverlay ? 1u : 0u)      << 16)
+                            | ((flip       ? 1u : 0u)      << 17);
 
-    float v0 = 1.0f - (row + 1) * SCREEN_TILE_HEIGHT;
-    float v1 = 1.0f - row * SCREEN_TILE_HEIGHT;
-
-    return { { u0, v0 }, { u1, v1 } };
+    return k == 0u ? 1u : k;  // key=0 means invisible; shift non-zero AIR edge case
 }
 
-// 6 faces: +Y -Y +X -X +Z -Z
-// Add this to the current face to go to the neighboring block to that face
-// Each face = 4 verts -> 6 indices (2 tris) baked as 6 verts
-static constexpr glm::ivec3 NORMALS[6] = {
-    { 0, 1, 0}, { 0,-1, 0},         // +Y & -Y
-    { 1, 0, 0}, {-1, 0, 0},         // +X & -X
-    { 0, 0, 1}, { 0, 0,-1}          // +Z & -Z
-};
 
-// Tangent directions along the face surface (local U axis)
-static constexpr glm::ivec3 TANGENT_U[6] = {
-    {1, 0, 0}, {1, 0, 0},           // +Y & -Y
-    {0, 0, 1}, {0, 0, 1},           // +X & -X
-    {1, 0, 0}, {1, 0, 0},           // +Z & -Z
-};
-
-// Tangent directions along the face surface (local V axis)
-static constexpr glm::ivec3 TANGENT_V[6] = {
-    {0, 0, 1}, {0, 0, 1},           // +Y & -Y
-    {0, 1, 0}, {0, 1, 0},           // +X & -X
-    {0, 1, 0}, {0, 1, 0},           // +Z & -Z
-};
-
-// Quad verts per face (local offsets from block origin)
-static constexpr glm::ivec3 FACE_VERTS[6][4] = {
-    // +Y top
-    {{0,1,0},{1,1,0},{1,1,1},{0,1,1}},
-    // -Y bottom
-    {{0,0,1},{1,0,1},{1,0,0},{0,0,0}},
-
-    // +X right
-    {{1,0,0},{1,0,1},{1,1,1},{1,1,0}},
-    // -X left
-    {{0,0,1},{0,0,0},{0,1,0},{0,1,1}},
-
-    // +Z front
-    {{0,0,1},{1,0,1},{1,1,1},{0,1,1}},
-    // -Z back
-    {{1,0,0},{0,0,0},{0,1,0},{1,1,0}}
-};
-
-// Quad -> 2 tris (convert indices into 4-vert quad)
-static constexpr int TRI_IDX[6] = { 0,1,2, 0,2,3 };
-
-static constexpr int GetAOState(int side1, int side2, int corner) noexcept
+// =========================================================================
+// Helpers
+// =========================================================================
+static uint32_t PackRGBA(float r, float g, float b, float a) noexcept
 {
-    if (side1 + side2 == 2)
-        return 0;
+    // Clamp to [0.0, 1.0], multiply, add 0.5f for perfect rounding, then cast
+    uint32_t R = static_cast<uint32_t>((std::clamp(r, 0.0f, 1.0f) * 255.0f) + 0.5f);
+    uint32_t G = static_cast<uint32_t>((std::clamp(g, 0.0f, 1.0f) * 255.0f) + 0.5f);
+    uint32_t B = static_cast<uint32_t>((std::clamp(b, 0.0f, 1.0f) * 255.0f) + 0.5f);
+    uint32_t A = static_cast<uint32_t>((std::clamp(a, 0.0f, 1.0f) * 255.0f) + 0.5f);
 
+	// LE layout: R at lowest address -> GL reads as vec4.x. Correct on x86/ARM - little-endian platforms
+    // GL shader expects RGBA in uint, so this matches perfectly
+    return ((uint32_t)A << 24) | ((uint32_t)B << 16) | ((uint32_t)G << 8) | (uint32_t)R;
+}
+
+static uint8_t PackAO(const uint8_t ao[4]) noexcept
+{
+    return (ao[0] & 0x3)
+        | ((ao[1] & 0x3) << 2)
+        | ((ao[2] & 0x3) << 4)
+        | ((ao[3] & 0x3) << 6);
+}
+
+static void UnpackAO(uint8_t packed, uint8_t ao[4]) noexcept
+{
+    ao[0] = packed & 0x3;
+    ao[1] = (packed >> 2) & 0x3;
+    ao[2] = (packed >> 4) & 0x3;
+    ao[3] = (packed >> 6) & 0x3;
+}
+
+
+// =========================================================================
+// AO helpers 
+// =========================================================================
+
+static int GetAOState(int side1, int side2, int corner) noexcept
+{
+    if (side1 + side2 == 2) return 0;
     return 3 - (side1 + side2 + corner);
 }
 
-// We cannot access World's IsSolid(...) so we implement a similar function here
-// (x, y, z) are local chunk pos, may be -1 or CX/CZ for AO neighbor samples
-// Use GetUnchecked whenever possible so as to avoid redundant bounds checks
-bool ChunkMeshBuilder::IsSolidLocal(const Chunk& chunk, int x, int y, int z, const Chunk* nPX, const Chunk* nNX, const Chunk* nPZ, const Chunk* nNZ, const Chunk* nPX_PZ, const Chunk* nPX_NZ, const Chunk* nNX_PZ, const Chunk* nNX_NZ)
+// Checks opacity at chunk-local (x,y,z) with cross-chunk support for AO sampling
+// Used only for AO (corner chunks needed) — mirrors original IsSolidLocal exactly
+static bool IsSolidLocal(
+    const Chunk& chunk,
+    int x, int y, int z,
+    const Chunk* nPX, const Chunk* nNX,
+    const Chunk* nPZ, const Chunk* nNZ,
+    const Chunk* nPX_PZ, const Chunk* nPX_NZ,
+    const Chunk* nNX_PZ, const Chunk* nNX_NZ) noexcept
 {
-    if (y < 0 || y >= CY)
-        return false;
+    if (y < 0 || y >= CY) return false;
 
     if (x >= 0 && x < CX && z >= 0 && z < CZ)
         return IsOpaque(chunk.GetUnchecked(x, y, z));
 
-    // Side chunks
-    if (nPX && x >= CX && z >= 0 && z < CZ)
-        return IsOpaque(nPX->GetUnchecked(0, y, z));                    // RIGHT
-    else if (nNX && x < 0 && z >= 0 && z < CZ)
-        return IsOpaque(nNX->GetUnchecked(CX - 1, y, z));               // LEFT
-    else if (nPZ && z >= CZ && x >= 0 && x < CX)
-        return IsOpaque(nPZ->GetUnchecked(x, y, 0));                    // FORWARD
-    else if (nNZ && z < 0 && x >= 0 && x < CX)
-        return IsOpaque(nNZ->GetUnchecked(x, y, CZ - 1));               // BACK
+    if (nPX    && x >= CX   && z >= 0  && z < CZ) return IsOpaque(nPX->GetUnchecked(0,    y, z));
+    if (nNX    && x  <  0   && z >= 0  && z < CZ) return IsOpaque(nNX->GetUnchecked(CX-1, y, z));
+    if (nPZ    && z >= CZ   && x >= 0  && x < CX) return IsOpaque(nPZ->GetUnchecked(x,    y, 0));
+    if (nNZ    && z  <  0   && x >= 0  && x < CX) return IsOpaque(nNZ->GetUnchecked(x,    y, CZ-1));
+    if (nPX_PZ && x >= CX   && z >= CZ)           return IsOpaque(nPX_PZ->GetUnchecked(0,    y, 0));
+    if (nPX_NZ && x >= CX   && z  <  0)           return IsOpaque(nPX_NZ->GetUnchecked(0,    y, CZ-1));
+    if (nNX_PZ && x  <  0   && z >= CZ)           return IsOpaque(nNX_PZ->GetUnchecked(CX-1, y, 0));
+    if (nNX_NZ && x  <  0   && z  <  0)           return IsOpaque(nNX_NZ->GetUnchecked(CX-1, y, CZ-1));
 
-    // Corner chunks
-    else if (nPX_PZ && x >= CX && z >= CZ)
-        return IsOpaque(nPX_PZ->GetUnchecked(0, y, 0));                 // FORWARD-RIGHT
-    else if (nPX_NZ && x >= CX && z < 0)
-        return IsOpaque(nPX_NZ->GetUnchecked(0, y, CZ - 1));            // BACK-RIGHT
-    else if (nNX_PZ && x < 0 && z >= CZ)
-        return IsOpaque(nNX_PZ->GetUnchecked(CX - 1, y, 0));            // FORWARD-LEFT
-    else if (nNX_NZ && x < 0 && z < 0)
-        return IsOpaque(nNX_NZ->GetUnchecked(CX - 1, y, CZ - 1));       // BACK-LEFT
-    else
-        return false;
+    return false;
 }
 
-void ChunkMeshBuilder::EmitCross(std::vector<Vertex>& verts, const glm::ivec3& worldPos, BlockType type)
+// Checks opacity for face-visibility test — only needs 4 direct neighbors,
+// not corners (we never query a diagonal for visibility, only for AO).
+static bool IsNeighborOpaque(
+    const Chunk& chunk,
+    const Chunk* nPX, const Chunk* nNX,
+    const Chunk* nPZ, const Chunk* nNZ,
+    int x, int y, int z) noexcept
 {
-    const BlockDef& crossItem = GetDef(type);
-    UVRect uv = Tile(crossItem.faces[0]);
-    glm::vec3 tint = crossItem.tint;
+    if (y < 0 || y >= CY) return false;
 
-    // Map quad corners to atlas sub-region
-    glm::vec2 uvs[4] = {
-        { uv.min.x, uv.min.y },   // v0 bottom-left
-        { uv.max.x, uv.min.y },   // v1 bottom-right
-        { uv.max.x, uv.max.y },   // v2 top-right
-        { uv.min.x, uv.max.y },   // v3 top-left
+    if (x >= 0 && x < CX && z >= 0 && z < CZ) return IsOpaque(chunk.GetUnchecked(x, y, z));
+    if (x >= CX && nPX) return IsOpaque(nPX->GetUnchecked(0,    y, z));
+    if (x  <  0 && nNX) return IsOpaque(nNX->GetUnchecked(CX-1, y, z));
+    if (z >= CZ && nPZ) return IsOpaque(nPZ->GetUnchecked(x,    y, 0));
+    if (z  <  0 && nNZ) return IsOpaque(nNZ->GetUnchecked(x,    y, CZ-1));
+    return false;  // no neighbor chunk -> face is exposed to void -> visible
+}
+
+// Compute raw AO [0..3] for all 4 vertices of face at chunk-local chunkLocalBlockPos
+// Fills out AO[0..3] aligned with FACE_VERTS[face][0..3]
+static void ComputeAO(
+    const Chunk& chunk,
+    const Chunk* nPX, const Chunk* nNX,
+    const Chunk* nPZ, const Chunk* nNZ,
+    const Chunk* nPX_PZ, const Chunk* nPX_NZ,
+    const Chunk* nNX_PZ, const Chunk* nNX_NZ,
+    const glm::ivec3& chunkLocalBlockPos, int face,
+    uint8_t outAO[4]) noexcept
+{
+    const glm::ivec3& U = TANGENT_U[face];
+    const glm::ivec3& V = TANGENT_V[face];
+    const glm::ivec3& N = NORMALS[face];
+
+    for (int i = 0; i < 4; ++i)
+    {
+        const glm::ivec3& v = FACE_VERTS[face][i];
+        //const int du = (glm::dot(glm::vec3(v), glm::vec3(U)) > 0.5f) ?  1 : -1;
+        //const int dv = (glm::dot(glm::vec3(v), glm::vec3(V)) > 0.5f) ?  1 : -1;
+
+        const int du = (glm::dot(static_cast<glm::vec3>(v), static_cast<glm::vec3>(U)) > 0.5f) ? 1 : -1;
+        const int dv = (glm::dot(static_cast<glm::vec3>(v), static_cast<glm::vec3>(V)) > 0.5f) ? 1 : -1;
+
+        const glm::ivec3 base   = chunkLocalBlockPos + N;
+        const glm::ivec3 side1  = base + du * U;
+        const glm::ivec3 side2  = base + dv * V;
+        const glm::ivec3 corner = base + du * U + dv * V;
+
+        const int s1 = IsSolidLocal(chunk, side1.x, side1.y, side1.z,
+                                    nPX, nNX, nPZ, nNZ,
+                                    nPX_PZ, nPX_NZ, nNX_PZ, nNX_NZ);
+
+        const int s2 = IsSolidLocal(chunk, side2.x,  side2.y,  side2.z,
+                                    nPX, nNX, nPZ, nNZ,
+                                    nPX_PZ, nPX_NZ, nNX_PZ, nNX_NZ);
+
+        const int c  = IsSolidLocal(chunk, corner.x, corner.y, corner.z,
+                                    nPX, nNX, nPZ, nNZ,
+                                    nPX_PZ, nPX_NZ, nNX_PZ, nNX_NZ);
+
+        outAO[i] = static_cast<uint8_t>(GetAOState(s1, s2, c));
+    }
+}
+
+
+// =========================================================================
+// Kept for translucent blocks (glass/leaves)
+// Identical to original, updated to emit new Vertex fields
+// =========================================================================
+
+void ChunkMeshBuilder::AddTranslucentFace(
+    std::vector<Vertex>& verts,
+    const glm::ivec3& worldPos,
+    const glm::ivec3& chunkLocalPos,
+    int face,
+    BlockType type,
+    const Chunk& chunk,
+    const Chunk* nPX, const Chunk* nNX,
+    const Chunk* nPZ, const Chunk* nNZ,
+    const Chunk* nPX_PZ, const Chunk* nPX_NZ,
+    const Chunk* nNX_PZ, const Chunk* nNX_NZ)
+{
+    const BlockDef& blockInfo = GetDef(type);
+    const bool useOverlay     = blockInfo.useOverlay && face > 1;
+
+    const glm::vec2 baseUVs[4] = {
+        {0.0f, 0.0f},
+        {1.0f, 0.0f},
+        {1.0f, 1.0f},
+        {0.0f, 1.0f},
     };
 
-    glm::vec2 noOverlay[4] = { {0, 0} };
+    uint8_t aoRaw[4];
+    ComputeAO(chunk, nPX, nNX, nPZ, nNZ, nPX_PZ, nPX_NZ, nNX_PZ, nNX_NZ, chunkLocalPos, face, aoRaw);
 
-    static const glm::ivec3 CROSS_VERTS1[4] = { {0,0,1},{1,0,0},{1,1,0},{0,1,1} };
-    static const glm::ivec3 CROSS_VERTS2[4] = { {0,0,0},{1,0,1},{1,1,1},{0,1,0} };
-    static const glm::ivec3 DUMMY_NORMAL = { 0, 1, 0 };  // lighting unused for cross
+    const bool flip = (aoRaw[0] + aoRaw[2] > aoRaw[1] + aoRaw[3]);
+    const int tri[2][6] = {
+        {0,1,2, 0,2,3},  // normal
+        {0,1,3, 1,2,3},  // flipped
+    };
+    const int* idx = flip ? tri[1] : tri[0];
 
-    // Forward + reversed winding -> double-sided
-    constexpr int FWD[6] = { 0,1,2, 0,2,3 };
-    constexpr int REV[6] = { 0,2,1, 0,3,2 };
+    for (int i = 0; i < 6; ++i)
+    {
+        const int k = idx[i];
+
+        //packed: normal (3b), useOverlay(1b), ao(2b)
+		uint8_t packed = ((uint8_t)face & 0x7)                  // lowest 3 bits
+					   | ((useOverlay ? 1u : 0u) << 3)          // next bit
+					   | ((aoRaw[k] & 3u) << 4);                // next 2 bits
+
+        verts.emplace_back(Vertex{
+            .pos         = worldPos + FACE_VERTS[face][k],
+            .baseUV      = baseUVs[k],            // tile-local (0..1 for 1×1 face)
+            .tileBase    = (uint8_t)blockInfo.faces[face],
+            .tileOverlay = (uint8_t)blockInfo.overlay,
+            .packed      = packed,
+            .tint        = PackRGBA(blockInfo.tint.x, blockInfo.tint.y, blockInfo.tint.z, 1.0f),
+        });
+    }
+}
+
+
+// =========================================================================
+// EmitCross - from earlier version
+// =========================================================================
+
+void ChunkMeshBuilder::EmitCross(
+    std::vector<Vertex>& verts,
+    const glm::ivec3& worldPos,
+    BlockType type)
+{
+    const BlockDef& crossItem = GetDef(type);
+    const glm::vec3 tint     = crossItem.tint;
+
+    const glm::vec2 uvs[4] = {
+        {0.0f, 0.0f},
+        {1.0f, 0.0f},
+        {1.0f, 1.0f},
+        {0.0f, 1.0f},
+    };
+
+    static const glm::ivec3 CROSS_VERTS1[4] = {{0,0,1},{1,0,0},{1,1,0},{0,1,1}};
+    static const glm::ivec3 CROSS_VERTS2[4] = {{0,0,0},{1,0,1},{1,1,1},{0,1,0}};
+
+    constexpr int FWD[6] = {0,1,2, 0,2,3};
+    constexpr int REV[6] = {0,2,1, 0,3,2};
 
     auto emit = [&](const glm::ivec3 quad[4], const int idx[6]) {
         for (int i = 0; i < 6; ++i)
         {
+            uint8_t packed = ((uint8_t)0 & 0x7)
+                            | (false) << 3
+                            | ((uint8_t)1 & 0x3) << 4;
+
             verts.emplace_back(Vertex{
-                worldPos + quad[idx[i]],
-                uvs[idx[i]],
-                noOverlay[idx[i]],
-                DUMMY_NORMAL,
-                worldPos,
-                tint,
-                0.0f,   // no overlay
-                0.6f    // ao = full bright
+                .pos         = glm::vec3(worldPos + quad[idx[i]]),
+                .baseUV      = uvs[idx[i]],
+                .tileBase    = (uint8_t)crossItem.faces[0],
+                .tileOverlay = (uint8_t)0,
+                .packed      = packed, 
+                .tint        = PackRGBA(tint.x, tint.y, tint.z, 1.0f),
             });
         }
     };
@@ -163,227 +428,368 @@ void ChunkMeshBuilder::EmitCross(std::vector<Vertex>& verts, const glm::ivec3& w
     emit(CROSS_VERTS2, FWD);  emit(CROSS_VERTS2, REV);
 }
 
-void ChunkMeshBuilder::AddFace(std::vector<Vertex>& verts, const glm::ivec3& worldPos, const glm::ivec3& chunkLocalPos, Face face, BlockType type, const Chunk& chunk, const Chunk* nPX, const Chunk* nNX, const Chunk* nPZ, const Chunk* nNZ, const Chunk* nPX_PZ, const Chunk* nPX_NZ, const Chunk* nNX_PZ, const Chunk* nNX_NZ)
+
+// =========================================================================
+// Emits 6 vertices (2 triangles) for a merged H-row × W-col quad
+// `grid` is the CY×CX FaceCell array; ref cell is at [row0][col0]
+//
+// KEY INSIGHT: since all merged cells share the same key (same ao[4]),
+// ref.ao[] is the canonical AO for the entire quad. No per-corner lookup
+// =========================================================================
+void ChunkMeshBuilder::EmitGreedyQuad(
+    int face, int layer,
+    int row0, int col0, int H, int W,
+    const GridArray& grid,
+    int chunkWX, int chunkWZ,
+    std::vector<Vertex>& out)
 {
-    const BlockDef& blockInfo = GetDef(type);
+    const FaceAxis&  axes  = FACE_AXES[face];
+    const FaceCell&  ref = grid[row0][col0];
+    const BlockDef&  def = GetDef(ref.type);
+    const bool   useOverlay = def.useOverlay && face > 1;
+    
+    // Grass uses a green tint for its top and side overlay
+    // The bottom face is dirt and must remain untinted
+    uint32_t tint = (face == BOTTOM)
+        ? PackRGBA(1.0f, 1.0f, 1.0f, 1.0f) : PackRGBA(def.tint.x, def.tint.y, def.tint.z, 1.0f);
 
-    // Overlay logic (only for side faces like grass)
-    bool useOverlay = blockInfo.useOverlay && face > 1;
+    // Face-plane layer coord: positive normal, one step forward
+    const int layerFace = layer + (axes.normalDir > 0 ? 1 : 0);
 
-    // Base texture
-    const UVRect baseRect = Tile(blockInfo.faces[face]);
-    // Overlay texture
-    const UVRect overlayRect = useOverlay ? Tile(blockInfo.overlay) : UVRect{ {0,0},{0,0} };
+    // AO: all merged cells identical, use ref directly
+    const bool flip = (ref.ao[0] + ref.ao[2] > ref.ao[1] + ref.ao[3]);
 
-    // Map quad corners to atlas sub-region
-    glm::vec2 baseUVs[4] = {
-        {baseRect.min.x, baseRect.min.y},   // v0 bottom-left
-        {baseRect.max.x, baseRect.min.y},   // v1 bottom-right
-        {baseRect.max.x, baseRect.max.y},   // v2 top-right
-        {baseRect.min.x, baseRect.max.y},   // v3 top-left
-    };
-
-    glm::vec2 overlayUVs[4] = {
-        {overlayRect.min.x, overlayRect.min.y},   // v0 bottom-left
-        {overlayRect.max.x, overlayRect.min.y},   // v1 bottom-right
-        {overlayRect.max.x, overlayRect.max.y},   // v2 top-right
-        {overlayRect.min.x, overlayRect.max.y},   // v3 top-left
-    };
-
-    // Ambient Occlusion
-    float ao[4] = {};
-
-    glm::ivec3 U = TANGENT_U[face];
-    glm::ivec3 V = TANGENT_V[face];
-    glm::ivec3 N = NORMALS[face];
-
-    for (int i = 0; i < 4; ++i)
+    // Build 4 vertex positions and UVs
+    Vertex verts[4] = {};
+    for (int k = 0; k < 4; ++k)
     {
-        glm::ivec3 v = FACE_VERTS[face][i];
-        int du = (glm::dot(glm::vec3(v), glm::vec3(U)) > 0.5f) ? 1 : -1;
-        int dv = (glm::dot(glm::vec3(v), glm::vec3(V)) > 0.5f) ? 1 : -1;
+        const int rowDelta = ROW_MAX[face][k] ? H : 0;
+        const int colDelta = COL_MAX[face][k] ? W : 0;
 
-        // These are now in world coordinates
-        glm::ivec3 base = chunkLocalPos + NORMALS[face];
-        glm::ivec3 side1 = base + du * U;
-        glm::ivec3 side2 = base + dv * V;
-        glm::ivec3 corner = base + du * U + dv * V;
+        // Chunk-local coords -> world coords
+        int lc[3] = {0, 0, 0};
+        lc[axes.layerAxis] = layerFace;
+        lc[axes.rowAxis]   = row0 + rowDelta;
+        lc[axes.colAxis]   = col0 + colDelta;
 
-        int s1 = IsSolidLocal(chunk, side1.x, side1.y, side1.z, nPX, nNX, nPZ, nNZ, nPX_PZ, nPX_NZ, nNX_PZ, nNX_NZ);
-        int s2 = IsSolidLocal(chunk, side2.x, side2.y, side2.z, nPX, nNX, nPZ, nNZ, nPX_PZ, nPX_NZ, nNX_PZ, nNX_NZ);
-        int c = IsSolidLocal(chunk, corner.x, corner.y, corner.z, nPX, nNX, nPZ, nNZ, nPX_PZ, nPX_NZ, nNX_PZ, nNX_NZ);
+        verts[k].pos = {(float)(chunkWX + lc[0]), (float) lc[1], (float)(chunkWZ + lc[2])};
 
-        ao[i] = GetAOState(s1, s2, c);
+        // Tile-local UV:
+        //   Y  faces:  uv = (rowDelta, colUV)  — U=X,  V=Z
+        //   X/Z faces: uv = (colUV, rowDelta) — U=Z/X, V=Y
+        // colUV inverted for negative-normal faces to preserve texture orientation
+        const float colUV = UV_INV_COL[face] ? (float)(W - colDelta) : (float)colDelta;
+        const float rowUV = (float)rowDelta;
+        verts[k].baseUV      = UV_ROW_IS_U[face] ? glm::vec2{rowUV, colUV} : glm::vec2{colUV, rowUV};
+
+        verts[k].tileBase    = def.faces[face];
+        verts[k].tileOverlay = static_cast<uint8_t>(def.overlay);
+
+		uint8_t packed = ((uint8_t)face & 0x7) | (useOverlay << 3) | ((ref.ao[k] & 0x3) << 4);
+        verts[k].packed      = packed;
+        verts[k].tint        = tint;
     }
 
-    int tri[6];
+    // Emit triangles — flip diagonal based on AO to minimize gradient banding
+    static constexpr int TRI_NORM[6] = {0,1,2, 0,2,3};
+    static constexpr int TRI_FLIP[6] = {0,1,3, 1,2,3};
+    const int* tri = flip ? TRI_FLIP : TRI_NORM;
 
-    if (ao[0] + ao[2] > ao[1] + ao[3])
+    for (int i = 0; i < 6; ++i)
+        out.push_back(verts[tri[i]]);
+}
+
+
+// =========================================================================
+// Processes one face direction at one layer:
+//   1. Builds FaceCell grid + uint16_t rowMask[] bitmasks
+//   2. Greedy sweeps using ctz (count trailing zeros) for O(1) bit scanning
+// =========================================================================
+
+void ChunkMeshBuilder::BuildLayer(
+    Chunk& chunk,
+    const Chunk* nPX, const Chunk* nNX,
+    const Chunk* nPZ, const Chunk* nNZ,
+    const Chunk* nPX_PZ, const Chunk* nPX_NZ,
+    const Chunk* nNX_PZ, const Chunk* nNX_NZ,
+    int face, int layer,
+    int chunkWX, int chunkWZ,
+    std::vector<Vertex>& out)
+{
+    const FaceAxis& ax       = FACE_AXES[face];
+    const int       rowCount = ax.rowCount;   // 16 for Y, 256 for X/Z
+    const int       colCount = CX;            // always 16
+
+    // Thread-local grid reused across all BuildLayer calls on this worker
+    // Allocate this on heap as FaceCell[CY][CZ] is huge
+    static thread_local auto grid_ptr = std::make_unique<GridArray>();
+    auto& grid = *grid_ptr;
+
+    // Row bitmasks: bit col set iff grid[row][col] is a visible, unclaimed face
+    uint16_t rowMask[CY] = {};
+    
+    // Rebild AO if chunk is AO dirty - instead of looking up atomic flag - which is slow
+    //const bool rebuildAO = chunk.aoDirty.load(std::memory_order_relaxed)
+    //       || (nPX    &&    nPX->aoDirty.load(std::memory_order_relaxed))
+    //       || (nNX    &&    nNX->aoDirty.load(std::memory_order_relaxed))
+    //       || (nNX    &&    nNX->aoDirty.load(std::memory_order_relaxed))
+    //       || (nNX    &&    nNX->aoDirty.load(std::memory_order_relaxed))
+		  // || (nPX_PZ && nPX_PZ->aoDirty.load(std::memory_order_relaxed))
+    //       || (nPX_NZ && nPX_NZ->aoDirty.load(std::memory_order_relaxed))
+    //       || (nNX_PZ && nNX_PZ->aoDirty.load(std::memory_order_relaxed))
+    //       || (nNX_NZ && nNX_NZ->aoDirty.load(std::memory_order_relaxed));
+
+    const bool rebuildAO = chunk.aoDirty
+                 || (nPX && nPX->aoDirty)
+                 || (nNX && nNX->aoDirty)
+                 || (nPZ && nPZ->aoDirty)
+                 || (nNZ && nNZ->aoDirty)
+                 || (nPX_PZ && nPX_PZ->aoDirty)
+                 || (nPX_NZ && nPX_NZ->aoDirty)
+                 || (nNX_PZ && nNX_PZ->aoDirty)
+                 || (nNX_NZ && nNX_NZ->aoDirty);
+
+    // =========================================================================
+    // Step 1: Populate cell grid
+    // =========================================================================
+
+    for (int row = 0; row < rowCount; ++row)
     {
-        // flipped
-        int tmp[6] = { 0, 1, 3, 1, 2, 3 };
-        std::copy(tmp, tmp + 6, tri);
-    }
-    else
-    {
-        // normal
-        int tmp[6] = { 0, 1, 2, 0, 2, 3 };
-        std::copy(tmp, tmp + 6, tri);
+        rowMask[row] = 0u;
+        for (int col = 0; col < colCount; ++col)
+        {
+            grid[row][col].key = 0u;
+
+            // Map (layer, row, col) -> chunk-local block (lx, ly, lz)
+            int lc[3] = {0, 0, 0};
+            lc[ax.layerAxis] = layer;
+            lc[ax.rowAxis]   = row;
+            lc[ax.colAxis]   = col;
+            const int localX = lc[0], localY = lc[1], localZ = lc[2];
+
+            // Skip non-opaque blocks
+            if (!IsOpaque(chunk.GetUnchecked(localX, localY, localZ)))
+                continue;
+
+            // Skip if face is occluded by an opaque neighbor
+            const glm::ivec3 neighborBlock = glm::ivec3(localX, localY, localZ) + NORMALS[face];
+
+            if (IsNeighborOpaque(chunk, nPX, nNX, nPZ, nNZ, neighborBlock.x, neighborBlock.y, neighborBlock.z))
+                continue;
+
+            // On demand AO computation
+            uint8_t ao[4];
+            if (rebuildAO)
+            {
+                // First build, compute fresh, write to cache
+                ComputeAO(chunk, nPX, nNX, nPZ, nNZ, nPX_PZ, nPX_NZ, nNX_PZ, nNX_NZ, { localX, localY, localZ }, face, ao);
+
+                chunk.aoCache[localX][localY][localZ][face] = PackAO(ao);
+            }
+            else
+            {
+                // Subsequent builds — read cache, zero ComputeAO cost
+                // Just extract AO from cache
+				UnpackAO(chunk.aoCache[localX][localY][localZ][face], ao);
+            }
+
+            const bool flip  = (ao[0] + ao[2] > ao[1] + ao[3]);
+            const BlockType bt = chunk.GetUnchecked(localX, localY, localZ);
+            const BlockDef& def = GetDef(bt);
+            const bool useOverlay = def.useOverlay && face > 1;
+
+            grid[row][col].key  = MakeKey(bt, ao, useOverlay, flip);
+            grid[row][col].type = bt;
+            memcpy(grid[row][col].ao, ao, 4);
+
+            rowMask[row] |= static_cast<uint16_t>(1u << col);
+        }
     }
 
-    for (int i : tri)
+    // =========================================================================
+    // Step 2: Greedy sweep
+    // =========================================================================
+
+    for (int row = 0; row < rowCount; ++row)
     {
-        verts.emplace_back(Vertex{
-            worldPos + FACE_VERTS[face][i],
-            baseUVs[i],                      // <- atlas sub-region now
-            overlayUVs[i],
-            NORMALS[face],
-            worldPos,
-            blockInfo.tint,
-            useOverlay ? 1.0f : 0.0f,
-            ao[i] / 3.0f
-        });
+        uint16_t mask = rowMask[row];
+
+        while (mask != 0u)
+        {
+            // O(1): jump to lowest set bit — start col of next unprocessed face
+            const int col = std::countr_zero(mask);
+            const uint32_t cellKey = grid[row][col].key;
+
+            // Expand width W: consecutive set bits at the same key
+            int W = 1;
+            while (col + W < colCount && ((mask >> (col + W)) & 1u) && grid[row][col + W].key == cellKey)
+                ++W;
+
+            // Bitmask representing the W-wide column run
+            const uint16_t runMask = static_cast<uint16_t>(((1u << W) - 1u) << col);
+
+            // Expand height H: find consecutive rows where:
+            // 1. All bits in runMask are set, AND
+            // 2. All cells have the same key
+            int H = 1;
+            while (row + H < rowCount)
+            {
+                if ((rowMask[row + H] & runMask) != runMask) break;
+
+                bool keysMatch = true;
+                for (int c = col; c < col + W && keysMatch; ++c)
+                    if (grid[row + H][c].key != cellKey) keysMatch = false;
+
+                if (!keysMatch)
+                    break;
+
+                ++H;
+            }
+
+            // Emit one quad for (H rows × W cols)
+            EmitGreedyQuad(face, layer, row, col, H, W, grid, chunkWX, chunkWZ, out);
+
+            // Clear consumed bits in every merged row
+            for (int r = row; r < row + H; ++r)
+                rowMask[r] &= ~runMask;
+
+            mask &= ~runMask;
+        }
     }
 }
 
-// Builds mesh for chunks
-void ChunkMeshBuilder::Build(const Chunk& chunk, const Chunk* nPX, const Chunk* nNX, const Chunk* nPZ, const Chunk* nNZ, const Chunk* nPX_PZ, const Chunk* nPX_NZ, const Chunk* nNX_PZ, const Chunk* nNX_NZ, std::vector<Vertex>& outVertices)
+// =========================================================================
+// Two passes:
+//   Pass 1 — non-opaque blocks (cross + translucent): old per-face logic
+//   Pass 2 — opaque blocks: binary greedy meshing per face per layer
+// =========================================================================
+void ChunkMeshBuilder::Build(
+    Chunk& chunk,
+    const Chunk* nPX, const Chunk* nNX,
+    const Chunk* nPZ, const Chunk* nNZ,
+    const Chunk* nPX_PZ, const Chunk* nPX_NZ,
+    const Chunk* nNX_PZ, const Chunk* nNX_NZ,
+    std::vector<Vertex>& outVertices)
 {
-    std::shared_lock lock(chunk.chunkMutex);
-    std::shared_lock lockPX = nPX ? std::shared_lock(nPX->chunkMutex) : std::shared_lock<std::shared_mutex>{};
-    std::shared_lock lockNX = nNX ? std::shared_lock(nNX->chunkMutex) : std::shared_lock<std::shared_mutex>{};
-    std::shared_lock lockPZ = nPZ ? std::shared_lock(nPZ->chunkMutex) : std::shared_lock<std::shared_mutex>{};
-    std::shared_lock lockNZ = nNZ ? std::shared_lock(nNZ->chunkMutex) : std::shared_lock<std::shared_mutex>{};
-	std::shared_lock lockPX_PZ = nPX_PZ ? std::shared_lock(nPX_PZ->chunkMutex) : std::shared_lock<std::shared_mutex>{};
-    std::shared_lock lockPX_NZ = nPX_NZ ? std::shared_lock(nPX_NZ->chunkMutex) : std::shared_lock<std::shared_mutex>{};
-    std::shared_lock lockNX_PZ = nNX_PZ ? std::shared_lock(nNX_PZ->chunkMutex) : std::shared_lock<std::shared_mutex>{};
-    std::shared_lock lockNX_NZ = nNX_NZ ? std::shared_lock(nNX_NZ->chunkMutex) : std::shared_lock<std::shared_mutex>{};
+    // SAFETY: shared_lock allows N concurrent readers — no deadlock possible between workers
+    // even with overlapping neighbor sets. Invariant: workers NEVER acquire unique_lock.
+    // Main thread write ops (SetUnchecked) only run when no active MeshJob holds that chunk
+    // (enforced by m_chunkMeshUsageGuards). Do NOT change to unique_lock without a full
+    // lock-ordering audit.
+    // 
+    // 1. Always lock the main chunk unconditionally
+    std::shared_lock<std::shared_mutex> lock(chunk.chunkMutex);
+
+    // 2. Declare optional locks for neighbors (initially empty/unlocked)
+    std::optional<std::shared_lock<std::shared_mutex>> lockPX, lockNX, lockPZ, lockNZ;
+    std::optional<std::shared_lock<std::shared_mutex>> lockPXPZ, lockPXNZ, lockNXPZ, lockNXNZ;
+
+    // 3. Construct and lock simultaneously only if the pointer is valid
+    if (nPX) lockPX.emplace(nPX->chunkMutex);
+    if (nNX) lockNX.emplace(nNX->chunkMutex);
+    if (nPZ) lockPZ.emplace(nPZ->chunkMutex);
+    if (nNZ) lockNZ.emplace(nNZ->chunkMutex);
+
+    if (nPX_PZ) lockPXPZ.emplace(nPX_PZ->chunkMutex);
+    if (nPX_NZ) lockPXNZ.emplace(nPX_NZ->chunkMutex);
+    if (nNX_PZ) lockNXPZ.emplace(nNX_PZ->chunkMutex);
+    if (nNX_NZ) lockNXNZ.emplace(nNX_NZ->chunkMutex);
 
     outVertices.clear();
 
-    // Chunk world coordinates (not global world coordinates)
-    int chunk_wx0 = chunk.chunkPos.x * CX;
-    int chunk_wz0 = chunk.chunkPos.y * CZ;
+    const int chunkWX = chunk.chunkPos.x * CX;
+    const int chunkWZ = chunk.chunkPos.y * CZ;
 
-    // Iterate over every block
+    // ================================================================================
+    // Pass 1: Non-opaque blocks (cross + translucent) - Create vertices normally
+    // ================================================================================
+
+    for (int y = 0; y < CY; ++y)
     for (int x = 0; x < CX; ++x)
+    for (int z = 0; z < CZ; ++z)
     {
-        for (int y = 0; y < CY; ++y)
+        const BlockType blockType = chunk.GetUnchecked(x, y, z);
+        const glm::ivec3 worldPos{ chunkWX + x, y, chunkWZ + z };
+        const glm::ivec3 localPos{ x, y, z };
+
+        // Skip if the block is air, which is most likely (most of the chunk is filled with air
+        if (blockType == BlockType::AIR) [[likely]]
+            continue;
+
+        // Cross blocks (flowers, saplings, grass, etc)
+        if (IsCross(blockType)) [[unlikely]]
         {
-            for (int z = 0; z < CZ; ++z)
+            EmitCross(outVertices, {chunkWX + x, y, chunkWZ + z}, blockType);
+            continue;
+        }
+
+        // Translucent blocks (glass, leaves)
+        if (IsTranslucent(blockType)) [[unlikely]]
+        {
+            for (int face = 0; face < 6; ++face)
             {
-                BlockType blockType = chunk.GetUnchecked(x, y, z);
-                if (blockType == BlockType::AIR) [[likely]]     // If air, continue
-                    continue;
+                const int neighborX = x + NORMALS[face].x;
+                const int neighborY = y + NORMALS[face].y;
+                const int neighborZ = z + NORMALS[face].z;
 
-                // Cross item
-				else if (GetDef(blockType).flags & BLOCK_CROSS) [[unlikely]]
+                bool shouldRenderFace = true;
+
+                if (Chunk::InBounds(neighborX, neighborY, neighborZ))
                 {
-                    // Local world coordinates
-                    glm::ivec3 worldPos = glm::ivec3(chunk_wx0 + x, y, chunk_wz0 + z);
-                    EmitCross(outVertices, worldPos, blockType);
-                    continue;
+                    const BlockType neighborBlock = chunk.GetUnchecked(neighborX, neighborY, neighborZ);
+                    const bool isTranslucent = IsTranslucent(neighborBlock);
+                    const bool isSolid       = IsSolid(neighborBlock);
+
+                    shouldRenderFace = !((isSolid || isTranslucent) && !(isTranslucent && neighborBlock  != blockType));
                 }
-
-                // For rendering faces of translucent objects
-				else if (IsTranslucent(blockType)) [[unlikely]]
-                {
-                    // Local world coordinates
-                    glm::ivec3 worldPos = glm::ivec3(chunk_wx0 + x, y, chunk_wz0 + z);
-
-                    // Check all six faces
-                    for (int face = 0; face < 6; ++face)
-                    {
-                        int nx = x + NORMALS[face].x;
-                        int ny = y + NORMALS[face].y;
-                        int nz = z + NORMALS[face].z;
-
-                        bool shouldRenderFace = true;
-
-                        if (Chunk::InBounds(nx, ny, nz))
-                        {
-                            // Neighbor is inside this chunk — safe direct access
-                            auto neighbor = chunk.GetUnchecked(nx, ny, nz);
-
-                            bool isTranslucent = IsTranslucent(neighbor);
-                            bool isSolid = IsSolid(neighbor);
-
-                            // Render the face if the neighbor is solid, or if it is translucent of the same type.
-                            // Do NOT render if the neighbor is translucent and a different type (e.g., glass vs leaves).
-                            shouldRenderFace = !((isSolid || isTranslucent) && !(isTranslucent && neighbor != blockType));
-                        }
-                        else
-                        {
-                            BlockType neighbor;
-                            bool hasNeighbor = true;
-
-                            // Fetch neighbor from adjacent chunk
-                            if (nx < 0 && nNX)
-                                neighbor = nNX->GetUnchecked(CX - 1, ny, nz);
-                            else if (nx >= CX && nPX)
-                                neighbor = nPX->GetUnchecked(0, ny, nz);
-                            else if (nz < 0 && nNZ)
-                                neighbor = nNZ->GetUnchecked(nx, ny, CZ - 1);
-                            else if (nz >= CZ && nPZ)
-                                neighbor = nPZ->GetUnchecked(nx, ny, 0);
-                            else
-                                hasNeighbor = false;
-
-                            // Do the same here
-                            if (hasNeighbor)
-                            {
-                                bool isTranslucent = IsTranslucent(neighbor);
-                                bool isSolid = IsSolid(neighbor);
-
-                                shouldRenderFace = !((isSolid || isTranslucent) &&
-                                    !(isTranslucent && neighbor != blockType));
-                            }
-                            else
-                            {
-                                // No neighbor chunk -> face is exposed
-                                shouldRenderFace = true;
-                            }
-                        }
-
-                        if (shouldRenderFace)
-                            AddFace(outVertices, worldPos, glm::ivec3{ x, y, z }, (Face)face, blockType, chunk, nPX, nNX, nPZ, nNZ, nPX_PZ, nPX_NZ, nNX_PZ, nNX_NZ);
-                    }
-                }
-
-                // For rendering faces of opaque objects
                 else
                 {
-                    // Local world coordinates
-                    glm::ivec3 worldPos = glm::ivec3(chunk_wx0 + x, y, chunk_wz0 + z);
+                    BlockType neighborBlock{};
+                    bool hasNeighbor = true;
 
-                    // Check all six faces
-                    for (int face = 0; face < 6; ++face)
+                    if      (neighborX <  0  && nNX) neighborBlock = nNX->GetUnchecked(CX-1, neighborY, neighborZ);
+                    else if (neighborX >= CX && nPX) neighborBlock = nPX->GetUnchecked(0,    neighborY, neighborZ);
+                    else if (neighborZ <  0  && nNZ) neighborBlock = nNZ->GetUnchecked(neighborX, neighborY, CZ-1);
+                    else if (neighborZ >= CZ && nPZ) neighborBlock = nPZ->GetUnchecked(neighborX, neighborY, 0);
+                    else hasNeighbor = false;
+
+                    if (hasNeighbor)
                     {
-                        int nx = x + NORMALS[face].x;
-                        int ny = y + NORMALS[face].y;
-                        int nz = z + NORMALS[face].z;
-
-                        bool shouldRenderFace = true;
-
-                        if (Chunk::InBounds(nx, ny, nz))
-                        {
-                            // Neighbor is inside this chunk — safe direct access
-							shouldRenderFace = !IsOpaque(chunk.GetUnchecked(nx, ny, nz));
-                        }
-                        else
-                        {
-                            // Out of chunk bounds — query neighbor chunk
-                            if (nx < 0 && nNX) shouldRenderFace = !IsOpaque(nNX->GetUnchecked(CX - 1, ny, nz));
-                            else if (nx >= CX && nPX) shouldRenderFace = !IsOpaque(nPX->GetUnchecked(0, ny, nz));
-                            else if (nz < 0 && nNZ) shouldRenderFace = !IsOpaque(nNZ->GetUnchecked(nx, ny, CZ - 1));
-                            else if (nz >= CZ && nPZ) shouldRenderFace = !IsOpaque(nPZ->GetUnchecked(nx, ny, 0));
-                        }
-
-                        if (shouldRenderFace)
-                            AddFace(outVertices, worldPos, glm::ivec3{ x, y, z }, (Face)face, blockType, chunk, nPX, nNX, nPZ, nNZ, nPX_PZ, nPX_NZ, nNX_PZ, nNX_NZ);
+                        const bool isTranslucent = IsTranslucent(neighborBlock);
+                        const bool isSolid       = IsSolid(neighborBlock);
+                        shouldRenderFace = !((isSolid || isTranslucent) && !(isTranslucent && neighborBlock != blockType));
+                    }
+                    else 
+                    {
+                        shouldRenderFace = false;  // no neighbor -> face hidden
                     }
                 }
+
+                if (shouldRenderFace)
+                    AddTranslucentFace(outVertices, worldPos, localPos, static_cast<Face>(face), blockType, chunk, nPX, nNX, nPZ, nNZ, nPX_PZ, nPX_NZ, nNX_PZ, nNX_NZ);
             }
         }
+
+        // Opaque blocks are handled in Pass 2 (binary greedy meshing)
     }
+
+    // =========================================================================
+    // Pass 2: Opaque blocks — binary greedy meshing
+    // =========================================================================
+    // Outer loop order: face direction -> layer
+    // Inner loop (inside BuildLayer): row -> greedy col/height expansion
+    //
+    // Total layers processed: 6 × (CY + CX + CX + CZ + CZ) = 6 × (256+16+16+16+16)
+    // = worst case 1920 layer passes, each on a 16× (16 or 256) grid
+
+    for (int face = 0; face < 6; ++face)
+    {
+        const int layerCount = FACE_AXES[face].layerCount;
+        for (int layer = 0; layer < layerCount; ++layer)
+        {
+            BuildLayer(chunk, nPX, nNX, nPZ, nNZ, nPX_PZ, nPX_NZ, nNX_PZ, nNX_NZ, face, layer, chunkWX, chunkWZ, outVertices);
+        }
+    }
+
+    chunk.aoDirty = false;
 }

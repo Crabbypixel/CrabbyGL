@@ -105,7 +105,8 @@ void World::SetBlock(int worldX, int worldY, int worldZ, BlockType type)
 
     // TODO: Mark this & neighboring chunks dirty - this is the reason for seam issue in world physics, to be done later
     // NOTE: This still has a visual bug
-	MarkAdjacentChunksDirty(worldX, worldY, worldZ);
+    MarkAdjacentChunksDirty(worldX, worldY, worldZ);
+    MarkAdjacentChunksAODirty(worldX, worldY, worldZ);
 }
 
 // ───── World generation ────────────────────────────────────────────────────
@@ -132,8 +133,8 @@ void World::FillChunkData(Chunk& chunk, glm::ivec2 coord)
     // Try loading from disk first
     if (LoadChunkFromDisk(chunk, coord))
     {
-        chunk.dirty = true;
-        chunk.modified = false;
+        //chunk.dirty = true;
+        //chunk.modified = false;
         return;
     }
 
@@ -156,18 +157,27 @@ void World::FillChunkData(Chunk& chunk, glm::ivec2 coord)
             int   thickness = 4 + (int)((1.0f - n) * 10.0f);
             int   base = std::max(1, height - thickness);
 
-            chunk.blocks[x][0][z] = BlockType::BEDROCK;
-            for (int y = 1; y < base; ++y) chunk.blocks[x][y][z] = BlockType::STONE;
-            for (int y = base; y < height; ++y) chunk.blocks[x][y][z] = BlockType::DIRT;
-            chunk.blocks[x][height][z] = BlockType::GRASS_BLOCK;
+            chunk.SetUnchecked(x, 0, z, BlockType::BEDROCK);
+
+            for (int y = 1; y < base; ++y)
+                chunk.SetUnchecked(x, y, z, BlockType::STONE);
+
+            for (int y = base; y < height; ++y)
+                chunk.SetUnchecked(x, y, z, BlockType::DIRT);
+
+            chunk.SetUnchecked(x, height, z, BlockType::GRASS_BLOCK);
 
             if (cx * CX + x == 0 || cz * CZ + z == 0)
-                chunk.blocks[x][height + 1][z] = BlockType::BRICK;
+                chunk.SetUnchecked(x, height + 1, z, BlockType::BRICK);
         }
     }   
-
-    chunk.dirty = true;
-    chunk.modified = false;
+    
+	// Uncomment these lines to make all generated chunks dirty -> so that they can be stored to disk
+	// But this causes a huge performance drop because of the disk IO, so only enable this when you want
+    // to test the chunk saving/loading functionality
+    // 
+    //chunk.dirty = true;
+    //chunk.modified = false;
 }
 
 // ───── File IO ──────────────────────────────────────────────────
@@ -190,12 +200,7 @@ void World::SaveChunkToDisk(const Chunk& chunk)
         return;
     }
 
-    file.write(reinterpret_cast<const char*>(chunk.blocks), sizeof(chunk.blocks));
-
-    if (!file)
-    {
-        std::cerr << "Error writing chunk file: " << path << '\n';
-    }
+	chunk.Serialize(file);
 }
 
 bool World::LoadChunkFromDisk(Chunk& chunk, glm::ivec2& coord)
@@ -207,16 +212,11 @@ bool World::LoadChunkFromDisk(Chunk& chunk, glm::ivec2& coord)
     if (!file)
         return false;
 
-    file.read(reinterpret_cast<char*>(chunk.blocks), sizeof(chunk.blocks));
-
-    if (file.gcount() != sizeof(chunk.blocks))
+    if (!chunk.Deserialize(file))
     {
-        std::cerr << "Chunk file corrupted: " << path << '\n';
-
+        std::cerr << "Chunk file corrupted at: " << path << '\n';
         return false;
     }
-
-    chunk.chunkPos = coord;
 
     return true;
 }
@@ -278,7 +278,6 @@ bool World::PlaceBlock(const RaycastHit& hit, BlockType type)
     }
 
     SetBlock(target.x, target.y, target.z, type);
-    MarkAdjacentChunksDirty(target.x, target.y, target.z);
 
     return true;
 }
@@ -291,9 +290,38 @@ bool World::BreakBlock(const RaycastHit& hit)
     const BlockType& blockType = GetBlock(hit.blockPos.x, hit.blockPos.y, hit.blockPos.z);
 
     SetBlock(hit.blockPos.x, hit.blockPos.y, hit.blockPos.z, BlockType::AIR);
-    MarkAdjacentChunksDirty(hit.blockPos.x, hit.blockPos.y, hit.blockPos.z);
 
     return true;
+}
+
+void World::MarkAdjacentChunksAODirty(int wx, int wy, int wz)
+{
+    glm::ivec3 local = ChunkLocalCoord(wx, wy, wz);
+
+    const bool minX = (local.x == 0);
+    const bool maxX = (local.x == CX - 1);
+
+    const bool minZ = (local.z == 0);
+    const bool maxZ = (local.z == CZ - 1);
+
+    auto markAODirty = [&](int dx, int dz) {
+        if (Chunk* c = GetChunk(wx + dx, wz + dz))
+            c->aoDirty = true;
+    };
+
+    // Cross neighbors
+    if (minX) markAODirty(-1, 0);
+    if (maxX) markAODirty(1, 0);
+
+    if (minZ) markAODirty(0, -1);
+    if (maxZ) markAODirty(0, 1);
+
+    // Diagonal neighbors
+    if (minX && minZ) markAODirty(-1, -1);
+    if (minX && maxZ) markAODirty(-1, 1);
+
+    if (maxX && minZ) markAODirty(1, -1);
+    if (maxX && maxZ) markAODirty(1, 1);
 }
 
 void World::MarkAdjacentChunksDirty(int wx, int wy, int wz)
@@ -436,7 +464,8 @@ void World::DrawAll(const glm::mat4& proj, const glm::mat4& view)
     m_chunkShader->use();
 
     // Bind textures once — shared across all chunk draw calls
-    glActiveTexture(GL_TEXTURE1); glBindTexture(GL_TEXTURE_2D, m_atlasTexture);
+    glActiveTexture(GL_TEXTURE1);
+    glBindTexture(GL_TEXTURE_2D, m_atlasTexture);
 
     // Extract frustum planes
     m_frustum.Extract(proj * view);
@@ -544,7 +573,7 @@ void World::UpdateChunkStreaming(const glm::vec3& playerPos)
                 continue;               // Deferred, retry unloading this chunk next time when worker is done
         }
 
-        // Else, proceed with unloading (only modified chunks)
+        // Else, proceed with unloading (only modified chunk
         auto it = chunks.find(chunkCoord);
         if (it != chunks.end() && it->second->modified)
         {
@@ -579,6 +608,16 @@ void World::UpdateChunkStreaming(const glm::vec3& playerPos)
         }
     }
 
+	// Sort based on the distance to player - closer chunks get loaded first for better player experience
+    std::sort(
+        chunksToLoad.begin(),
+        chunksToLoad.end(),
+        [&playerChunkCoord](const glm::ivec2& a, const glm::ivec2& b)
+        {
+            return a.x * a.x + a.y * a.y < b.x * b.x + b.y * b.y;
+        }
+    );
+
     // Actually load
     {
         std::lock_guard<std::mutex> lockQ(m_chunkLoadJobMutex);
@@ -597,10 +636,16 @@ void World::UpdateChunkStreaming(const glm::vec3& playerPos)
             // Mark neighboring chunks dirty because faces at chunk borders depend on adjacent chunk data
             // When a chunk changes, neighbors may need to rebuild meshes for correct face culling
             // Hence mark them dirty so the renderer will re-build the neighbor chunk meshes
-            auto it = chunks.find(chunkCoord + glm::ivec2{ 1, 0 }); if (it != chunks.end()) it->second->dirty = true;
-                 it = chunks.find(chunkCoord + glm::ivec2{ 0, 1 }); if (it != chunks.end()) it->second->dirty = true;
-                 it = chunks.find(chunkCoord + glm::ivec2{-1, 0 }); if (it != chunks.end()) it->second->dirty = true;
-                 it = chunks.find(chunkCoord + glm::ivec2{ 0,-1 }); if (it != chunks.end()) it->second->dirty = true;
+            auto it = chunks.find(chunkCoord + glm::ivec2{ 1, 0 }); if (it != chunks.end()) { it->second->dirty = true; it->second->aoDirty = true; }
+                 it = chunks.find(chunkCoord + glm::ivec2{ 0, 1 }); if (it != chunks.end()) { it->second->dirty = true; it->second->aoDirty = true; }
+                 it = chunks.find(chunkCoord + glm::ivec2{-1, 0 }); if (it != chunks.end()) { it->second->dirty = true; it->second->aoDirty = true; }
+                 it = chunks.find(chunkCoord + glm::ivec2{ 0,-1 }); if (it != chunks.end()) { it->second->dirty = true; it->second->aoDirty = true; }
+
+            // Same for diagonal neighbors
+                 it = chunks.find(chunkCoord + glm::ivec2{ 1, 1 }); if (it != chunks.end()) { it->second->dirty = true; it->second->aoDirty = true; }
+                 it = chunks.find(chunkCoord + glm::ivec2{ 1,-1 }); if (it != chunks.end()) { it->second->dirty = true; it->second->aoDirty = true; }
+                 it = chunks.find(chunkCoord + glm::ivec2{-1, 1 }); if (it != chunks.end()) { it->second->dirty = true; it->second->aoDirty = true; }
+                 it = chunks.find(chunkCoord + glm::ivec2{-1,-1 }); if (it != chunks.end()) { it->second->dirty = true; it->second->aoDirty = true; }
         }
     }
     m_chunkLoadJobCV.notify_all();
@@ -620,11 +665,33 @@ void World::CommitGeneratedChunks()
     // Mark the chunks dirty for meshing
     for (auto& [coord, chunkPtr] : queued)
     {
-        chunks[coord] = std::move(chunkPtr);
+        // TODO
+        chunkPtr->dirty = true;
+        chunkPtr->modified = false;
+        chunkPtr->aoDirty = true;
 
+        chunks[coord] = std::move(chunkPtr);
 		m_chunkMeshes.try_emplace(coord);   // default construct mesh for this chunk
 
-        chunks[coord]->dirty = true;
+        // Re-dirty all 8 neighbours NOW (after chunks have been loaded) that 
+        // this chunk is actually in the live map.  UpdateChunkStreaming 
+        // already marked them dirty when  chunk was *queued*, but the 
+        // neighbours may have been re-meshed with null neighbour pointers 
+        // before we committed. This guarantees they rebuild with the correct neighbour data.
+        static constexpr glm::ivec2 NEIGHBORING_CHUNK_OFFSET[] = {
+			{1, 0}, {-1, 0}, {0, 1}, {0, -1},
+			{1, 1}, {1, -1}, {-1, 1}, {-1, -1}
+        };
+
+        for (auto& off : NEIGHBORING_CHUNK_OFFSET)
+        {
+            auto neighboringChunk = chunks.find(coord + off);
+            if (neighboringChunk != chunks.end())
+            {
+                neighboringChunk->second->dirty = true;
+                neighboringChunk->second->aoDirty = true;
+            }
+        }
 
         /*
          * Release the reservation AFTER promotion, not before.
