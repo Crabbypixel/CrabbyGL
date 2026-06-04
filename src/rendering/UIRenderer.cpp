@@ -190,7 +190,6 @@ static int GetIconIndex(BlockType t) noexcept
 		return 65;
 	case BlockType::BROWN_MUSHROOM:
 		return 66;
-
 	default:
 		std::cerr << "Unknown block type: " << (int)t << '\n';
 	}
