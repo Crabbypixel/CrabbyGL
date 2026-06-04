@@ -614,10 +614,7 @@ void World::UpdateChunkStreaming(const glm::vec3& playerPos)
         chunksToLoad.end(),
         [&playerChunkCoord](const glm::ivec2& a, const glm::ivec2& b)
         {
-            float da = glm::length(glm::vec2(a - playerChunkCoord));
-            float db = glm::length(glm::vec2(b - playerChunkCoord));
-
-            return da < db;
+            return a.x * a.x + a.y * a.y < b.x * b.x + b.y * b.y;
         }
     );
 
@@ -639,13 +636,12 @@ void World::UpdateChunkStreaming(const glm::vec3& playerPos)
             // Mark neighboring chunks dirty because faces at chunk borders depend on adjacent chunk data
             // When a chunk changes, neighbors may need to rebuild meshes for correct face culling
             // Hence mark them dirty so the renderer will re-build the neighbor chunk meshes
-            // Neighboring chunks
             auto it = chunks.find(chunkCoord + glm::ivec2{ 1, 0 }); if (it != chunks.end()) { it->second->dirty = true; it->second->aoDirty = true; }
                  it = chunks.find(chunkCoord + glm::ivec2{ 0, 1 }); if (it != chunks.end()) { it->second->dirty = true; it->second->aoDirty = true; }
                  it = chunks.find(chunkCoord + glm::ivec2{-1, 0 }); if (it != chunks.end()) { it->second->dirty = true; it->second->aoDirty = true; }
                  it = chunks.find(chunkCoord + glm::ivec2{ 0,-1 }); if (it != chunks.end()) { it->second->dirty = true; it->second->aoDirty = true; }
 
-            // Diagonal neighbors
+            // Same for diagonal neighbors
                  it = chunks.find(chunkCoord + glm::ivec2{ 1, 1 }); if (it != chunks.end()) { it->second->dirty = true; it->second->aoDirty = true; }
                  it = chunks.find(chunkCoord + glm::ivec2{ 1,-1 }); if (it != chunks.end()) { it->second->dirty = true; it->second->aoDirty = true; }
                  it = chunks.find(chunkCoord + glm::ivec2{-1, 1 }); if (it != chunks.end()) { it->second->dirty = true; it->second->aoDirty = true; }
@@ -675,10 +671,27 @@ void World::CommitGeneratedChunks()
         chunkPtr->aoDirty = true;
 
         chunks[coord] = std::move(chunkPtr);
-
 		m_chunkMeshes.try_emplace(coord);   // default construct mesh for this chunk
 
-        chunks[coord]->dirty = true;
+        // Re-dirty all 8 neighbours NOW (after chunks have been loaded) that 
+        // this chunk is actually in the live map.  UpdateChunkStreaming 
+        // already marked them dirty when  chunk was *queued*, but the 
+        // neighbours may have been re-meshed with null neighbour pointers 
+        // before we committed. This guarantees they rebuild with the correct neighbour data.
+        static constexpr glm::ivec2 NEIGHBORING_CHUNK_OFFSET[] = {
+			{1, 0}, {-1, 0}, {0, 1}, {0, -1},
+			{1, 1}, {1, -1}, {-1, 1}, {-1, -1}
+        };
+
+        for (auto& off : NEIGHBORING_CHUNK_OFFSET)
+        {
+            auto neighboringChunk = chunks.find(coord + off);
+            if (neighboringChunk != chunks.end())
+            {
+                neighboringChunk->second->dirty = true;
+                neighboringChunk->second->aoDirty = true;
+            }
+        }
 
         /*
          * Release the reservation AFTER promotion, not before.
