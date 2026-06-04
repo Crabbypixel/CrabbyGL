@@ -2,6 +2,7 @@
 
 #include <glm/glm.hpp>
 
+// Exactly 32 bytes per vertex, tightly packed for optimal GPU upload and cache performance
 struct Vertex
 {
     glm::vec3 pos;          // World-space vertex position
@@ -9,8 +10,9 @@ struct Vertex
 
     uint8_t   tileBase;     // Atlas tile for base texture
     uint8_t   tileOverlay;  // Atlas tile for overlay texture
-
-    uint8_t   packed;       // [0-2] normal, [3] overlay, [4-5] AO
+	uint8_t   packed;       // [0-2] normal, [3] overlay, [4-5] AO, [6-7] unused
+    uint8_t  _padding1;
 
     uint32_t  tint;         // RGBA8 tint color
+	uint32_t  _padding2;
 };

@@ -81,8 +81,6 @@ private:
 	float spaceTimer = 0.0f;
 	bool waitingForSecondTap = false;
 
-	// Ambient occlusion toggle
-	bool isAOEnabled = true;
 	bool shouldDrawAsWireframe = false;
 
 public:
@@ -326,9 +324,6 @@ public:
 		else
 			chunkMeshShader.setBool("u_isSelected", false);
 
-		chunkMeshShader.setBool("u_isAOEnabled", isAOEnabled);
-
-
 		// Draw world
 		glPolygonMode(GL_FRONT_AND_BACK, shouldDrawAsWireframe ? GL_LINE : GL_FILL);
 		world.DrawAll(matProjection, camera.getLookAt());
@@ -431,7 +426,6 @@ public:
 
 		ImGui::Text("Selected Block: %s", GetDef(inventory.GetHeldBlock()).name);
 		ImGui::Text("Raycast place position: %d %d %d", raycastPlacePos.x, raycastPlacePos.y, raycastPlacePos.z);
-		ImGui::Text("AO (H to toggle): %s", isAOEnabled ? "Yes" : "No");
 		ImGui::Text("Chunk borders (G to toggle): %s", chunkDebug.visible ? "Enabled" : "Disabled");
 
 		static int teleportX = 0;
@@ -493,10 +487,6 @@ public:
 				}
 			}
 		}
-
-		// Toggle Ambient Occlusion
-		if (GetKey('H').bPressed)
-			isAOEnabled = !isAOEnabled;
 
 		// Toggle rendering chunk borders
 		if (GetKey('G').bPressed)

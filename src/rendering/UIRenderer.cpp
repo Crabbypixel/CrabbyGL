@@ -113,20 +113,6 @@ static std::pair<glm::vec2, glm::vec2> AtlasUV(int tileIndex)
 
 static std::pair<glm::vec2, glm::vec2> ASCIICharUV(char ch)
 {
-	//constexpr int COLS = 16;
-	//constexpr float CELL_W = 1.0f / COLS;
-	//constexpr float CELL_H = 1.0f / 16.0f;
-	//constexpr int FIRST_CHAR = 0;
-
-	//int index = (unsigned char)ch - FIRST_CHAR;
-	//int col = index % COLS;
-	//int row = index / COLS;
-
-	//return {
-	//	{ col * CELL_W,          1.0f - (row + 1) * CELL_H },
-	//	{ (col + 1) * CELL_W,    1.0f - row * CELL_H       }
-	//};
-
 	static constexpr float TILE_WIDTH = 8.0f;
 	static constexpr float TILE_HEIGHT = 8.0f;
 	static constexpr float TEXTURE_MAP_WIDTH = 128.0f;
@@ -204,6 +190,9 @@ static int GetIconIndex(BlockType t) noexcept
 		return 65;
 	case BlockType::BROWN_MUSHROOM:
 		return 66;
+
+	default:
+		std::cerr << "Unknown block type: " << (int)t << '\n';
 	}
 }
 

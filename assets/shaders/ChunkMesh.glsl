@@ -20,7 +20,7 @@ out vec2  fUV;
 out vec3  fTint;
 out float fAo;
 
-flat out uint fUseOverlay;
+flat out uint fUseOverlay;          // GLSL version 330 doesn't support flat bools, so we use uint instead
 flat out uint fNormalIndex;
 flat out uint fTileBase;
 flat out uint fTileOverlay;
@@ -179,8 +179,7 @@ void main()
     color *= u_ambient + u_diffuse * NdotL;
 
     // Ambient occlusion
-    if (u_isAOEnabled)
-        color *= mix(0.5f, 1.0f, fAo);
+    color *= mix(0.5f, 1.0f, fAo);
 
     // Selected block highlight
     if (u_isSelected && fragBlockPos() == u_selectedBlock)

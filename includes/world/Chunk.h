@@ -16,20 +16,18 @@ class Chunk
 {
 private:
 	// Core block data
-	/*
-	  * TODO: Make this private and only accessible via Get / Set, but
-	  * that would require a lot of code changes so maybe later
-	
-	  * TODO: Maybe linearize this into a 1D array for better cache performance, but
-	  * that would require changing the block access code everywhere so maybe later
-	*/
-	BlockType blocks[CX][CY][CZ];
+	// Linearized access for better cache performance in meshing and serialization
+	// ** Z is the fastest moving axis, then X, then Y (YZX order) to optimize for horizontal locality during meshing **
+	std::array<BlockType, CHUNK_VOLUME> blocks{};
 
-	// Linearize
-	//std::array<BlockType, CHUNK_VOLUME> blocks{};
-	
+	// Index - YZX ordering
+	[[nodiscard]] static constexpr int GetIndex(int x, int y, int z) noexcept
+	{
+		return (y * CX * CZ) + (x * CZ) + z;
+	}
+
 public:
-	Chunk() {}
+	Chunk() = default;
 
 	Chunk(const Chunk&) = delete;
 	Chunk(Chunk&&) = delete;

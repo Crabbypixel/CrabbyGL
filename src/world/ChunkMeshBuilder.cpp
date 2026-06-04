@@ -200,6 +200,8 @@ static uint32_t PackRGBA(float r, float g, float b, float a) noexcept
     uint32_t B = static_cast<uint32_t>((std::clamp(b, 0.0f, 1.0f) * 255.0f) + 0.5f);
     uint32_t A = static_cast<uint32_t>((std::clamp(a, 0.0f, 1.0f) * 255.0f) + 0.5f);
 
+	// LE layout: R at lowest address -> GL reads as vec4.x. Correct on x86/ARM - little-endian platforms
+    // GL shader expects RGBA in uint, so this matches perfectly
     return ((uint32_t)A << 24) | ((uint32_t)B << 16) | ((uint32_t)G << 8) | (uint32_t)R;
 }
 
@@ -245,14 +247,14 @@ static bool IsSolidLocal(
     if (x >= 0 && x < CX && z >= 0 && z < CZ)
         return IsOpaque(chunk.GetUnchecked(x, y, z));
 
-    if (nPX    && x >= CX   && z >= 0  && z < CZ) return IsOpaque(nPX   ->GetUnchecked(0,     y, z));
-    if (nNX    && x  <  0   && z >= 0  && z < CZ) return IsOpaque(nNX   ->GetUnchecked(CX-1,  y, z));
-    if (nPZ    && z >= CZ   && x >= 0  && x < CX) return IsOpaque(nPZ   ->GetUnchecked(x,     y, 0));
-    if (nNZ    && z  <  0   && x >= 0  && x < CX) return IsOpaque(nNZ   ->GetUnchecked(x,     y, CZ-1));
-    if (nPX_PZ && x >= CX   && z >= CZ)           return IsOpaque(nPX_PZ->GetUnchecked(0,     y, 0));
-    if (nPX_NZ && x >= CX   && z  <  0)           return IsOpaque(nPX_NZ->GetUnchecked(0,     y, CZ-1));
-    if (nNX_PZ && x  <  0   && z >= CZ)           return IsOpaque(nNX_PZ->GetUnchecked(CX-1,  y, 0));
-    if (nNX_NZ && x  <  0   && z  <  0)           return IsOpaque(nNX_NZ->GetUnchecked(CX-1,  y, CZ-1));
+    if (nPX    && x >= CX   && z >= 0  && z < CZ) return IsOpaque(nPX->GetUnchecked(0,    y, z));
+    if (nNX    && x  <  0   && z >= 0  && z < CZ) return IsOpaque(nNX->GetUnchecked(CX-1, y, z));
+    if (nPZ    && z >= CZ   && x >= 0  && x < CX) return IsOpaque(nPZ->GetUnchecked(x,    y, 0));
+    if (nNZ    && z  <  0   && x >= 0  && x < CX) return IsOpaque(nNZ->GetUnchecked(x,    y, CZ-1));
+    if (nPX_PZ && x >= CX   && z >= CZ)           return IsOpaque(nPX_PZ->GetUnchecked(0,    y, 0));
+    if (nPX_NZ && x >= CX   && z  <  0)           return IsOpaque(nPX_NZ->GetUnchecked(0,    y, CZ-1));
+    if (nNX_PZ && x  <  0   && z >= CZ)           return IsOpaque(nNX_PZ->GetUnchecked(CX-1, y, 0));
+    if (nNX_NZ && x  <  0   && z  <  0)           return IsOpaque(nNX_NZ->GetUnchecked(CX-1, y, CZ-1));
 
     return false;
 }
@@ -293,8 +295,11 @@ static void ComputeAO(
     for (int i = 0; i < 4; ++i)
     {
         const glm::ivec3& v = FACE_VERTS[face][i];
-        const int du = (glm::dot(glm::vec3(v), glm::vec3(U)) > 0.5f) ?  1 : -1;
-        const int dv = (glm::dot(glm::vec3(v), glm::vec3(V)) > 0.5f) ?  1 : -1;
+        //const int du = (glm::dot(glm::vec3(v), glm::vec3(U)) > 0.5f) ?  1 : -1;
+        //const int dv = (glm::dot(glm::vec3(v), glm::vec3(V)) > 0.5f) ?  1 : -1;
+
+        const int du = (glm::dot(static_cast<glm::vec3>(v), static_cast<glm::vec3>(U)) > 0.5f) ? 1 : -1;
+        const int dv = (glm::dot(static_cast<glm::vec3>(v), static_cast<glm::vec3>(V)) > 0.5f) ? 1 : -1;
 
         const glm::ivec3 base   = chunkLocalBlockPos + N;
         const glm::ivec3 side1  = base + du * U;
@@ -522,6 +527,9 @@ void ChunkMeshBuilder::BuildLayer(
 
     // Row bitmasks: bit col set iff grid[row][col] is a visible, unclaimed face
     uint16_t rowMask[CY] = {};
+    
+    // Rebild AO if chunk is AO dirty - instead of looking up atomic flag - which is slow
+    const bool rebuildAO = chunk.aoDirty.load(std::memory_order_relaxed);
 
     // =========================================================================
     // Step 1: Populate cell grid
@@ -547,12 +555,13 @@ void ChunkMeshBuilder::BuildLayer(
 
             // Skip if face is occluded by an opaque neighbor
             const glm::ivec3 neighborBlock = glm::ivec3(localX, localY, localZ) + NORMALS[face];
+
             if (IsNeighborOpaque(chunk, nPX, nNX, nPZ, nNZ, neighborBlock.x, neighborBlock.y, neighborBlock.z))
                 continue;
 
             // On demand AO computation
             uint8_t ao[4];
-            if (chunk.aoDirty)
+            if (rebuildAO)
             {
                 // First build, compute fresh, write to cache
                 ComputeAO(chunk, nPX, nNX, nPZ, nNZ, nPX_PZ, nPX_NZ, nNX_PZ, nNX_NZ, { localX, localY, localZ }, face, ao);
@@ -644,6 +653,12 @@ void ChunkMeshBuilder::Build(
     const Chunk* nNX_PZ, const Chunk* nNX_NZ,
     std::vector<Vertex>& outVertices)
 {
+    // SAFETY: shared_lock allows N concurrent readers — no deadlock possible between workers
+    // even with overlapping neighbor sets. Invariant: workers NEVER acquire unique_lock.
+    // Main thread write ops (SetUnchecked) only run when no active MeshJob holds that chunk
+    // (enforced by m_chunkMeshUsageGuards). Do NOT change to unique_lock without a full
+    // lock-ordering audit.
+    // 
     // 1. Always lock the main chunk unconditionally
     std::shared_lock<std::shared_mutex> lock(chunk.chunkMutex);
 
@@ -651,7 +666,7 @@ void ChunkMeshBuilder::Build(
     std::optional<std::shared_lock<std::shared_mutex>> lockPX, lockNX, lockPZ, lockNZ;
     std::optional<std::shared_lock<std::shared_mutex>> lockPXPZ, lockPXNZ, lockNXPZ, lockNXNZ;
 
-    // 3. Construct and lock simultaneously only if the neighbor pointer is valid
+    // 3. Construct and lock simultaneously only if the pointer is valid
     if (nPX) lockPX.emplace(nPX->chunkMutex);
     if (nNX) lockNX.emplace(nNX->chunkMutex);
     if (nPZ) lockPZ.emplace(nPZ->chunkMutex);
@@ -671,8 +686,8 @@ void ChunkMeshBuilder::Build(
     // Pass 1: Non-opaque blocks (cross + translucent) - Create vertices normally
     // ================================================================================
 
-    for (int x = 0; x < CX; ++x)
     for (int y = 0; y < CY; ++y)
+    for (int x = 0; x < CX; ++x)
     for (int z = 0; z < CZ; ++z)
     {
         const BlockType blockType = chunk.GetUnchecked(x, y, z);
@@ -716,8 +731,8 @@ void ChunkMeshBuilder::Build(
 
                     if      (neighborX <  0  && nNX) neighborBlock = nNX->GetUnchecked(CX-1, neighborY, neighborZ);
                     else if (neighborX >= CX && nPX) neighborBlock = nPX->GetUnchecked(0,    neighborY, neighborZ);
-                    else if (neighborZ <  0  && nNZ) neighborBlock = nNZ->GetUnchecked(neighborX,   neighborY, CZ-1);
-                    else if (neighborZ >= CZ && nPZ) neighborBlock = nPZ->GetUnchecked(neighborX,   neighborY, 0);
+                    else if (neighborZ <  0  && nNZ) neighborBlock = nNZ->GetUnchecked(neighborX, neighborY, CZ-1);
+                    else if (neighborZ >= CZ && nPZ) neighborBlock = nPZ->GetUnchecked(neighborX, neighborY, 0);
                     else hasNeighbor = false;
 
                     if (hasNeighbor)
