@@ -14,6 +14,7 @@
 #include "world/World.h"
 #include "world/Chunk.h"
 #include "world/BlockRegistry.h"
+#include "world/LightingSystem.h"
 
 #include "player/Player.h"
 #include "player/Inventory.h"
