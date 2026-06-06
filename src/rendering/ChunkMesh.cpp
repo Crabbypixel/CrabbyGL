@@ -40,9 +40,13 @@ void ChunkMesh::Upload(const std::vector<Vertex>& vertices) noexcept
     glVertexAttribIPointer(4, 1, GL_UNSIGNED_BYTE, sizeof(Vertex), (void*)offsetof(Vertex, packed));
     glEnableVertexAttribArray(4);
 
-    // 5: tint (vec3)
-    glVertexAttribPointer(5, 4, GL_UNSIGNED_BYTE, GL_TRUE, sizeof(Vertex), (void*)offsetof(Vertex, tint));
+    // 5: light valye(uint8_t) - unsigned byte (4 bits sunlight, 4 bits torchlight)
+    glVertexAttribIPointer(5, 1, GL_UNSIGNED_BYTE, sizeof(Vertex), (void*)offsetof(Vertex, lightValue));
     glEnableVertexAttribArray(5);
+
+    // 6: tint (vec3)
+    glVertexAttribPointer(6, 4, GL_UNSIGNED_BYTE, GL_TRUE, sizeof(Vertex), (void*)offsetof(Vertex, tint));
+    glEnableVertexAttribArray(6);
 
     glBindVertexArray(0);
     valid = true;

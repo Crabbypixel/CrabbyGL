@@ -103,6 +103,10 @@ public:
     [[nodiscard]] bool PlaceBlock(const RaycastHit& hit, BlockType type);
     [[nodiscard]] bool BreakBlock(const RaycastHit& hit);
 
+    // Chunk access
+    [[nodiscard]] Chunk* GetChunk(int worldX, int worldZ);
+    [[nodiscard]] const Chunk* GetChunk(int worldX, int worldZ) const;
+
     // 1) Generate and unload chunks by sending jobs to chunk job threads
     void UpdateChunkStreaming(const glm::vec3& playerPos);
 
@@ -138,10 +142,6 @@ private:
 
 	// Global atomic shutdown flag for workers to exit
     std::atomic<bool> m_shutdown{ false };
-
-    // Internal chunk access
-    [[nodiscard]] Chunk* GetChunk(int worldX, int worldZ);
-    [[nodiscard]] const Chunk* GetChunk(int worldX, int worldZ) const;
 
     // Mark the adjacent chunk dirty if the world coord passed is at a chunk boundary (same with AO)
     void MarkAdjacentChunksDirty(int wx, int wy, int wz);

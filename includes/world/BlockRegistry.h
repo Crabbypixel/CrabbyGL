@@ -21,6 +21,7 @@ namespace Tiles
 	constexpr int PLANK = 10;
 	constexpr int SAND = 16;
 	constexpr int GRAVEL = 17;
+	constexpr int GLOWSTONE = 18;
 	constexpr int TREE_LOG_SIDES_2 = 22;
 	constexpr int GLASS = 11;
 	constexpr int SMOOTH_STONE = 12;
@@ -46,6 +47,7 @@ struct BlockDef
 	uint16_t flags;
 	float hardness;		// later for mining speed and tool requirements - to be done later
 	bool useOverlay;
+	uint8_t lightEmission;
 };
 
 enum BlockFlags : uint16_t

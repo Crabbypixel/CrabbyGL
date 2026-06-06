@@ -6,7 +6,8 @@ layout (location = 1) in vec2  aUV;
 layout (location = 2) in uint  aTileBase;
 layout (location = 3) in uint  aTileOverlay;
 layout (location = 4) in uint  aPacked;
-layout (location = 5) in vec4  aTint;
+layout (location = 5) in uint  aLightValue;
+layout (location = 6) in vec4  aTint;
 
 // Shared camera matrices
 layout (std140) uniform Matrices
@@ -184,7 +185,7 @@ void main()
     // Selected block highlight
     if (u_isSelected && fragBlockPos() == u_selectedBlock)
     {
-        color /= 0.85f;
+        color *= 1.2f;
     }
 
     FragColor = vec4(color, baseTex.a);

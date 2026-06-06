@@ -24,10 +24,15 @@ struct LightRemovalNode
 class LightingSystem
 {
 private:
+	World* m_world = nullptr;
 	std::queue<LightNode> m_lightBFSQueue;
 	std::queue<LightRemovalNode> m_lightRemovalBFSQueue;
-	std::queue<LightNode> m_addQueue;
-	std::queue<LightRemovalNode> m_removeQueue;
+
+	// Non-copyable, non-movable
+	LightingSystem(const LightingSystem&) = delete;
+	LightingSystem(LightingSystem&&) = delete;
+	LightingSystem& operator=(const LightingSystem&) = delete;
+	LightingSystem& operator=(LightingSystem&&) = delete;
 
 	// Light accessors
 	int  GetTorchLight(Chunk* chunk, int x, int y, int z);
@@ -36,11 +41,14 @@ private:
 	void SetSunlight(Chunk* chunk, int x, int y, int z, int val);
 
 	// BFS passes:
-	void PropagateTorch(World& world);
-	void RemoveTorch(World& world);
+	void PropagateTorch();
+	void RemoveTorch();
 
 public:
+	LightingSystem() = default;
+	void Init(World* world) { m_world = world; }
+
 	void NotifyBlockPlaced(int wx, int wy, int wz, BlockType type);
 	void NotifyBlockRemoved(int wx, int wy, int wz);
-	void Update(World& world);
+	void Update();
 };

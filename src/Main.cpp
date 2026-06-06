@@ -64,6 +64,7 @@ private:
 	// World
 	World world;
 	WorldPhysics worldPhysics;
+	LightingSystem lightingSystem;
 
 	// Chunk outlines for debugging
 	ChunkDebug chunkDebug;
@@ -139,6 +140,9 @@ public:
 		auto dt2 = std::chrono::system_clock::now();
 		float fTimeTaken = std::chrono::duration_cast<std::chrono::milliseconds>(dt2 - dt1).count();
 		std::cout << "Time taken to generate world: " << std::fixed << std::setprecision(2) << fTimeTaken / 1000.0f << " seconds" << std::endl;
+
+		// ───── Lighting ──────────────────────────────────────────────────
+		lightingSystem.Init(&world);
 
 		// ───── Shaders ──────────────────────────────────────────────────
 		InitShaders();
@@ -259,18 +263,19 @@ public:
 					for (int j = 200; j < 220; ++j)
 						world.SetBlock(i, 150, j, BlockType::GRAVEL);
 
-				world.SetBlock(0, 100, 0, BlockType::BROWN_MUSHROOM);
+				//world.SetBlock(0, 100, 0, BlockType::GLOWSTONE);
 			}
 		}
 
 		RaycastHit m_currentHit = RaycastDDA(camera.position, camera.front, world);
-		glm::ivec3 raycastPlacePos = m_currentHit.blockPos + m_currentHit.normal;
+		const glm::ivec3& raycastHitPos = m_currentHit.blockPos;
+		const glm::ivec3& raycastPlacePos = m_currentHit.blockPos + m_currentHit.normal;
 		glm::ivec3 playerPos = { (int)floor(player.GetPos().x), (int)floor(player.GetPos().y), (int)floor(player.GetPos().z)};
 
 		// Select block
 		if (!bIsPaused && shouldUpdateCamera && GetMouseButton(Mouse::MIDDLE).bPressed && m_currentHit.hit)
 		{
-			BlockType picked = world.GetBlock(m_currentHit.blockPos.x, m_currentHit.blockPos.y, m_currentHit.blockPos.z);
+			BlockType picked = world.GetBlock(raycastHitPos.x, raycastHitPos.y, raycastHitPos.z);
 			inventory.AddBlock(picked);
 		}
 
@@ -280,7 +285,10 @@ public:
 			bool isBlockBreakValid = world.BreakBlock(m_currentHit);
 
 			if (isBlockBreakValid)
-				worldPhysics.NotifyBlockChanged(m_currentHit.blockPos.x, m_currentHit.blockPos.y, m_currentHit.blockPos.z);
+			{
+				worldPhysics.NotifyBlockChanged(raycastHitPos.x, raycastHitPos.y, raycastHitPos.z);
+				lightingSystem.NotifyBlockRemoved(raycastHitPos.x, raycastHitPos.y, raycastHitPos.z);
+			}
 		}
 
 		// Place block
@@ -289,10 +297,15 @@ public:
 			bool isBlockPlaceValid = world.PlaceBlock(m_currentHit, inventory.GetHeldBlock());
 
 			if (isBlockPlaceValid)
+			{
 				worldPhysics.NotifyBlockChanged(raycastPlacePos.x, raycastPlacePos.y, raycastPlacePos.z);
+				lightingSystem.NotifyBlockPlaced(raycastPlacePos.x, raycastPlacePos.y, raycastPlacePos.z, inventory.GetHeldBlock());
+			}
 		}
 
+		// Update world physics & world lighting
 		worldPhysics.Update(dt, world);
+		lightingSystem.Update();
 
 		// ───── Rendering ───────────────────────────────────────────────
 		// Update chunk streaming state based on player position:

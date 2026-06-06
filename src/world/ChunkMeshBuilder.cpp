@@ -375,6 +375,7 @@ void ChunkMeshBuilder::AddTranslucentFace(
             .tileBase    = (uint8_t)blockInfo.faces[face],
             .tileOverlay = (uint8_t)blockInfo.overlay,
             .packed      = packed,
+            .lightValue  = chunk.lightMap[chunkLocalPos.x][chunkLocalPos.y][chunkLocalPos.z],
             .tint        = PackRGBA(blockInfo.tint.x, blockInfo.tint.y, blockInfo.tint.z, 1.0f),
         });
     }
@@ -418,7 +419,8 @@ void ChunkMeshBuilder::EmitCross(
                 .baseUV      = uvs[idx[i]],
                 .tileBase    = (uint8_t)crossItem.faces[0],
                 .tileOverlay = (uint8_t)0,
-                .packed      = packed, 
+                .packed      = packed,
+                .lightValue  = 0u,
                 .tint        = PackRGBA(tint.x, tint.y, tint.z, 1.0f),
             });
         }
@@ -487,6 +489,7 @@ void ChunkMeshBuilder::EmitGreedyQuad(
 
 		uint8_t packed = ((uint8_t)face & 0x7) | (useOverlay << 3) | ((ref.ao[k] & 0x3) << 4);
         verts[k].packed      = packed;
+        verts[k].lightValue  = 
         verts[k].tint        = tint;
     }
 

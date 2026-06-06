@@ -254,7 +254,6 @@ bool World::PlaceBlock(const RaycastHit& hit, BlockType type)
     if (IsSolid(target.x, target.y, target.z))
         return false;
 
-    // TODO
     // Log blocks have directional variants based on placement face
     const bool isLog = type == BlockType::TREE_LOG_Y ||
                        type == BlockType::TREE_LOG_X ||
