@@ -88,7 +88,7 @@ BlockType World::GetBlock(int worldX, int worldY, int worldZ) const
         return BlockType::AIR;
 
     auto l = ChunkLocalCoord(worldX, worldY, worldZ);
-    return chunk->GetUnchecked(l.x, l.y, l.z);
+    return chunk->Get(l.x, l.y, l.z);               // Locks before accessing
 }
 
 void World::SetBlock(int worldX, int worldY, int worldZ, BlockType type)
@@ -101,7 +101,7 @@ void World::SetBlock(int worldX, int worldY, int worldZ, BlockType type)
         return;
 
     auto l = ChunkLocalCoord(worldX, worldY, worldZ);
-    chunk->SetUnchecked(l.x, l.y, l.z, type);
+    chunk->Set(l.x, l.y, l.z, type);                // Locks before accessing
 
     // TODO: Mark this & neighboring chunks dirty - this is the reason for seam issue in world physics, to be done later
     // NOTE: This still has a visual bug
@@ -133,8 +133,6 @@ void World::FillChunkData(Chunk& chunk, glm::ivec2 coord)
     // Try loading from disk first
     if (LoadChunkFromDisk(chunk, coord))
     {
-        //chunk.dirty = true;
-        //chunk.modified = false;
         return;
     }
 
@@ -171,13 +169,6 @@ void World::FillChunkData(Chunk& chunk, glm::ivec2 coord)
                 chunk.SetUnchecked(x, height + 1, z, BlockType::BRICK);
         }
     }   
-    
-	// Uncomment these lines to make all generated chunks dirty -> so that they can be stored to disk
-	// But this causes a huge performance drop because of the disk IO, so only enable this when you want
-    // to test the chunk saving/loading functionality
-    // 
-    //chunk.dirty = true;
-    //chunk.modified = false;
 }
 
 // ───── File IO ──────────────────────────────────────────────────
@@ -403,14 +394,25 @@ void World::SyncRenderer()
     m_meshJobCV.notify_all();
 
     // Phase 2: Drain mesh staging, move the meshes from the staging region to local main thread memory
-    std::unordered_map<glm::ivec2, std::vector<Vertex>, IVec2Hash> ready;
+    // Amortized GPU vertex upload
+    const int MAX_UPLOADS_PER_FRAME = 4;
+    int uploadsThisFrame = 0;
+
+    std::vector<std::pair<glm::ivec2, std::vector<Vertex>>> chunksToUpload;
     {
         std::lock_guard<std::mutex> lock(m_meshStagingMutex);
-        ready.swap(m_meshStaging);
+
+        auto it = m_meshStaging.begin();
+        while (it != m_meshStaging.end() && uploadsThisFrame < MAX_UPLOADS_PER_FRAME)
+        {
+            chunksToUpload.push_back({ it->first, std::move(it->second) });
+            it = m_meshStaging.erase(it);
+            uploadsThisFrame++;
+        }
     }
 
     // Phase 3: Upload meshes to the GPU
-    for (auto& [coord, verts] : ready)
+    for (auto& [coord, verts] : chunksToUpload)
     {
         auto it = m_chunkMeshes.find(coord);
         if (it != m_chunkMeshes.end())
@@ -614,7 +616,9 @@ void World::UpdateChunkStreaming(const glm::vec3& playerPos)
         chunksToLoad.end(),
         [&playerChunkCoord](const glm::ivec2& a, const glm::ivec2& b)
         {
-            return a.x * a.x + a.y * a.y < b.x * b.x + b.y * b.y;
+            glm::ivec2 deltaA = a - playerChunkCoord;
+            glm::ivec2 deltaB = b - playerChunkCoord;
+            return deltaA.x * deltaA.x + deltaA.y * deltaA.y < deltaB.x * deltaB.x + deltaB.y * deltaB.y;
         }
     );
 
@@ -665,7 +669,13 @@ void World::CommitGeneratedChunks()
     // Mark the chunks dirty for meshing
     for (auto& [coord, chunkPtr] : queued)
     {
-        // TODO
+        // Uncomment these lines to make all generated chunks dirty -> so that they can be stored to disk
+        // But this causes a huge performance drop because of the disk IO, so only enable this when you want
+        // to test the chunk saving/loading functionality
+        // 
+        //chunk.dirty = true;
+        //chunk.modified = false;
+
         chunkPtr->dirty = true;
         chunkPtr->modified = false;
         chunkPtr->aoDirty = true;
@@ -817,8 +827,7 @@ void World::MeshWorkerLoop()
             if (m_shutdown && m_meshJobQueue.empty())
                 break;
 
-            // Pop out a mesh job from the queue
-            // for further processing: generate mesh
+            // Pop out a mesh job from the queue for further processing: generate mesh
             job = m_meshJobQueue.front();
             m_meshJobQueue.pop();
         }

@@ -260,7 +260,7 @@ static bool IsSolidLocal(
 }
 
 // Checks opacity for face-visibility test — only needs 4 direct neighbors,
-// not corners (we never query a diagonal for visibility, only for AO).
+// not corners (we never query a diagonal for visibility, only for AO)
 static bool IsNeighborOpaque(
     const Chunk& chunk,
     const Chunk* nPX, const Chunk* nNX,
@@ -269,7 +269,7 @@ static bool IsNeighborOpaque(
 {
     if (y < 0 || y >= CY) return false;
 
-    if (x >= 0 && x < CX && z >= 0 && z < CZ) return IsOpaque(chunk.GetUnchecked(x, y, z));
+    if (x >= 0 && x < CX &&  z >= 0 && z < CZ) return IsOpaque(chunk.GetUnchecked(x, y, z));
     if (x >= CX && nPX) return IsOpaque(nPX->GetUnchecked(0,    y, z));
     if (x  <  0 && nNX) return IsOpaque(nNX->GetUnchecked(CX-1, y, z));
     if (z >= CZ && nPZ) return IsOpaque(nPZ->GetUnchecked(x,    y, 0));
@@ -507,7 +507,7 @@ void ChunkMeshBuilder::EmitGreedyQuad(
 // =========================================================================
 
 void ChunkMeshBuilder::BuildLayer(
-    Chunk& chunk,
+    const Chunk& chunk,
     const Chunk* nPX, const Chunk* nNX,
     const Chunk* nPZ, const Chunk* nNZ,
     const Chunk* nPX_PZ, const Chunk* nPX_NZ,
@@ -528,26 +528,17 @@ void ChunkMeshBuilder::BuildLayer(
     // Row bitmasks: bit col set iff grid[row][col] is a visible, unclaimed face
     uint16_t rowMask[CY] = {};
     
-    // Rebild AO if chunk is AO dirty - instead of looking up atomic flag - which is slow
-    //const bool rebuildAO = chunk.aoDirty.load(std::memory_order_relaxed)
-    //       || (nPX    &&    nPX->aoDirty.load(std::memory_order_relaxed))
-    //       || (nNX    &&    nNX->aoDirty.load(std::memory_order_relaxed))
-    //       || (nNX    &&    nNX->aoDirty.load(std::memory_order_relaxed))
-    //       || (nNX    &&    nNX->aoDirty.load(std::memory_order_relaxed))
-		  // || (nPX_PZ && nPX_PZ->aoDirty.load(std::memory_order_relaxed))
-    //       || (nPX_NZ && nPX_NZ->aoDirty.load(std::memory_order_relaxed))
-    //       || (nNX_PZ && nNX_PZ->aoDirty.load(std::memory_order_relaxed))
-    //       || (nNX_NZ && nNX_NZ->aoDirty.load(std::memory_order_relaxed));
-
-    const bool rebuildAO = chunk.aoDirty
-                 || (nPX && nPX->aoDirty)
-                 || (nNX && nNX->aoDirty)
-                 || (nPZ && nPZ->aoDirty)
-                 || (nNZ && nNZ->aoDirty)
-                 || (nPX_PZ && nPX_PZ->aoDirty)
-                 || (nPX_NZ && nPX_NZ->aoDirty)
-                 || (nNX_PZ && nNX_PZ->aoDirty)
-                 || (nNX_NZ && nNX_NZ->aoDirty);
+    // Rebild AO if chunk is AO dirty - instead of looking up atomic flag everytime in loop
+    // - which is slow, so capture it once
+    const bool rebuildAO = chunk.aoDirty.load(std::memory_order_relaxed)
+                 || (nPX && nPX->aoDirty.load(std::memory_order_relaxed))
+                 || (nNX && nNX->aoDirty.load(std::memory_order_relaxed))
+                 || (nPZ && nPZ->aoDirty.load(std::memory_order_relaxed))
+                 || (nNZ && nNZ->aoDirty.load(std::memory_order_relaxed))
+           || (nPX_PZ && nPX_PZ->aoDirty.load(std::memory_order_relaxed))
+           || (nPX_NZ && nPX_NZ->aoDirty.load(std::memory_order_relaxed))
+           || (nNX_PZ && nNX_PZ->aoDirty.load(std::memory_order_relaxed))
+           || (nNX_NZ && nNX_NZ->aoDirty.load(std::memory_order_relaxed));
 
     // =========================================================================
     // Step 1: Populate cell grid
@@ -584,6 +575,7 @@ void ChunkMeshBuilder::BuildLayer(
                 // First build, compute fresh, write to cache
                 ComputeAO(chunk, nPX, nNX, nPZ, nNZ, nPX_PZ, nPX_NZ, nNX_PZ, nNX_NZ, { localX, localY, localZ }, face, ao);
 
+                // Compress ao and store into chunk
                 chunk.aoCache[localX][localY][localZ][face] = PackAO(ao);
             }
             else
@@ -664,7 +656,7 @@ void ChunkMeshBuilder::BuildLayer(
 //   Pass 2 — opaque blocks: binary greedy meshing per face per layer
 // =========================================================================
 void ChunkMeshBuilder::Build(
-    Chunk& chunk,
+    const Chunk& chunk,
     const Chunk* nPX, const Chunk* nNX,
     const Chunk* nPZ, const Chunk* nNZ,
     const Chunk* nPX_PZ, const Chunk* nPX_NZ,
@@ -678,9 +670,13 @@ void ChunkMeshBuilder::Build(
     // lock-ordering audit.
     // 
     // 1. Always lock the main chunk unconditionally
+    // This is a shared lock as ChunhMeshBuilder occasionally builds MUTABLE aoCache and write it into chunk class
+    // This file makes sure that it does not read neighboring chunks AO array
     std::shared_lock<std::shared_mutex> lock(chunk.chunkMutex);
 
     // 2. Declare optional locks for neighbors (initially empty/unlocked)
+    // Shared locks as CMB ONLY reads from the neighboring chunks
+    // GUARANTEE THAT CMB DOESN'T WRITE ANYTHING INTO NEIGHBORING CHUNKS
     std::optional<std::shared_lock<std::shared_mutex>> lockPX, lockNX, lockPZ, lockNZ;
     std::optional<std::shared_lock<std::shared_mutex>> lockPXPZ, lockPXNZ, lockNXPZ, lockNXNZ;
 
@@ -791,5 +787,7 @@ void ChunkMeshBuilder::Build(
         }
     }
 
+    // Safe: main thread's Set() thread-blocks on unique_lock until we release shared_lock.
+    // If a block changed mid-build, aoDirty=true is already set -> another rebuild follows.
     chunk.aoDirty = false;
 }

@@ -63,9 +63,9 @@ void LightingSystem::SetSunlight(Chunk* chunk, int x, int y, int z, int val)
 
 static constexpr uint16_t Encode(uint8_t x, uint8_t y, uint8_t z) noexcept
 {
-	assert(x >= 0 && x <= CX);
-	assert(y >= 0 && y <= CY);
-	assert(z >= 0 && z <= CZ);
+	assert(x >= 0 && x < CX);
+	assert(y >= 0 && y < CY);
+	assert(z >= 0 && z < CZ);
 
 	return ((uint16_t)x << 12) | ((uint16_t)y << 4) | (uint16_t)z;
 }

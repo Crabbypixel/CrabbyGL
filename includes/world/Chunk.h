@@ -17,10 +17,10 @@ class Chunk
 private:
 	// Core block data
 	// Linearized access for better cache performance in meshing and serialization
-	// ** Z is the fastest moving axis, then X, then Y (YZX order) to optimize for horizontal locality during meshing **
+	// ** Z is the fastest moving axis, then X, then Y (YXZ order) to optimize for horizontal locality during meshing **
 	std::array<BlockType, CHUNK_VOLUME> blocks{};
 
-	// Index - YZX ordering
+	// Index - YXZ ordering
 	[[nodiscard]] static constexpr int GetIndex(int x, int y, int z) noexcept
 	{
 		return (y * CX * CZ) + (x * CZ) + z;
@@ -28,41 +28,43 @@ private:
 
 	// Cached AO values for each block face (6 faces per block) to avoid redundant AO calculations during meshing
 	// TODO: Consider compressing this later - 50% memory reduction as AO values are [0..3], can pack 2 AO values per byte
-	uint8_t aoCache[CX][CY][CZ][6];
+	mutable uint8_t aoCache[CX][CY][CZ][6];
 
 	// Light buffer - most significant 4 bits for skylight, least significant 4 bits for block light
 	// Singular color (white) for block light, to be expanded later
 	// TODO: Maybe consider linearizing this
+	// IMP TODO: Add separate lightMutex for lightMap, doesn't stall chunk writes/reads as lightMap is constantly re-written
 	uint8_t lightMap[CX][CY][CZ];
 
-	// Friend class, they mainly access aoCache and lightMap respectively.
+	// Friend class, they mainly read/write aoCache and lightMap directly.
 	friend class ChunkMeshBuilder;
 	friend class LightingSystem;
 
 public:
 	Chunk() { memset(aoCache, 0, sizeof(aoCache)); memset(lightMap, 0, sizeof(lightMap)); }
-
 	Chunk(const Chunk&) = delete;
 	Chunk(Chunk&&) = delete;
 	Chunk& operator=(const Chunk&) = delete;
 	Chunk& operator=(Chunk&&) = delete;
 
+	// Mutex to protect blocks, aoCache & lightMap
 	mutable std::shared_mutex chunkMutex;
 
+	// World position of this chunk
 	glm::ivec2 chunkPos{0, 0};
 
 	// CRITICAL: Main thread owns the world state, workers CANNOT modify
 	bool dirty = true;				// Needs mesh rebuild
 	bool modified = false;			// Has unsaved changes (never cleared except after SaveChunkToDisk)
-	std::atomic<bool> aoDirty = true;			// For computing AO values
+	mutable std::atomic<bool> aoDirty = true;			// For computing AO values
 
 	[[nodiscard]] BlockType Get(int x, int y, int z) const noexcept;
 	[[nodiscard]] BlockType GetUnchecked(int x, int y, int z) const;
 	void Set(int x, int y, int z, BlockType type);
 	void SetUnchecked(int x, int y, int z, BlockType type);
 
-	void Serialize(std::ofstream& f) const;
-	[[nodiscard]] bool Deserialize(std::ifstream& f);
+	void Serialize(std::ofstream& outputStream) const;
+	[[nodiscard]] bool Deserialize(std::ifstream& inputStream);
 
 	// Range check
 	[[nodiscard]] static constexpr bool InBounds(int x, int y, int z) noexcept;
