@@ -167,13 +167,14 @@ struct alignas(4) FaceCell {
     uint32_t  key;    // 0 = invisible; packed key used for merge decisions
     uint8_t   ao[4];  // raw AO [0..3] for vertices 0..3
     BlockType type;   // block type at this cell
-    uint8_t   _pad[2];
+    uint8_t   lightValue;
+    uint8_t   _pad;
 };
 
 
 [[nodiscard]] static uint32_t MakeKey(
     BlockType type, const uint8_t ao[4],
-    bool useOverlay, bool flip) noexcept
+    bool useOverlay, bool flip, uint8_t lightValue) noexcept
 {
     const uint32_t aoPacked =  ((uint32_t)ao[0] & 0x3)
                             | (((uint32_t)ao[1] & 0x3) << 2)
@@ -183,7 +184,8 @@ struct alignas(4) FaceCell {
     const uint32_t k = (uint32_t)(uint8_t)type
                             | (aoPacked                    <<  8)
                             | ((useOverlay ? 1u : 0u)      << 16)
-                            | ((flip       ? 1u : 0u)      << 17);
+                            | ((flip       ? 1u : 0u)      << 17)
+                            | ((lightValue)                << 18);
 
     return k == 0u ? 1u : k;  // key=0 means invisible; shift non-zero AIR edge case
 }
@@ -295,9 +297,6 @@ static void ComputeAO(
     for (int i = 0; i < 4; ++i)
     {
         const glm::ivec3& v = FACE_VERTS[face][i];
-        //const int du = (glm::dot(glm::vec3(v), glm::vec3(U)) > 0.5f) ?  1 : -1;
-        //const int dv = (glm::dot(glm::vec3(v), glm::vec3(V)) > 0.5f) ?  1 : -1;
-
         const int du = (glm::dot(static_cast<glm::vec3>(v), static_cast<glm::vec3>(U)) > 0.5f) ? 1 : -1;
         const int dv = (glm::dot(static_cast<glm::vec3>(v), static_cast<glm::vec3>(V)) > 0.5f) ? 1 : -1;
 
@@ -489,7 +488,7 @@ void ChunkMeshBuilder::EmitGreedyQuad(
 
 		uint8_t packed = ((uint8_t)face & 0x7) | (useOverlay << 3) | ((ref.ao[k] & 0x3) << 4);
         verts[k].packed      = packed;
-        verts[k].lightValue  = 
+        verts[k].lightValue  = ref.lightValue;
         verts[k].tint        = tint;
     }
 
@@ -508,7 +507,6 @@ void ChunkMeshBuilder::EmitGreedyQuad(
 //   1. Builds FaceCell grid + uint16_t rowMask[] bitmasks
 //   2. Greedy sweeps using ctz (count trailing zeros) for O(1) bit scanning
 // =========================================================================
-
 void ChunkMeshBuilder::BuildLayer(
     const Chunk& chunk,
     const Chunk* nPX, const Chunk* nNX,
@@ -519,29 +517,28 @@ void ChunkMeshBuilder::BuildLayer(
     int chunkWX, int chunkWZ,
     std::vector<Vertex>& out)
 {
-    const FaceAxis& ax       = FACE_AXES[face];
-    const int       rowCount = ax.rowCount;   // 16 for Y, 256 for X/Z
-    const int       colCount = CX;            // always 16
+    // Extract axis rules based on face direction to treat any 3D slice as a 2D plane
+    const FaceAxis& ax = FACE_AXES[face];
+    const int       rowCount = ax.rowCount;
+    const int       colCount = CX;
 
-    // Thread-local grid reused across all BuildLayer calls on this worker
-    // Allocate this on heap as FaceCell[CY][CZ] is huge
+    // Static thread local allocation avoids hitting the OS heap allocator on every frame
     static thread_local auto grid_ptr = std::make_unique<GridArray>();
     auto& grid = *grid_ptr;
 
-    // Row bitmasks: bit col set iff grid[row][col] is a visible, unclaimed face
+    // Bitmasks where a set bit means a face is visible and needs to be processed
     uint16_t rowMask[CY] = {};
-    
-    // Rebild AO if chunk is AO dirty - instead of looking up atomic flag everytime in loop
-    // - which is slow, so capture it once
+
+    // Check all neighbor atomic dirty flags once using relaxed memory order to avoid loop stalls
     const bool rebuildAO = chunk.aoDirty.load(std::memory_order_relaxed)
-                 || (nPX && nPX->aoDirty.load(std::memory_order_relaxed))
-                 || (nNX && nNX->aoDirty.load(std::memory_order_relaxed))
-                 || (nPZ && nPZ->aoDirty.load(std::memory_order_relaxed))
-                 || (nNZ && nNZ->aoDirty.load(std::memory_order_relaxed))
-           || (nPX_PZ && nPX_PZ->aoDirty.load(std::memory_order_relaxed))
-           || (nPX_NZ && nPX_NZ->aoDirty.load(std::memory_order_relaxed))
-           || (nNX_PZ && nNX_PZ->aoDirty.load(std::memory_order_relaxed))
-           || (nNX_NZ && nNX_NZ->aoDirty.load(std::memory_order_relaxed));
+        || (nPX    && nPX->aoDirty.load(std::memory_order_relaxed))
+        || (nNX    && nNX->aoDirty.load(std::memory_order_relaxed))
+        || (nPZ    && nPZ->aoDirty.load(std::memory_order_relaxed))
+        || (nNZ    && nNZ->aoDirty.load(std::memory_order_relaxed))
+        || (nPX_PZ && nPX_PZ->aoDirty.load(std::memory_order_relaxed))
+        || (nPX_NZ && nPX_NZ->aoDirty.load(std::memory_order_relaxed))
+        || (nNX_PZ && nNX_PZ->aoDirty.load(std::memory_order_relaxed))
+        || (nNX_NZ && nNX_NZ->aoDirty.load(std::memory_order_relaxed));
 
     // =========================================================================
     // Step 1: Populate cell grid
@@ -554,49 +551,70 @@ void ChunkMeshBuilder::BuildLayer(
         {
             grid[row][col].key = 0u;
 
-            // Map (layer, row, col) -> chunk-local block (lx, ly, lz)
-            int lc[3] = {0, 0, 0};
+            // Map the 2D grid coordinates back into 3D chunk local space
+            int lc[3] = { 0, 0, 0 };
             lc[ax.layerAxis] = layer;
-            lc[ax.rowAxis]   = row;
-            lc[ax.colAxis]   = col;
+            lc[ax.rowAxis] = row;
+            lc[ax.colAxis] = col;
             const int localX = lc[0], localY = lc[1], localZ = lc[2];
 
-            // Skip non-opaque blocks
+            // Air blocks do not have faces to render
             if (!IsOpaque(chunk.GetUnchecked(localX, localY, localZ)))
                 continue;
 
-            // Skip if face is occluded by an opaque neighbor
+            // Skip drawing this face if it is entirely hidden by a solid neighbor block
             const glm::ivec3 neighborBlock = glm::ivec3(localX, localY, localZ) + NORMALS[face];
 
             if (IsNeighborOpaque(chunk, nPX, nNX, nPZ, nNZ, neighborBlock.x, neighborBlock.y, neighborBlock.z))
                 continue;
 
-            // On demand AO computation
+            // Calculate or fetch ambient occlusion values based on neighbor modifications
             uint8_t ao[4];
             if (rebuildAO)
             {
-                // First build, compute fresh, write to cache
+                // Structural neighborhood changed so calculate new AO values and update cache
                 ComputeAO(chunk, nPX, nNX, nPZ, nNZ, nPX_PZ, nPX_NZ, nNX_PZ, nNX_NZ, { localX, localY, localZ }, face, ao);
-
-                // Compress ao and store into chunk
                 chunk.aoCache[localX][localY][localZ][face] = PackAO(ao);
             }
             else
             {
-                // Subsequent builds — read cache, zero ComputeAO cost
-                // Just extract AO from cache
-				UnpackAO(chunk.aoCache[localX][localY][localZ][face], ao);
+                // Neighborhood is unchanged so read packed values straight from cache
+                UnpackAO(chunk.aoCache[localX][localY][localZ][face], ao);
             }
 
-            const bool flip  = (ao[0] + ao[2] > ao[1] + ao[3]);
+            // Flip quad diagonal setup if needed to prevent rendering artifacts
+            const bool flip = (ao[0] + ao[2] > ao[1] + ao[3]);
             const BlockType bt = chunk.GetUnchecked(localX, localY, localZ);
             const BlockDef& def = GetDef(bt);
             const bool useOverlay = def.useOverlay && face > 1;
 
-            grid[row][col].key  = MakeKey(bt, ao, useOverlay, flip);
+            const glm::ivec3 nPos = glm::ivec3(localX, localY, localZ) + NORMALS[face];
+            uint8_t lightValue = 0;
+
+            // Retrieve light data inside chunk bounds or handle edge fallback logic
+            if (Chunk::InBounds(nPos.x, nPos.y, nPos.z))
+            {
+                lightValue = chunk.lightMap[nPos.x][nPos.y][nPos.z];
+            }
+            else
+            {
+                if (nPos.x == CX && face == POS_X)  lightValue = chunk.lightMap[CX - 1][nPos.y][nPos.z];
+                else if (nPos.x == -1 && face == NEG_X)  lightValue = chunk.lightMap[0][nPos.y][nPos.z];
+
+                if (nPos.z == CZ && face == POS_Z)  lightValue = chunk.lightMap[nPos.x][nPos.y][CZ - 1];
+                else if (nPos.z == -1 && face == NEG_Z)  lightValue = chunk.lightMap[nPos.x][nPos.y][0];
+
+                if (nPos.y == CY && face == TOP)    lightValue = chunk.lightMap[nPos.x][CY - 1][nPos.z];
+                else if (nPos.y == -1 && face == BOTTOM) lightValue = chunk.lightMap[nPos.x][0][nPos.z];
+            }
+
+            // Store structural state and build a 32-bit key representing identical render properties
+            grid[row][col].lightValue = lightValue;
             grid[row][col].type = bt;
             memcpy(grid[row][col].ao, ao, 4);
+            grid[row][col].key = MakeKey(bt, ao, useOverlay, flip, lightValue);
 
+            // Mark this cell bit as active and ready for the greedy scan phase
             rowMask[row] |= static_cast<uint16_t>(1u << col);
         }
     }
@@ -611,21 +629,19 @@ void ChunkMeshBuilder::BuildLayer(
 
         while (mask != 0u)
         {
-            // O(1): jump to lowest set bit — start col of next unprocessed face
+            // Hardware instruction counts trailing zeros to jump to the next unmeshed face in one cycle
             const int col = std::countr_zero(mask);
             const uint32_t cellKey = grid[row][col].key;
 
-            // Expand width W: consecutive set bits at the same key
+            // Expand horizontally across the row as long as adjacent block properties match exactly
             int W = 1;
             while (col + W < colCount && ((mask >> (col + W)) & 1u) && grid[row][col + W].key == cellKey)
                 ++W;
 
-            // Bitmask representing the W-wide column run
+            // Create a temporary bitmask for the discovered horizontal run
             const uint16_t runMask = static_cast<uint16_t>(((1u << W) - 1u) << col);
 
-            // Expand height H: find consecutive rows where:
-            // 1. All bits in runMask are set, AND
-            // 2. All cells have the same key
+            // Expand vertically down neighboring rows if they contain matching active bits and keys
             int H = 1;
             while (row + H < rowCount)
             {
@@ -641,10 +657,10 @@ void ChunkMeshBuilder::BuildLayer(
                 ++H;
             }
 
-            // Emit one quad for (H rows × W cols)
+            // Generate vertex data for the combined greedy quad geometry size
             EmitGreedyQuad(face, layer, row, col, H, W, grid, chunkWX, chunkWZ, out);
 
-            // Clear consumed bits in every merged row
+            // Clear the consumed bits from all processed rows using bitwise bitmasks
             for (int r = row; r < row + H; ++r)
                 rowMask[r] &= ~runMask;
 
@@ -652,6 +668,7 @@ void ChunkMeshBuilder::BuildLayer(
         }
     }
 }
+
 
 // =========================================================================
 // Two passes:
@@ -790,7 +807,7 @@ void ChunkMeshBuilder::Build(
         }
     }
 
-    // Safe: main thread's Set() thread-blocks on unique_lock until we release shared_lock.
-    // If a block changed mid-build, aoDirty=true is already set -> another rebuild follows.
+    // Safe: main thread's Set() thread-blocks on unique_lock until we release shared_lock
+    // If a block changed mid-build, aoDirty=true is already set -> another rebuild follows
     chunk.aoDirty = false;
 }

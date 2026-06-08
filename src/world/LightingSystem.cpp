@@ -3,14 +3,11 @@
 #include "world/World.h"
 
 #include <iostream>
+#include <mutex>
 
 // Index helpers
 static constexpr uint16_t Encode(uint8_t x, uint8_t y, uint8_t z) noexcept
 {
-	assert(x >= 0 && x < CX);
-	assert(y >= 0 && y < CY);
-	assert(z >= 0 && z < CZ);
-
 	return ((uint16_t)x << 12) | ((uint16_t)y << 4) | (uint16_t)z;
 }
 
@@ -29,33 +26,69 @@ static constexpr int DecodeZ(uint16_t index) noexcept
 	return (index) & 0xF;
 }
 
+void LightingSystem::InitChunkLight(Chunk* chunk)
+{
+	if (!chunk)
+		return;
+
+	for(int y = 0; y < CY; ++y)
+	for(int x = 0; x < CX; ++x)
+	for(int z = 0; z < CZ; ++z)
+	{
+		int lightValue = GetDef(chunk->Get(x, y, z)).lightEmission;
+		if (lightValue > 0)
+		{
+			SetTorchLight(chunk, x, y, z, lightValue);
+			m_lightBFSQueue.emplace(Encode(x, y, z), chunk);
+		}
+	}
+}
+
 void LightingSystem::NotifyBlockPlaced(int wx, int wy, int wz, BlockType type)
 {
 	int emission = GetDef(type).lightEmission;
 
+	glm::ivec3 local = World::ChunkLocalCoord(wx, wy, wz);
+	Chunk* chunk = m_world->GetChunk(wx, wz);
+
+	if (!chunk)
+		return;
+
 	if (emission > 0)
 	{
-		glm::ivec3 localCoord = World::ChunkLocalCoord(wx, wy, wz);
-		Chunk* chunk = m_world->GetChunk(wx, wz);
+		SetTorchLight(chunk, local.x, local.y, local.z, emission);
+		m_lightBFSQueue.emplace(Encode(local.x, local.y, local.z), chunk);
+	}
 
-		if (!chunk)
-			return;
-
-		uint16_t index = Encode(localCoord.x, localCoord.y, localCoord.z);
-
-		SetTorchLight(chunk, localCoord.x, localCoord.y, localCoord.z, emission);
-
-		m_lightBFSQueue.emplace(index, chunk);
+	else if (IsOpaque(type))
+	{
+		int existingLightLevel = GetTorchLight(chunk, local.x, local.y, local.z);
+		SetTorchLight(chunk, local.x, local.y, local.z, 0);
+		m_lightRemovalBFSQueue.emplace(Encode(local.x, local.y, local.z), existingLightLevel, chunk);
 	}
 }
 
 void LightingSystem::NotifyBlockRemoved(int wx, int wy, int wz)
 {
+	Chunk* chunk = m_world->GetChunk(wx, wz);
+	if (!chunk)
+	{
+		std::cerr << "NotifyBlockRemoved() - invalid chunk\n";
+		return;
+	}
 
+	glm::ivec3 local = World::ChunkLocalCoord(wx, wy, wz);
+
+	uint16_t index = Encode(local.x, local.y, local.z);
+	int lightValue = GetTorchLight(chunk, local.x, local.y, local.z);
+
+	m_lightRemovalBFSQueue.emplace(index, lightValue, chunk);
+	SetTorchLight(chunk, local.x, local.y, local.z, 0);
 }
 
 void LightingSystem::Update()
 {
+	RemoveTorch();
 	PropagateTorch();
 }
 
@@ -73,14 +106,16 @@ void LightingSystem::PropagateTorch()
 		}
 
 		if (!chunk)
+		{
+			std::cerr << "PropagateTorch() - invalid chunk\n";
 			return;
-
+		}
 		glm::ivec3 local = { DecodeX(index), DecodeY(index), DecodeZ(index) };
 
 		// Get light level of this pos
 		int lightLevel = GetTorchLight(chunk, local.x, local.y, local.z);
 
-		// Look at all neighboring voxels to this position
+		// Look at all adjacent voxels to this position
 		// If its light level is 2 or more levels less than
 		// to the current one, add them to the queue
 
@@ -94,37 +129,39 @@ void LightingSystem::PropagateTorch()
 		// Do bounds checking and if X is less than 0, query -X 
 		for (const auto& ND : NEIGHBORS)
 		{
-			glm::vec3 adjacentBlock = local + ND;
-			if (Chunk::InBounds(adjacentBlock.x, adjacentBlock.y, adjacentBlock.z))
-			{
-				// Only propagate light into non-opaque blocks
-				if (!IsOpaque(chunk->Get(adjacentBlock.x, adjacentBlock.y, adjacentBlock.z)) && GetTorchLight(chunk, adjacentBlock.x, adjacentBlock.y, adjacentBlock.z) + 2 <= lightLevel)
-				{
-					// Set light level
-					SetTorchLight(chunk, adjacentBlock.x, adjacentBlock.y, adjacentBlock.z, lightLevel - 1);
+			glm::ivec3 adjacentBlockPos = local + ND;
+			Chunk* adjacentBlockChunk = chunk;
 
-					// Add neighboring block into queue
-					uint16_t neighboringIndex = Encode(adjacentBlock.x, adjacentBlock.y, adjacentBlock.z);
-					m_lightBFSQueue.emplace(neighboringIndex, chunk);
-				}
-			}
-			else
+			// Resolve if the block is in adjacent chunk
+			if (!Chunk::InBounds(adjacentBlockPos.x, adjacentBlockPos.y, adjacentBlockPos.z))
 			{
 				// Allowing blocks outside vertical world limit makes query into the same chunk, so don't allow
-				if (adjacentBlock.y < 0 || adjacentBlock.y >= CY)
+				if (adjacentBlockPos.y < 0 || adjacentBlockPos.y >= CY)
 					continue;
 
-				glm::ivec2 neighboringChunkPos = chunk->chunkPos + glm::ivec2(ND.x, ND.z);
-				Chunk* neighboringChunk = m_world->GetChunk(neighboringChunkPos.x, neighboringChunkPos.y);
+				glm::ivec2 neighboringBlockChunkPos = chunk->chunkPos + glm::ivec2(ND.x, ND.z);
+				adjacentBlockChunk = m_world->GetChunk(neighboringBlockChunkPos.x * CX, neighboringBlockChunkPos.y * CZ);
 
-				if (!neighboringChunk)
+				if (!adjacentBlockChunk)
 					continue;
 
 				// Get local block pos
-				if (adjacentBlock.x == -1)		adjacentBlock.x = CX;
-				else if (adjacentBlock.x == CX) adjacentBlock.x = 0;
-				else if (adjacentBlock.z == -1) adjacentBlock.z = CZ;
-				else if (adjacentBlock.z == CZ) adjacentBlock.z = 0;
+				if		(adjacentBlockPos.x == -1) adjacentBlockPos.x = CX - 1;
+				else if (adjacentBlockPos.x == CX) adjacentBlockPos.x = 0;
+				else if (adjacentBlockPos.z == -1) adjacentBlockPos.z = CZ - 1;
+				else if (adjacentBlockPos.z == CZ) adjacentBlockPos.z = 0;
+			}
+
+			// Change light levels and add into queue
+			// Only propagate light into non-opaque blocks
+			if (!IsOpaque(adjacentBlockChunk->Get(adjacentBlockPos.x, adjacentBlockPos.y, adjacentBlockPos.z))
+				&& GetTorchLight(adjacentBlockChunk, adjacentBlockPos.x, adjacentBlockPos.y, adjacentBlockPos.z) + 2 <= lightLevel)
+			{
+				// Set torch light of adjacent block
+				SetTorchLight(adjacentBlockChunk, adjacentBlockPos.x, adjacentBlockPos.y, adjacentBlockPos.z, lightLevel - 1);
+
+				// Add adjacent block into queue
+				m_lightBFSQueue.emplace(Encode(adjacentBlockPos.x, adjacentBlockPos.y, adjacentBlockPos.z), adjacentBlockChunk);
 			}
 		}
 	}
@@ -132,7 +169,72 @@ void LightingSystem::PropagateTorch()
 
 void LightingSystem::RemoveTorch()
 {
+	while (!m_lightRemovalBFSQueue.empty())
+	{
+		uint16_t index = 0;
+		int lightLevel = 0;
+		Chunk* chunk = nullptr;
+		{
+			LightRemovalNode& node = m_lightRemovalBFSQueue.front();
+			index = node.index;
+			lightLevel = node.val;
+			chunk = node.chunk;
+			m_lightRemovalBFSQueue.pop();
+		}
 
+		if (!chunk)
+		{
+			std::cerr << "RemoveTorch() - invalid chunk\n";
+			return;
+		}
+
+		glm::ivec3 local = { DecodeX(index), DecodeY(index), DecodeZ(index) };
+
+		static const glm::ivec3 NEIGHBORS[] = {
+			{1, 0, 0}, {-1, 0, 0},	// +X, -X
+			{0, 0, 1}, { 0, 0,-1},	// +Z, -Z
+			{0, 1, 0}, { 0,-1, 0},	// +Y, -Y
+		};
+
+		for (const auto& ND : NEIGHBORS)
+		{
+			glm::ivec3 adjacentBlockPos = local + ND;
+			Chunk* adjacentBlockChunk = chunk;
+
+			// Resolve if the block is in adjacent chunk
+			if (!Chunk::InBounds(adjacentBlockPos.x, adjacentBlockPos.y, adjacentBlockPos.z))
+			{
+				if (adjacentBlockPos.y < 0 || adjacentBlockPos.y >= CY)
+					continue;
+
+				glm::ivec2 neighboringBlockChunkPos = chunk->chunkPos + glm::ivec2(ND.x, ND.z);
+				adjacentBlockChunk = m_world->GetChunk(neighboringBlockChunkPos.x * CX, neighboringBlockChunkPos.y * CZ);
+				
+				if (!adjacentBlockChunk)
+					continue;
+
+				// Get local block pos
+				if		(adjacentBlockPos.x == -1) adjacentBlockPos.x = CX - 1;
+				else if (adjacentBlockPos.x == CX) adjacentBlockPos.x = 0;
+				else if (adjacentBlockPos.z == -1) adjacentBlockPos.z = CZ - 1;
+				else if (adjacentBlockPos.z == CZ) adjacentBlockPos.z = 0;
+			}
+
+			int neighborLevel = GetTorchLight(adjacentBlockChunk, adjacentBlockPos.x, adjacentBlockPos.y, adjacentBlockPos.z);
+			
+			if (neighborLevel != 0 && neighborLevel < lightLevel)
+			{
+				// Set adjacent block light level
+				SetTorchLight(adjacentBlockChunk, adjacentBlockPos.x, adjacentBlockPos.y, adjacentBlockPos.z, 0);
+				m_lightRemovalBFSQueue.emplace(Encode(adjacentBlockPos.x, adjacentBlockPos.y, adjacentBlockPos.z), neighborLevel, adjacentBlockChunk);
+			}
+			else if(neighborLevel >= lightLevel)
+			{
+				// Kind of becomes a light source, propagate light
+				m_lightBFSQueue.emplace(Encode(adjacentBlockPos.x, adjacentBlockPos.y, adjacentBlockPos.z), adjacentBlockChunk);
+			}
+		}
+	}
 }
 
 // Get bits 0000XXXX
@@ -149,8 +251,11 @@ void LightingSystem::SetTorchLight(Chunk* chunk, int x, int y, int z, int val)
 {
 	if (!chunk)
 		return;
+	
+	std::unique_lock lock(chunk->chunkMutex);
 
 	chunk->lightMap[x][y][z] = (chunk->lightMap[x][y][z] & 0xF0) | static_cast<uint8_t>(val);
+	chunk->dirty = true;
 }
 // Get bits XXXX0000
 int LightingSystem::GetSunlight(Chunk* chunk, int x, int y, int z)

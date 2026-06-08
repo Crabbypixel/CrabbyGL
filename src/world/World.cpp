@@ -11,6 +11,7 @@
 #include "world/World.h"
 #include "world/BlockRegistry.h"
 #include "world/ChunkMeshBuilder.h"
+#include "world/LightingSystem.h"
 #include "rendering/Shader.h"
 
 static constexpr glm::ivec2 GUARDED_NEIGHBORS[] =
@@ -654,7 +655,7 @@ void World::UpdateChunkStreaming(const glm::vec3& playerPos)
     m_chunkLoadJobCV.notify_all();
 }
 
-void World::CommitGeneratedChunks()
+void World::CommitGeneratedChunks(LightingSystem* lightingSystem)
 {
     // Move the chunks from the staging region (done by loading workers)
     // to local main thread memory - directly accessing staging region leads to data races
@@ -679,8 +680,12 @@ void World::CommitGeneratedChunks()
         chunkPtr->modified = false;
         chunkPtr->aoDirty = true;
 
+        // Build light values
+        lightingSystem->InitChunkLight(chunkPtr.get());
+
         chunks[coord] = std::move(chunkPtr);
 		m_chunkMeshes.try_emplace(coord);   // default construct mesh for this chunk
+
 
         // Re-dirty all 8 neighbours NOW (after chunks have been loaded) that 
         // this chunk is actually in the live map.  UpdateChunkStreaming 

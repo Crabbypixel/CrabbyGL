@@ -21,6 +21,7 @@
 class Shader;
 
 class Chunk;
+class LightingSystem;
 struct RaycastHit;
 
 enum class BlockType : uint8_t;
@@ -111,7 +112,7 @@ public:
     void UpdateChunkStreaming(const glm::vec3& playerPos);
 
 	// 2) Move the loaded chunks from staging region to core chunk data & mark the chunks "dirty" for meshing
-    void CommitGeneratedChunks();
+    void CommitGeneratedChunks(LightingSystem* lightingSystem);
 
 	// 3) Generate meshes (by mesh job threads), stage, push to local and upload to GPU
     void SyncRenderer();

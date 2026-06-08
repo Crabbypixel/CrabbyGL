@@ -47,6 +47,7 @@ private:
 public:
 	LightingSystem() = default;
 	void Init(World* world) { m_world = world; }
+	void InitChunkLight(Chunk* chunk);
 
 	void NotifyBlockPlaced(int wx, int wy, int wz, BlockType type);
 	void NotifyBlockRemoved(int wx, int wy, int wz);

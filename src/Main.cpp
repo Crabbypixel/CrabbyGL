@@ -88,7 +88,7 @@ private:
 public:
 	bool Setup() override
 	{
-		player.SetPos(glm::vec3(20.0f, 39.0f, 78.0f));
+		player.SetPos(glm::vec3(65.0f, 256.0f, 38.0f));
 		camera.Init(player.GetPos(), glm::vec3(0.0f, 0.0f, -1.0f), ScreenWidth(), ScreenHeight());
 
 		// Axes
@@ -317,7 +317,7 @@ public:
 		// Promote fully generated chunks from staging into the main world: 
 		// - Transfers ownership into `chunks` map (main thread)
 		// - Ensures chunks become visible/usable only after complete generation
-		world.CommitGeneratedChunks();
+		world.CommitGeneratedChunks(&lightingSystem);
 
 		// Synchronize CPU-side world state with GPU rendering:
 		// - Enqueue dirty chunks for meshing
@@ -547,7 +547,7 @@ public:
 	{
 		chunkMeshShader.use();
 		chunkMeshShader.setVec3("u_lightDir", glm::vec3(0.0f, -1.0f, 0.0f));
-		chunkMeshShader.setVec3("u_ambient", glm::vec3(0.4f));
+		chunkMeshShader.setVec3("u_ambient", glm::vec3(0.3f));
 		chunkMeshShader.setVec3("u_diffuse", glm::vec3(0.7f));
 	}
 

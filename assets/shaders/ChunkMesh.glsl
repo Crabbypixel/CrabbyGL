@@ -25,6 +25,7 @@ flat out uint fUseOverlay;          // GLSL version 330 doesn't support flat boo
 flat out uint fNormalIndex;
 flat out uint fTileBase;
 flat out uint fTileOverlay;
+flat out uint fLightValue;
 
 void main()
 {
@@ -42,6 +43,9 @@ void main()
     fNormalIndex = aPacked & 0x7u;
     fUseOverlay  = (aPacked >> 3u) & 0x1u;
     fAo          = float((aPacked >> 4u) & 0x3u) / 3.0f;
+
+    // Sunlight & Torchlight
+    fLightValue = aLightValue;
 
     // RGBA8 tint arrives normalized to 0..1
     fTint = aTint.rgb;
@@ -82,6 +86,7 @@ flat in uint fUseOverlay;
 flat in uint fNormalIndex;
 flat in uint fTileBase;
 flat in uint fTileOverlay;
+flat in uint fLightValue;
 
 out vec4 FragColor;
 
@@ -182,10 +187,17 @@ void main()
     // Ambient occlusion
     color *= mix(0.5f, 1.0f, fAo);
 
+    // Torchlight
+    float torch = float(fLightValue & 0xFu) / 15.0f;
+    color *= torch;
+
     // Selected block highlight
     if (u_isSelected && fragBlockPos() == u_selectedBlock)
     {
-        color *= 1.2f;
+        if(color == vec3(0.0f))     // Show some highlight if the color is completely zero
+            color += 0.1f;
+        else
+            color *= 1.2f;
     }
 
     FragColor = vec4(color, baseTex.a);
