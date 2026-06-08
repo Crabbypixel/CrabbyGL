@@ -4,11 +4,6 @@
 #include <mutex>
 #include <fstream>
 
-constexpr bool Chunk::InBounds(int x, int y, int z) noexcept
-{
-	return (x >= 0 && x < CX) && (y >= 0 && y < CY) && (z >= 0 && z < CZ);
-}
-
 BlockType Chunk::Get(int x, int y, int z) const noexcept
 {
 	if (!InBounds(x, y, z))
@@ -31,13 +26,11 @@ void Chunk::Set(int x, int y, int z, BlockType type)
 
 BlockType Chunk::GetUnchecked(int x, int y, int z) const
 {
-	// YXZ ordering!!!
 	return blocks[GetIndex(x, y, z)];
 }
 
 void Chunk::SetUnchecked(int x, int y, int z, BlockType type)
 {
-	// YXZ ordering!!!
 	blocks[GetIndex(x, y, z)] = type;
 
 	dirty = true;

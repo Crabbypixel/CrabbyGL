@@ -36,7 +36,7 @@ private:
 	// IMP TODO: Add separate lightMutex for lightMap, doesn't stall chunk writes/reads as lightMap is constantly re-written
 	uint8_t lightMap[CX][CY][CZ];
 
-	// Friend class, they mainly read/write aoCache and lightMap directly.
+	// Friend class, they mainly read/write aoCache and lightMap directly
 	friend class ChunkMeshBuilder;
 	friend class LightingSystem;
 
@@ -47,7 +47,7 @@ public:
 	Chunk& operator=(const Chunk&) = delete;
 	Chunk& operator=(Chunk&&) = delete;
 
-	// Mutex to protect blocks, aoCache & lightMap
+	// Protects: blocks, aoCache & lightMap
 	mutable std::shared_mutex chunkMutex;
 
 	// World position of this chunk
@@ -67,5 +67,7 @@ public:
 	[[nodiscard]] bool Deserialize(std::ifstream& inputStream);
 
 	// Range check
-	[[nodiscard]] static constexpr bool InBounds(int x, int y, int z) noexcept;
+	[[nodiscard]] static constexpr bool InBounds(int x, int y, int z) noexcept { return (x >= 0 && x < CX) 
+																					 && (y >= 0 && y < CY) 
+																					 && (z >= 0 && z < CZ); }
 };

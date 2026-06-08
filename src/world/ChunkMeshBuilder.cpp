@@ -444,10 +444,10 @@ void ChunkMeshBuilder::EmitGreedyQuad(
     int chunkWX, int chunkWZ,
     std::vector<Vertex>& out)
 {
-    const FaceAxis&  axes  = FACE_AXES[face];
-    const FaceCell&  ref = grid[row0][col0];
-    const BlockDef&  def = GetDef(ref.type);
-    const bool   useOverlay = def.useOverlay && face > 1;
+    const FaceAxis&  axes = FACE_AXES[face];
+    const FaceCell&  ref  = grid[row0][col0];
+    const BlockDef&  def  = GetDef(ref.type);
+    const bool useOverlay = def.useOverlay && face > 1;
     
     // Grass uses a green tint for its top and side overlay
     // The bottom face is dirt and must remain untinted

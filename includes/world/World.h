@@ -3,6 +3,8 @@
 #include <glm/glm.hpp>
 
 #include "rendering/ChunkMesh.h"
+#include "physics/WorldPhysics.h"
+#include "world/LightingSystem.h"
 
 #include <cmath>
 #include <array>
@@ -21,7 +23,6 @@
 class Shader;
 
 class Chunk;
-class LightingSystem;
 struct RaycastHit;
 
 enum class BlockType : uint8_t;
@@ -45,7 +46,7 @@ struct IVec2Hash
 
 struct Frustum
 {
-    std::array<glm::vec4, 6> planes;
+    std::array<glm::vec4, 6> planes {};
 
     void Extract(const glm::mat4& vp);
     bool ContainsAABB(const glm::vec3& min, const glm::vec3& max) const;
@@ -108,11 +109,14 @@ public:
     [[nodiscard]] Chunk* GetChunk(int worldX, int worldZ);
     [[nodiscard]] const Chunk* GetChunk(int worldX, int worldZ) const;
 
+    [[nodiscard]] WorldPhysics& GetWorldPhysics() noexcept { return m_worldPhysics; }
+    [[nodiscard]] LightingSystem& GetLightingSystem() noexcept { return m_lightingSystem; }
+
     // 1) Generate and unload chunks by sending jobs to chunk job threads
     void UpdateChunkStreaming(const glm::vec3& playerPos);
 
 	// 2) Move the loaded chunks from staging region to core chunk data & mark the chunks "dirty" for meshing
-    void CommitGeneratedChunks(LightingSystem* lightingSystem);
+    void CommitGeneratedChunks();
 
 	// 3) Generate meshes (by mesh job threads), stage, push to local and upload to GPU
     void SyncRenderer();
@@ -135,10 +139,14 @@ private:
 	// Frustum planes for Frustum Culling
 	Frustum m_frustum;
 
+    // World physics and lighting system manager
+    WorldPhysics m_worldPhysics;
+    LightingSystem m_lightingSystem;
+
 	// World-player variables
     // TODO: Make this dynamic and make user to control - to be done later
-    int m_viewDist = 8;			// Chunk load boundary
-    int m_unloadDist = 8;		// Chunk unload boundary
+    int m_viewDist = 3;			// Chunk load boundary
+    int m_unloadDist = 3;		// Chunk unload boundary
     glm::ivec2 m_lastPlayerChunk = { INT_MAX, INT_MAX };	// Previous frame player chunk pos
 
 	// Global atomic shutdown flag for workers to exit

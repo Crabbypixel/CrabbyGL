@@ -63,8 +63,6 @@ private:
 
 	// World
 	World world;
-	WorldPhysics worldPhysics;
-	LightingSystem lightingSystem;
 
 	// Chunk outlines for debugging
 	ChunkDebug chunkDebug;
@@ -125,8 +123,6 @@ public:
 			std::cout << "Error loading player inventory\n";
 
 		// ───── World ──────────────────────────────────────────────────
-		auto dt1 = std::chrono::system_clock::now();
-
 		chunkMeshShader.load("assets/shaders/ChunkMesh.glsl");
 
 		world.SetChunkShader(chunkMeshShader);
@@ -136,13 +132,6 @@ public:
 		// This is the optimal spot for good performance without overly increasing number of threads
 		world.StartChunkLoadWorkers(4);
 		world.StartMeshWorkers(4);
-
-		auto dt2 = std::chrono::system_clock::now();
-		float fTimeTaken = std::chrono::duration_cast<std::chrono::milliseconds>(dt2 - dt1).count();
-		std::cout << "Time taken to generate world: " << std::fixed << std::setprecision(2) << fTimeTaken / 1000.0f << " seconds" << std::endl;
-
-		// ───── Lighting ──────────────────────────────────────────────────
-		lightingSystem.Init(&world);
 
 		// ───── Shaders ──────────────────────────────────────────────────
 		InitShaders();
@@ -262,8 +251,6 @@ public:
 				for (int i = 200; i < 220; ++i)
 					for (int j = 200; j < 220; ++j)
 						world.SetBlock(i, 150, j, BlockType::GRAVEL);
-
-				//world.SetBlock(0, 100, 0, BlockType::GLOWSTONE);
 			}
 		}
 
@@ -286,8 +273,8 @@ public:
 
 			if (isBlockBreakValid)
 			{
-				worldPhysics.NotifyBlockChanged(raycastHitPos.x, raycastHitPos.y, raycastHitPos.z);
-				lightingSystem.NotifyBlockRemoved(raycastHitPos.x, raycastHitPos.y, raycastHitPos.z);
+				world.GetWorldPhysics().NotifyBlockChanged(raycastHitPos.x, raycastHitPos.y, raycastHitPos.z);
+				world.GetLightingSystem().NotifyBlockRemoved(raycastHitPos.x, raycastHitPos.y, raycastHitPos.z);
 			}
 		}
 
@@ -298,14 +285,14 @@ public:
 
 			if (isBlockPlaceValid)
 			{
-				worldPhysics.NotifyBlockChanged(raycastPlacePos.x, raycastPlacePos.y, raycastPlacePos.z);
-				lightingSystem.NotifyBlockPlaced(raycastPlacePos.x, raycastPlacePos.y, raycastPlacePos.z, inventory.GetHeldBlock());
+				world.GetWorldPhysics().NotifyBlockChanged(raycastPlacePos.x, raycastPlacePos.y, raycastPlacePos.z);
+				world.GetLightingSystem().NotifyBlockPlaced(raycastPlacePos.x, raycastPlacePos.y, raycastPlacePos.z, inventory.GetHeldBlock());
 			}
 		}
 
 		// Update world physics & world lighting
-		worldPhysics.Update(dt, world);
-		lightingSystem.Update();
+		world.GetWorldPhysics().Update(dt);
+		world.GetLightingSystem().Update();
 
 		// ───── Rendering ───────────────────────────────────────────────
 		// Update chunk streaming state based on player position:
@@ -317,7 +304,7 @@ public:
 		// Promote fully generated chunks from staging into the main world: 
 		// - Transfers ownership into `chunks` map (main thread)
 		// - Ensures chunks become visible/usable only after complete generation
-		world.CommitGeneratedChunks(&lightingSystem);
+		world.CommitGeneratedChunks();
 
 		// Synchronize CPU-side world state with GPU rendering:
 		// - Enqueue dirty chunks for meshing

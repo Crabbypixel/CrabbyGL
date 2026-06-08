@@ -1,6 +1,7 @@
 #pragma once
 #include <glm/glm.hpp>
 #include <unordered_set>
+#include <iostream>
 
 class World;
 enum class BlockType : uint8_t;
@@ -8,7 +9,7 @@ enum class BlockType : uint8_t;
 class WorldPhysics
 {
 public:
-	WorldPhysics() = default;
+    WorldPhysics(World* world) : m_world(world) {}
 
 	// No copying or moving - physics state is tightly coupled to the world and shouldn't be duplicated
 	WorldPhysics(const WorldPhysics&) = delete;
@@ -20,12 +21,13 @@ public:
 	static constexpr float TICK_DT = 1.0f / TICK_RATE;
 
 	// Call every frame with real delta time, but physics will only update at fixed intervals (TICK_DT)
-	void Update(float dt, World& world);
+	void Update(float dt);
 
 	// Call when any block is placed or broken by the player
 	void NotifyBlockChanged(int wx, int wy, int wz);
 
 private:
+    World* m_world = nullptr;
 	float m_accumulator = 0.0f;		// Accumulated time since last physics update
 
     // Boost-combine hash for glm::ivec3
@@ -56,7 +58,7 @@ private:
 
 	// Runs one tick of physics updates, processing all blocks in m_dirtyBlocks and 
     // updating m_nextDirtyBlocks with any blocks that need to be re-evaluated on the next tick
-    void Tick(World& world);
+    void Tick();
 
 	// Returns true if the block type is affected by gravity (e.g. sand, gravel)
 	[[nodiscard]] static bool IsGravityBlock(BlockType type) noexcept;

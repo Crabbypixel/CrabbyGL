@@ -27,7 +27,7 @@ static constexpr glm::ivec2 GUARDED_NEIGHBORS[] =
     {-1, -1 }
 };
 
-World::World()
+World::World() : m_worldPhysics(this), m_lightingSystem(this)
 {
     chunks.reserve(1000);
     m_chunkSaveWorker = std::thread(&World::SaveWorkerLoop, this);
@@ -655,7 +655,7 @@ void World::UpdateChunkStreaming(const glm::vec3& playerPos)
     m_chunkLoadJobCV.notify_all();
 }
 
-void World::CommitGeneratedChunks(LightingSystem* lightingSystem)
+void World::CommitGeneratedChunks()
 {
     // Move the chunks from the staging region (done by loading workers)
     // to local main thread memory - directly accessing staging region leads to data races
@@ -669,33 +669,65 @@ void World::CommitGeneratedChunks(LightingSystem* lightingSystem)
     // Mark the chunks dirty for meshing
     for (auto& [coord, chunkPtr] : queued)
     {
-        // Uncomment these lines to make all generated chunks dirty -> so that they can be stored to disk
+        static constexpr glm::ivec2 NEIGHBORING_CHUNK_OFFSET[] = {
+            {1, 0}, {-1, 0}, {0, 1}, {0, -1},
+            {1, 1}, {1, -1}, {-1, 1}, {-1, -1}
+        };
+
+        static std::vector<glm::ivec2> lightChunkLoad;
+
+        // Uncomment these lines to make all generated chunks modified -> so that they can be stored to disk
         // But this causes a huge performance drop because of the disk IO, so only enable this when you want
-        // to test the chunk saving/loading functionality
-        // 
-        //chunk.dirty = true;
-        //chunk.modified = false;
+        // to test the chunk saving/loading functionality or when there's complex worldgen, for now worldgen
+        // is simple enough to run without significant frame drops
+        // chunkPtr->modified = true;
 
         chunkPtr->dirty = true;
         chunkPtr->modified = false;
         chunkPtr->aoDirty = true;
 
-        // Build light values
-        lightingSystem->InitChunkLight(chunkPtr.get());
-
         chunks[coord] = std::move(chunkPtr);
 		m_chunkMeshes.try_emplace(coord);   // default construct mesh for this chunk
 
+        // Build light values for present chunk and 4 neighboring chunks
+        m_lightingSystem.InitChunkLight(chunks.find(coord)->second.get());              // Add current chunk
+
+        /* Add 4 neighboring chunks
+           TODO:
+           Issue with this is that when a light-bearing chunk is loaded but if its neighbor doesn't exist in the map yet,
+           then it is not marked as dirty; we need to query these chunks ONCE they are exist in the map
+         */
+
+        for (int i = 0; i < 4; i++)
+        {
+            auto neighboringChunk = chunks.find(coord + NEIGHBORING_CHUNK_OFFSET[i]);
+            if (neighboringChunk != chunks.end())
+            {
+                m_lightingSystem.InitChunkLight(neighboringChunk->second.get());
+            }
+            else
+            {
+                // Add the coord to the vector to be loaded later
+                lightChunkLoad.push_back(coord);
+            }
+        }
+
+        //// Load:
+        //for (auto iter = lightChunkLoad.begin(); iter != lightChunkLoad.end(); ++iter)
+        //{
+        //    auto chunkToLoad = chunks.find(*iter);
+        //    if (chunkToLoad != chunks.end())
+        //    {
+        //        m_lightingSystem.InitChunkLight(chunkToLoad->second.get());
+        //        lightChunkLoad.erase(iter);
+        //    }
+        //}
 
         // Re-dirty all 8 neighbours NOW (after chunks have been loaded) that 
-        // this chunk is actually in the live map.  UpdateChunkStreaming 
-        // already marked them dirty when  chunk was *queued*, but the 
-        // neighbours may have been re-meshed with null neighbour pointers 
-        // before we committed. This guarantees they rebuild with the correct neighbour data.
-        static constexpr glm::ivec2 NEIGHBORING_CHUNK_OFFSET[] = {
-			{1, 0}, {-1, 0}, {0, 1}, {0, -1},
-			{1, 1}, {1, -1}, {-1, 1}, {-1, -1}
-        };
+        // this chunk is actually in the live map, UpdateChunkStreaming 
+        // already marked them dirty when chunk was *queued*, but the 
+        // neighbours may have been re-meshed with null neighbour pointers before we committed
+        // This guarantees they rebuild with the correct neighbour data
 
         for (auto& off : NEIGHBORING_CHUNK_OFFSET)
         {
@@ -708,10 +740,10 @@ void World::CommitGeneratedChunks(LightingSystem* lightingSystem)
         }
 
         /*
-         * Release the reservation AFTER promotion, not before.
+         * Release the reservation AFTER promotion, not before
          *
          * m_chunkLoadReservations prevents the main thread from re-scheduling
-         * a coord that is already in-flight (queued or sitting in staging).
+         * a coord that is already in-flight (queued or sitting in staging)
          *
          * If the worker erased the reservation inside the thread itself, a race opens:
          *   Worker  -> pushes to staging, erases reservation
@@ -820,7 +852,7 @@ void World::MeshWorkerLoop()
         // current chunk and all its 4 neighbors 
         // (no need to access map, this results in reduced hashing)
 
-		// 1) Obtain chunk to mesh
+		// 1. Obtain chunk to mesh
         MeshJob job;
         {
             std::unique_lock<std::mutex> lock(m_meshJobMutex);
@@ -836,7 +868,7 @@ void World::MeshWorkerLoop()
             m_meshJobQueue.pop();
         }
 
-        // 2) Now chunk coord is owned, build the vertices
+        // 2. Now chunk coord is owned, build the vertices
         {
             verts.clear();
 
@@ -851,7 +883,7 @@ void World::MeshWorkerLoop()
                 );
         }
 
-        // 3) Push built vertices to staging
+        // 3. Push built vertices to staging
         {
             std::lock_guard<std::mutex> lock(m_meshStagingMutex);
 
@@ -861,7 +893,7 @@ void World::MeshWorkerLoop()
             m_meshStaging[job.coord] = std::move(toStage);
         }
 
-        // 4) Decrement refcounts, so that the chunk can be unloaded (unguard now)
+        // 4. Decrement refcounts, so that the chunk can be unloaded (unguard now)
         {
             std::lock_guard<std::mutex> lock(m_chunkMeshUsageGuardMutex);
 
