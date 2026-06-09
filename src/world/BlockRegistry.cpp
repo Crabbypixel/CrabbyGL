@@ -5,7 +5,7 @@ using namespace Tiles;
 
 // +Y -Y +X -X +Z -Z
 const BlockDef BLOCK_DEFS[] =
-{
+{ //0.55f, 0.78f, 0.28f
 /* 0*/	{ "Air", { 0, 0, 0, 0, 0, 0 }, -1, { 1, 1, 1 }, BLOCK_TRANSPARENT, 0.0f, false, 0 },
 /* 1*/	{ "Dirt", { DIRT, DIRT, DIRT, DIRT, DIRT, DIRT }, -1, { 1, 1, 1 }, BLOCK_OPAQUE | BLOCK_SOLID, 1.5f, false },
 /* 2*/	{ "Grass block", { GRASS_TOP, DIRT, DIRT, DIRT, DIRT, DIRT }, GRASS_OVERLAY, { 0.55f, 0.78f, 0.28f }, BLOCK_OPAQUE | BLOCK_SOLID, 0.6f, true, 0 },

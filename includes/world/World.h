@@ -143,6 +143,10 @@ private:
     WorldPhysics m_worldPhysics;
     LightingSystem m_lightingSystem;
 
+    // Chunk coordinates with lighting initialization postponed until their neighbors are loaded into the map
+    //std::vector<glm::ivec2> m_deferredLightingChunks;
+    std::unordered_set<glm::ivec2, IVec2Hash> m_deferredLightingChunks;
+
 	// World-player variables
     // TODO: Make this dynamic and make user to control - to be done later
     int m_viewDist = 3;			// Chunk load boundary

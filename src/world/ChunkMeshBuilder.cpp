@@ -388,6 +388,7 @@ void ChunkMeshBuilder::AddTranslucentFace(
 void ChunkMeshBuilder::EmitCross(
     std::vector<Vertex>& verts,
     const glm::ivec3& worldPos,
+    uint8_t lightValue,
     BlockType type)
 {
     const BlockDef& crossItem = GetDef(type);
@@ -419,7 +420,7 @@ void ChunkMeshBuilder::EmitCross(
                 .tileBase    = (uint8_t)crossItem.faces[0],
                 .tileOverlay = (uint8_t)0,
                 .packed      = packed,
-                .lightValue  = 0u,
+                .lightValue  = lightValue,
                 .tint        = PackRGBA(tint.x, tint.y, tint.z, 1.0f),
             });
         }
@@ -598,14 +599,11 @@ void ChunkMeshBuilder::BuildLayer(
             }
             else
             {
-                if (nPos.x == CX && face == POS_X)  lightValue = chunk.lightMap[CX - 1][nPos.y][nPos.z];
-                else if (nPos.x == -1 && face == NEG_X)  lightValue = chunk.lightMap[0][nPos.y][nPos.z];
-
-                if (nPos.z == CZ && face == POS_Z)  lightValue = chunk.lightMap[nPos.x][nPos.y][CZ - 1];
-                else if (nPos.z == -1 && face == NEG_Z)  lightValue = chunk.lightMap[nPos.x][nPos.y][0];
-
-                if (nPos.y == CY && face == TOP)    lightValue = chunk.lightMap[nPos.x][CY - 1][nPos.z];
-                else if (nPos.y == -1 && face == BOTTOM) lightValue = chunk.lightMap[nPos.x][0][nPos.z];
+                // CORRECT — read from neighbor chunk's lightMap
+                if (nPos.x == CX && face == POS_X && nPX)  lightValue = nPX->lightMap[0][nPos.y][nPos.z];
+                if (nPos.x == -1 && face == NEG_X && nNX)  lightValue = nNX->lightMap[CX - 1][nPos.y][nPos.z];
+                if (nPos.z == CZ && face == POS_Z && nPZ)  lightValue = nPZ->lightMap[nPos.x][nPos.y][0];
+                if (nPos.z == -1 && face == NEG_Z && nNZ)  lightValue = nNZ->lightMap[nPos.x][nPos.y][CZ - 1];
             }
 
             // Store structural state and build a 32-bit key representing identical render properties
@@ -735,7 +733,7 @@ void ChunkMeshBuilder::Build(
         // Cross blocks (flowers, saplings, grass, etc)
         if (IsCross(blockType)) [[unlikely]]
         {
-            EmitCross(outVertices, {chunkWX + x, y, chunkWZ + z}, blockType);
+            EmitCross(outVertices, {chunkWX + x, y, chunkWZ + z}, chunk.lightMap[x][y][z], blockType);
             continue;
         }
 

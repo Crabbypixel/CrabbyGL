@@ -59,6 +59,7 @@ private:
     static void EmitCross(
         std::vector<Vertex>& verts,
         const glm::ivec3& worldPos,
+        uint8_t lightValue,
         BlockType type
     );
 

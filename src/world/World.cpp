@@ -674,8 +674,6 @@ void World::CommitGeneratedChunks()
             {1, 1}, {1, -1}, {-1, 1}, {-1, -1}
         };
 
-        static std::vector<glm::ivec2> lightChunkLoad;
-
         // Uncomment these lines to make all generated chunks modified -> so that they can be stored to disk
         // But this causes a huge performance drop because of the disk IO, so only enable this when you want
         // to test the chunk saving/loading functionality or when there's complex worldgen, for now worldgen
@@ -690,38 +688,49 @@ void World::CommitGeneratedChunks()
 		m_chunkMeshes.try_emplace(coord);   // default construct mesh for this chunk
 
         // Build light values for present chunk and 4 neighboring chunks
-        m_lightingSystem.InitChunkLight(chunks.find(coord)->second.get());              // Add current chunk
+        // Add current chunk
+        m_lightingSystem.InitChunkLight(chunks.find(coord)->second.get());
 
-        /* Add 4 neighboring chunks
-           TODO:
-           Issue with this is that when a light-bearing chunk is loaded but if its neighbor doesn't exist in the map yet,
-           then it is not marked as dirty; we need to query these chunks ONCE they are exist in the map
-         */
-
+        // Try adding 4 neighbors
         for (int i = 0; i < 4; i++)
         {
-            auto neighboringChunk = chunks.find(coord + NEIGHBORING_CHUNK_OFFSET[i]);
+            const glm::ivec2 neighboringChunkCoord = coord + NEIGHBORING_CHUNK_OFFSET[i];
+
+            // If this neighboring chunk is already present in coord, it will initalize itself later
+            if (queued.count(neighboringChunkCoord))
+                continue;
+
+            auto neighboringChunk = chunks.find(neighboringChunkCoord);
             if (neighboringChunk != chunks.end())
             {
                 m_lightingSystem.InitChunkLight(neighboringChunk->second.get());
             }
             else
             {
-                // Add the coord to the vector to be loaded later
-                lightChunkLoad.push_back(coord);
+                // Deferred loading, add the coord to the vector to be loaded later
+                m_deferredLightingChunks.insert(neighboringChunkCoord);
             }
         }
 
-        //// Load:
-        //for (auto iter = lightChunkLoad.begin(); iter != lightChunkLoad.end(); ++iter)
-        //{
-        //    auto chunkToLoad = chunks.find(*iter);
-        //    if (chunkToLoad != chunks.end())
-        //    {
-        //        m_lightingSystem.InitChunkLight(chunkToLoad->second.get());
-        //        lightChunkLoad.erase(iter);
-        //    }
-        //}
+        // Load deferred lighting chunks, remove if init successful
+        std::erase_if(m_deferredLightingChunks, [&](const glm::ivec2& deferredCoord) {
+            // This chunk has just been light initalized, remove it from deferred
+            if (deferredCoord == coord)
+                return true;
+
+            // If coord is present in queued, don't remove as its
+            // light will be initalized later
+            if (queued.count(coord))
+                return false;
+
+            auto it = chunks.find(deferredCoord);
+            if (it != chunks.end())
+            {
+                m_lightingSystem.InitChunkLight(it->second.get());
+                return true;
+            }
+            return false;
+        });
 
         // Re-dirty all 8 neighbours NOW (after chunks have been loaded) that 
         // this chunk is actually in the live map, UpdateChunkStreaming 

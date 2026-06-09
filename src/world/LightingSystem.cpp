@@ -42,6 +42,53 @@ void LightingSystem::InitChunkLight(Chunk* chunk)
 			m_lightBFSQueue.emplace(Encode(x, y, z), chunk);
 		}
 	}
+
+	// Check if the chunk's neighbors edge blocks have light -> seed BFS
+	// Neighbor bleed-in
+	static const struct {
+		glm::ivec2 ND;          // Neighbor chunk direction offset
+		glm::ivec2 borderPos;   // Target coordinate inside the neighboring chunk
+		glm::ivec2 edgePos;     // Boundary coordinate inside the current chunk
+	} NEIGHBORS[] = {
+		// -1 means that index is run by a loop variable
+		{ {  1,  0 }, { 0,      -1 }, { CX - 1, -1     } },        // +X neighbor
+		{ { -1,  0 }, { CX - 1, -1 }, { 0,      -1     } },        // -X neighbor
+		{ {  0,  1 }, { -1,     0  }, { -1,     CZ - 1 } },        // +Z neighbor
+		{ {  0, -1 }, { -1, CZ - 1 }, { -1,     0      } }         // -Z neighbor
+	};
+
+	for (const auto& side : NEIGHBORS)
+	{
+		const glm::ivec2 pos = chunk->chunkPos;
+		const glm::ivec2 nPos = pos + side.ND;
+		Chunk* neighborChunk = m_world->GetChunk(nPos.x * CX, nPos.y * CZ);
+
+		if (!neighborChunk)
+			continue;
+
+		// Traverse layer by layer (increasing height)
+		// The inner (i) loop is only for +/- X/Z so it always runs 16 times
+		for(int y = 0; y < CY; ++y)
+		for(int i = 0; i < CX; ++i)
+		{
+			// Border pos - coord inside neighboring chunk
+			glm::ivec3 borderPos = (side.borderPos.x != -1) ? glm::ivec3(side.borderPos.x, y, i) : glm::ivec3(i, y, side.borderPos.y);
+			glm::ivec3 edgePos = (side.edgePos.x != -1) ? glm::ivec3(side.edgePos.x, y, i) : glm::ivec3(i, y, side.edgePos.y);
+
+			int borderLight = GetTorchLight(neighborChunk, borderPos.x, borderPos.y, borderPos.z);
+			int incomingLight = borderLight - 1;
+			int edgeLight = GetTorchLight(chunk, edgePos.x, edgePos.y, edgePos.z);
+
+			if (borderLight <= 1)
+				continue;
+
+			if (edgeLight < incomingLight)
+			{
+				SetTorchLight(chunk, edgePos.x, edgePos.y, edgePos.z, incomingLight);
+				m_lightBFSQueue.emplace(Encode(edgePos.x, edgePos.y, edgePos.z), chunk);
+			}
+		}
+	}
 }
 
 void LightingSystem::NotifyBlockPlaced(int wx, int wy, int wz, BlockType type)
@@ -257,6 +304,7 @@ void LightingSystem::SetTorchLight(Chunk* chunk, int x, int y, int z, int val)
 	chunk->lightMap[x][y][z] = (chunk->lightMap[x][y][z] & 0xF0) | static_cast<uint8_t>(val);
 	chunk->dirty = true;
 }
+
 // Get bits XXXX0000
 int LightingSystem::GetSunlight(Chunk* chunk, int x, int y, int z)
 {
@@ -272,5 +320,6 @@ void LightingSystem::SetSunlight(Chunk* chunk, int x, int y, int z, int val)
 	if (!chunk)
 		return;
 
+	std::unique_lock lock(chunk->chunkMutex);
 	chunk->lightMap[x][y][z] = (chunk->lightMap[x][y][z] & 0xF) | (static_cast<uint8_t>(val) << 4);
 }

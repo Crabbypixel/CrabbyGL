@@ -179,17 +179,16 @@ void main()
         color *= fTint;
     }
 
-    // Flat per-face directional lighting
     float NdotL = max(dot(normalize(NORMALS[fNormalIndex]), -normalize(u_lightDir)), 0.0f);
+    //float sunLight = u_ambient.r + (u_diffuse.r * NdotL);
+    float sunLight = 0.0f;
+    
+    // Torch overrides directional: when torch=1 -> full omni, when torch=0 -> sun only
 
-    color *= u_ambient + u_diffuse * NdotL;
-
-    // Ambient occlusion
-    color *= mix(0.5f, 1.0f, fAo);
-
-    // Torchlight
     float torch = float(fLightValue & 0xFu) / 15.0f;
-    color *= torch;
+    float finalLight = mix(sunLight, 1.0f, torch);
+    color *= mix(0.5f, 1.0f, fAo);
+    color *= finalLight;	
 
     // Selected block highlight
     if (u_isSelected && fragBlockPos() == u_selectedBlock)
