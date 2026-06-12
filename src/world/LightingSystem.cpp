@@ -5,6 +5,8 @@
 #include <iostream>
 #include <mutex>
 
+enum class Blocktype;
+
 // Index helpers
 static constexpr uint16_t Encode(uint8_t x, uint8_t y, uint8_t z) noexcept
 {
@@ -31,14 +33,62 @@ void LightingSystem::InitChunkLight(Chunk* chunk)
 	if (!chunk)
 		return;
 
+	const glm::ivec2 pos = chunk->chunkPos;
+
+	// Sunlight
+	//for(int x = 0; x < CX; ++x)
+	//for(int z = 0; z < CZ; ++z)
+	//{
+	//	BlockType type = chunk->Get(x, CY - 1, z);
+	//	if (!IsOpaque(type))
+	//	{
+	//		SetSunlight(chunk, x, CY - 1, z, 15);
+	//		m_visitedChunks.insert(chunk);
+	//		m_sunlightBFSQueue.emplace(Encode(x, CY - 1, z), chunk);
+	//	}
+	//}
+
+	// Efficient
+	for (int x = 0; x < CX; ++x)
+	for (int z = 0; z < CZ; ++z)
+	{
+		// Find the first opaque block from the top
+		// BFS from there, otherwise send light vertically down
+		int surfaceY = -1;
+		for (int y = CY - 1; y >= 0; --y)
+		{
+			if (IsOpaque(chunk->GetUnchecked(x, y, z)))
+			{
+				surfaceY = y;
+				break;
+			}
+		}
+
+		// Don't cross the world limits
+		int skyBottom = (surfaceY == -1) ? 0 : surfaceY + 1;
+		for (int y = skyBottom; y < CY; ++y)
+		{
+			SetSunlight(chunk, x, y, z, 15);
+			//m_visitedChunks.insert(chunk);
+		}
+
+		if (skyBottom < CY)
+			m_sunlightBFSQueue.emplace(Encode(x, skyBottom, z), chunk);
+	}
+
+	chunk->dirty = true;
+
+	// Torchlight
 	for(int y = 0; y < CY; ++y)
 	for(int x = 0; x < CX; ++x)
 	for(int z = 0; z < CZ; ++z)
 	{
 		int lightValue = GetDef(chunk->Get(x, y, z)).lightEmission;
+
 		if (lightValue > 0)
 		{
 			SetTorchLight(chunk, x, y, z, lightValue);
+			m_visitedChunks.insert(chunk);
 			m_lightBFSQueue.emplace(Encode(x, y, z), chunk);
 		}
 	}
@@ -59,7 +109,6 @@ void LightingSystem::InitChunkLight(Chunk* chunk)
 
 	for (const auto& side : NEIGHBORS)
 	{
-		const glm::ivec2 pos = chunk->chunkPos;
 		const glm::ivec2 nPos = pos + side.ND;
 		Chunk* neighborChunk = m_world->GetChunk(nPos.x * CX, nPos.y * CZ);
 
@@ -82,10 +131,26 @@ void LightingSystem::InitChunkLight(Chunk* chunk)
 			if (borderLight <= 1)
 				continue;
 
+			// Bleed-in torchlight
 			if (edgeLight < incomingLight)
 			{
 				SetTorchLight(chunk, edgePos.x, edgePos.y, edgePos.z, incomingLight);
+				m_visitedChunks.insert(chunk);
 				m_lightBFSQueue.emplace(Encode(edgePos.x, edgePos.y, edgePos.z), chunk);
+			}
+
+			// Bleed-in sunlight
+			int borderSun = GetSunlight(neighborChunk, borderPos.x, borderPos.y, borderPos.z);
+			if (borderSun > 1)
+			{
+				int incomingSun = borderSun - 1;  // horizontal always decrements
+				int edgeSun = GetSunlight(chunk, edgePos.x, edgePos.y, edgePos.z);
+				if (edgeSun < incomingSun)
+				{
+					SetSunlight(chunk, edgePos.x, edgePos.y, edgePos.z, incomingSun);
+					m_visitedChunks.insert(chunk);
+					m_sunlightBFSQueue.emplace(Encode(edgePos.x, edgePos.y, edgePos.z), chunk);
+				}
 			}
 		}
 	}
@@ -104,6 +169,7 @@ void LightingSystem::NotifyBlockPlaced(int wx, int wy, int wz, BlockType type)
 	if (emission > 0)
 	{
 		SetTorchLight(chunk, local.x, local.y, local.z, emission);
+		m_visitedChunks.insert(chunk);
 		m_lightBFSQueue.emplace(Encode(local.x, local.y, local.z), chunk);
 	}
 
@@ -111,7 +177,13 @@ void LightingSystem::NotifyBlockPlaced(int wx, int wy, int wz, BlockType type)
 	{
 		int existingLightLevel = GetTorchLight(chunk, local.x, local.y, local.z);
 		SetTorchLight(chunk, local.x, local.y, local.z, 0);
+		m_visitedChunks.insert(chunk);
 		m_lightRemovalBFSQueue.emplace(Encode(local.x, local.y, local.z), existingLightLevel, chunk);
+
+		int existingSunlight = GetSunlight(chunk, local.x, local.y, local.z);
+		SetSunlight(chunk, local.x, local.y, local.z, 0);
+		m_visitedChunks.insert(chunk);
+		m_sunlightRemovalBFSQueue.emplace(Encode(local.x, local.y, local.z), existingSunlight, chunk);
 	}
 }
 
@@ -127,22 +199,35 @@ void LightingSystem::NotifyBlockRemoved(int wx, int wy, int wz)
 	glm::ivec3 local = World::ChunkLocalCoord(wx, wy, wz);
 
 	uint16_t index = Encode(local.x, local.y, local.z);
-	int lightValue = GetTorchLight(chunk, local.x, local.y, local.z);
 
+	// Torchlight
+	int lightValue = GetTorchLight(chunk, local.x, local.y, local.z);
 	m_lightRemovalBFSQueue.emplace(index, lightValue, chunk);
 	SetTorchLight(chunk, local.x, local.y, local.z, 0);
+	m_visitedChunks.insert(chunk);
+
+	// Sunlight
+	int sunValue = GetSunlight(chunk, local.x, local.y, local.z);
+	m_sunlightRemovalBFSQueue.emplace(index, sunValue, chunk);
+	SetSunlight(chunk, local.x, local.y, local.z, 0);
+	m_visitedChunks.insert(chunk);
 }
 
 void LightingSystem::Update()
 {
 	RemoveTorch();
+	RemoveSunlight();
+
 	PropagateTorch();
+	PropagateSunlight();
 }
 
 void LightingSystem::PropagateTorch()
 {
+	// Process BFS
 	while (!m_lightBFSQueue.empty())
 	{
+		// Pop an element from the queue
 		uint16_t index = 0;
 		Chunk* chunk = nullptr;
 		{
@@ -157,6 +242,7 @@ void LightingSystem::PropagateTorch()
 			std::cerr << "PropagateTorch() - invalid chunk\n";
 			return;
 		}
+
 		glm::ivec3 local = { DecodeX(index), DecodeY(index), DecodeZ(index) };
 
 		// Get light level of this pos
@@ -173,7 +259,7 @@ void LightingSystem::PropagateTorch()
 			{0, 1, 0}, {0, -1, 0},	// +Y, -Y
 		};
 
-		// Do bounds checking and if X is less than 0, query -X 
+		// Visit all neighbors
 		for (const auto& ND : NEIGHBORS)
 		{
 			glm::ivec3 adjacentBlockPos = local + ND;
@@ -206,18 +292,26 @@ void LightingSystem::PropagateTorch()
 			{
 				// Set torch light of adjacent block
 				SetTorchLight(adjacentBlockChunk, adjacentBlockPos.x, adjacentBlockPos.y, adjacentBlockPos.z, lightLevel - 1);
+				m_visitedChunks.insert(adjacentBlockChunk);
 
 				// Add adjacent block into queue
 				m_lightBFSQueue.emplace(Encode(adjacentBlockPos.x, adjacentBlockPos.y, adjacentBlockPos.z), adjacentBlockChunk);
 			}
 		}
 	}
+
+	// Dirty chunks
+	for (Chunk* c : m_visitedChunks)
+		c->dirty = true;
+	m_visitedChunks.clear();
 }
 
 void LightingSystem::RemoveTorch()
 {
+	// Process BFS
 	while (!m_lightRemovalBFSQueue.empty())
 	{
+		// Pop an element from the queue
 		uint16_t index = 0;
 		int lightLevel = 0;
 		Chunk* chunk = nullptr;
@@ -243,6 +337,7 @@ void LightingSystem::RemoveTorch()
 			{0, 1, 0}, { 0,-1, 0},	// +Y, -Y
 		};
 
+		// Visit all neighbors
 		for (const auto& ND : NEIGHBORS)
 		{
 			glm::ivec3 adjacentBlockPos = local + ND;
@@ -273,6 +368,7 @@ void LightingSystem::RemoveTorch()
 			{
 				// Set adjacent block light level
 				SetTorchLight(adjacentBlockChunk, adjacentBlockPos.x, adjacentBlockPos.y, adjacentBlockPos.z, 0);
+				m_visitedChunks.insert(adjacentBlockChunk);
 				m_lightRemovalBFSQueue.emplace(Encode(adjacentBlockPos.x, adjacentBlockPos.y, adjacentBlockPos.z), neighborLevel, adjacentBlockChunk);
 			}
 			else if(neighborLevel >= lightLevel)
@@ -282,6 +378,175 @@ void LightingSystem::RemoveTorch()
 			}
 		}
 	}
+
+	for (Chunk* c : m_visitedChunks)
+		c->dirty = true;
+	m_visitedChunks.clear();
+}
+
+// Sunlight flood fill is almost similar to PropagateTorchlight() but don't attenuate vertically down
+void LightingSystem::PropagateSunlight()
+{
+	// Process BFS
+	while (!m_sunlightBFSQueue.empty())
+	{
+		// Pop an element from the queue
+		uint16_t index = 0;
+		Chunk* chunk = nullptr;
+		{
+			LightNode& node = m_sunlightBFSQueue.front();
+			index = node.index;
+			chunk = node.chunk;
+			m_sunlightBFSQueue.pop();
+		}
+
+		if (!chunk)
+		{
+			std::cerr << "PropagateSunlight() - invalid chunk\n";
+			return;
+		}
+
+		glm::ivec3 local = { DecodeX(index), DecodeY(index), DecodeZ(index) };
+		int lightLevel = GetSunlight(chunk, local.x, local.y, local.z);
+
+		static const glm::ivec3 NEIGHBORS[] = {
+			{1,0,0},{-1,0,0},{0,0,1},{0,0,-1},{0,1,0},{0,-1,0}
+		};
+
+		// Visit all neighbors
+		for (const auto& ND : NEIGHBORS)
+		{
+			glm::ivec3 adjacentBlockPos = local + ND;
+			Chunk* adjacentBlockChunk = chunk;
+
+			// Resolve if the block is in neighboring chunk
+			if (!Chunk::InBounds(adjacentBlockPos.x, adjacentBlockPos.y, adjacentBlockPos.z))
+			{
+				if (adjacentBlockPos.y < 0 || adjacentBlockPos.y >= CY)
+					continue;
+
+				glm::ivec2 nChunkPos = chunk->chunkPos + glm::ivec2(ND.x, ND.z);
+				adjacentBlockChunk = m_world->GetChunk(nChunkPos.x * CX, nChunkPos.y * CZ);
+				
+				if (!adjacentBlockChunk)
+					continue;
+
+				if		(adjacentBlockPos.x == -1) adjacentBlockPos.x = CX - 1;
+				else if (adjacentBlockPos.x == CX) adjacentBlockPos.x = 0;
+				else if (adjacentBlockPos.z == -1) adjacentBlockPos.z = CZ - 1;
+				else if (adjacentBlockPos.z == CZ) adjacentBlockPos.z = 0;
+			}
+
+			// If neighboring block is opaque, skip this neighbot
+			if (IsOpaque(adjacentBlockChunk->Get(adjacentBlockPos.x, adjacentBlockPos.y, adjacentBlockPos.z)))
+				continue;
+
+			// Propagate sunlight fully only if the floodfill goes downwards
+			const bool propagateSunlight = (ND.y == -1 && lightLevel == 15);
+
+			// Neighbor block light and new light
+			const int newLight = propagateSunlight ? 15 : lightLevel - 1;
+			const int neighhborLight = GetSunlight(adjacentBlockChunk, adjacentBlockPos.x, adjacentBlockPos.y, adjacentBlockPos.z);
+
+			// Fill anything below max
+			const bool shouldPropagate = propagateSunlight ? (neighhborLight < 15) : (neighhborLight + 2 <= lightLevel);	
+
+			if (shouldPropagate)
+			{
+				SetSunlight(adjacentBlockChunk, adjacentBlockPos.x, adjacentBlockPos.y, adjacentBlockPos.z, newLight);
+				m_visitedChunks.insert(adjacentBlockChunk);
+				
+				// Add adjacent block into the queue
+				m_sunlightBFSQueue.emplace(Encode(adjacentBlockPos.x, adjacentBlockPos.y, adjacentBlockPos.z), adjacentBlockChunk);
+			}
+		}
+	}
+
+	for (Chunk* c : m_visitedChunks)
+		c->dirty = true;
+	m_visitedChunks.clear();
+}
+
+// Also similar to RemoveTorchlight()
+void LightingSystem::RemoveSunlight()
+{
+	// Process BFS
+	while (!m_sunlightRemovalBFSQueue.empty())
+	{
+		// Pop an element from the queue
+		uint16_t index = 0;
+		int lightLevel = 0;
+		Chunk* chunk = nullptr;
+		{
+			LightRemovalNode& node = m_sunlightRemovalBFSQueue.front();
+			index = node.index;
+			lightLevel = node.val;
+			chunk = node.chunk;
+			m_sunlightRemovalBFSQueue.pop();
+		}
+
+		if (!chunk)
+		{
+			std::cerr << "RemoveSunlight() - invalid chunk\n";
+			return;
+		}
+
+		glm::ivec3 local = { DecodeX(index), DecodeY(index), DecodeZ(index) };
+
+		static const glm::ivec3 NEIGHBORS[] = {
+			{1,0,0},{-1,0,0},{0,0,1},{0,0,-1},{0,1,0},{0,-1,0}
+		};
+
+		// Visit all neighbors
+		for (const auto& ND : NEIGHBORS)
+		{
+			glm::ivec3 adjacentBlockPos = local + ND;
+			Chunk* adjacentBlockChunk = chunk;
+
+			// Resolve if the block is in neighboring chunk
+			if (!Chunk::InBounds(adjacentBlockPos.x, adjacentBlockPos.y, adjacentBlockPos.z))
+			{
+				if (adjacentBlockPos.y < 0 || adjacentBlockPos.y >= CY) continue;
+
+				glm::ivec2 nChunkPos = chunk->chunkPos + glm::ivec2(ND.x, ND.z);
+				adjacentBlockChunk = m_world->GetChunk(nChunkPos.x * CX, nChunkPos.y * CZ);
+				if (!adjacentBlockChunk) continue;
+
+				if (adjacentBlockPos.x == -1) adjacentBlockPos.x = CX - 1;
+				else if (adjacentBlockPos.x == CX) adjacentBlockPos.x = 0;
+				else if (adjacentBlockPos.z == -1) adjacentBlockPos.z = CZ - 1;
+				else if (adjacentBlockPos.z == CZ) adjacentBlockPos.z = 0;
+			}
+
+			// Neighbor block sunlight level
+			int neighborLevel = GetSunlight(adjacentBlockChunk, adjacentBlockPos.x, adjacentBlockPos.y, adjacentBlockPos.z);
+
+			// Special case: For vertical light columns
+			// Full-strength sunlight propagates downwards without attenuation
+			// Therefore when the column is blocked, removal must continue
+			// This is the code responsible for shadows
+			const bool sunbeamRemoval = (ND.y == -1 && lightLevel == 15);
+
+			// Attenuate when neighbor has some light level and if its light level is lesser than current OR going to downwards
+			if (neighborLevel != 0 && (neighborLevel < lightLevel || sunbeamRemoval))
+			{
+				SetSunlight(adjacentBlockChunk, adjacentBlockPos.x, adjacentBlockPos.y, adjacentBlockPos.z, 0);
+				m_visitedChunks.insert(adjacentBlockChunk);
+
+				// Spread removal
+				m_sunlightRemovalBFSQueue.emplace(Encode(adjacentBlockPos.x, adjacentBlockPos.y, adjacentBlockPos.z), neighborLevel, adjacentBlockChunk);
+			}
+			else if (!sunbeamRemoval && neighborLevel >= lightLevel)
+			{
+				// Independent light source — re-propagate to fill gaps
+				m_sunlightBFSQueue.emplace(Encode(adjacentBlockPos.x, adjacentBlockPos.y, adjacentBlockPos.z), adjacentBlockChunk);
+			}
+		}
+	}
+
+	for (Chunk* c : m_visitedChunks)
+		c->dirty = true;
+	m_visitedChunks.clear();
 }
 
 // Get bits 0000XXXX
@@ -300,9 +565,7 @@ void LightingSystem::SetTorchLight(Chunk* chunk, int x, int y, int z, int val)
 		return;
 	
 	std::unique_lock lock(chunk->chunkMutex);
-
 	chunk->lightMap[x][y][z] = (chunk->lightMap[x][y][z] & 0xF0) | static_cast<uint8_t>(val);
-	chunk->dirty = true;
 }
 
 // Get bits XXXX0000
@@ -322,4 +585,5 @@ void LightingSystem::SetSunlight(Chunk* chunk, int x, int y, int z, int val)
 
 	std::unique_lock lock(chunk->chunkMutex);
 	chunk->lightMap[x][y][z] = (chunk->lightMap[x][y][z] & 0xF) | (static_cast<uint8_t>(val) << 4);
+	chunk->dirty = true;
 }

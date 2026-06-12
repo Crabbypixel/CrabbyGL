@@ -179,16 +179,19 @@ void main()
         color *= fTint;
     }
 
-    float NdotL = max(dot(normalize(NORMALS[fNormalIndex]), -normalize(u_lightDir)), 0.0f);
-    //float sunLight = u_ambient.r + (u_diffuse.r * NdotL);
-    float sunLight = 0.0f;
-    
-    // Torch overrides directional: when torch=1 -> full omni, when torch=0 -> sun only
-
-    float torch = float(fLightValue & 0xFu) / 15.0f;
-    float finalLight = mix(sunLight, 1.0f, torch);
-    color *= mix(0.5f, 1.0f, fAo);
-    color *= finalLight;	
+   float torch      = float( fLightValue       & 0xFu) / 15.0f;
+   float skyExposure = float((fLightValue >> 4u) & 0xFu) / 15.0f;
+   
+   float NdotL = max(dot(normalize(NORMALS[fNormalIndex]), -normalize(u_lightDir)), 0.0f);
+   
+   // Sky contribution: exposure × time-of-day × directional face angle
+   float sunLight = skyExposure * 1.0f * (u_ambient.r + u_diffuse.r * NdotL);
+   
+   // Torch overrides directional: torch=1 → full omni, torch=0 → sun only
+   float finalLight = mix(sunLight, 1.0f, torch);
+   
+   color *= mix(0.5f, 1.0f, fAo);
+   color *= finalLight;
 
     // Selected block highlight
     if (u_isSelected && fragBlockPos() == u_selectedBlock)

@@ -237,7 +237,6 @@ void World::UnloadChunks()
 
     chunks.clear();
     m_chunkMeshes.clear();
-    m_deferredLightingChunks.clear();
 }
 
 // ───── Raycast CRUD ──────────────────────────────────────────────────
@@ -441,7 +440,6 @@ void World::LoadAtlasTexture(const char* path)
 
     unsigned int id;
     glGenTextures(1, &id);
-    glActiveTexture(GL_TEXTURE1);
     glBindTexture(GL_TEXTURE_2D, id);
 
     GLenum fmt = (channels == 4) ? GL_RGBA : GL_RGB;
@@ -591,7 +589,6 @@ void World::UpdateChunkStreaming(const glm::vec3& playerPos)
         m_chunkMeshes[chunkCoord].Destroy();
         m_chunkMeshes.erase(chunkCoord);
         chunks.erase(chunkCoord);
-        m_deferredLightingChunks.erase(chunkCoord);             // Remove from deferred list if out of render distance
     }
 
     // Make list of chunks to load
@@ -717,12 +714,12 @@ void World::CommitGeneratedChunks()
 
         // Load deferred lighting chunks, remove if init successful
         std::erase_if(m_deferredLightingChunks, [&](const glm::ivec2& deferredCoord) {
-            // This chunk has just been light initalized, remove it from deferred list
+            // This chunk has just been light initalized, remove it from deferred
             if (deferredCoord == coord)
                 return true;
 
-            // If coord is present in queued, don't remove
-            // as its light will be initalized later
+            // If coord is present in queued, don't remove as its
+            // light will be initalized later
             if (queued.count(coord))
                 return false;
 

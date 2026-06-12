@@ -1,6 +1,9 @@
 #pragma once
+
 #include "world/Chunk.h"
+
 #include <queue>
+#include <unordered_set>
 
 class World;
 
@@ -25,8 +28,14 @@ class LightingSystem
 {
 private:
 	World* m_world = nullptr;
+
 	std::queue<LightNode> m_lightBFSQueue;
 	std::queue<LightRemovalNode> m_lightRemovalBFSQueue;
+
+	std::queue<LightNode> m_sunlightBFSQueue;
+	std::queue<LightRemovalNode> m_sunlightRemovalBFSQueue;
+
+	std::unordered_set<Chunk*> m_visitedChunks;
 
 	// Non-copyable, non-movable
 	LightingSystem(const LightingSystem&) = delete;
@@ -40,9 +49,13 @@ private:
 	int  GetSunlight(Chunk* chunk, int x, int y, int z);
 	void SetSunlight(Chunk* chunk, int x, int y, int z, int val);
 
-	// BFS passes:
+	// Torchlight BFS passes:
 	void PropagateTorch();
 	void RemoveTorch();
+
+	// Sunlight BFS passes:
+	void PropagateSunlight();
+	void RemoveSunlight();
 
 public:
 	LightingSystem(World* world) : m_world(world) {}
