@@ -5,6 +5,13 @@ void Shader::load(const std::string& shaderPath)
 	bool isGeometryShaderPresent = false;
 	std::ifstream stream(shaderPath);
 
+	if (!stream.is_open())
+	{
+		std::cerr << shaderPath << " not found.\n";
+		glfwTerminate();
+		exit(0);
+	}
+
 	enum class ShaderType
 	{
 		NONE = -1,
@@ -31,7 +38,6 @@ void Shader::load(const std::string& shaderPath)
 				isGeometryShaderPresent = true;
 			}
 		}
-
 		else
 		{
 			ss[(int)type] << line << '\n';
@@ -73,7 +79,7 @@ void Shader::load(const std::string& shaderPath)
 		glGetProgramiv(m_id, GL_INFO_LOG_LENGTH, &length);
 
 		std::string message(length, '\0');
-		glGetShaderInfoLog(m_id, length, &length, message.data());
+		glGetProgramInfoLog(m_id, length, &length, message.data());
 
 		std::cerr << "[OpenGL Error] Linking error in \'" << shaderPath << "\'" << std::endl;
 		std::cerr << "Log: " << message << std::endl;
@@ -181,14 +187,14 @@ void Shader::setIvec2(const std::string& name, const int& i1, const int& i2) noe
 }
 
 // Private utility function - to get uniform location with caching
-unsigned int Shader::GetUniformLocation(const std::string& name) noexcept
+int Shader::GetUniformLocation(const std::string& name) noexcept
 {
 	auto it = m_uniformLocationCache.find(name);
 
 	if (it != m_uniformLocationCache.end())
 		return it->second;
 
-	unsigned int location = glGetUniformLocation(m_id, name.c_str());
+	int location = glGetUniformLocation(m_id, name.c_str());
 	m_uniformLocationCache[name] = location;
 
 	return location;

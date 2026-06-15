@@ -723,7 +723,7 @@ void World::CommitGeneratedChunks()
 
             // If coord is present in queued, don't remove
             // as its light will be initalized later
-            if (queued.count(coord))
+            if (queued.count(deferredCoord))
                 return false;
 
             auto it = chunks.find(deferredCoord);

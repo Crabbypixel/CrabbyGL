@@ -165,10 +165,9 @@ static constexpr bool UV_INV_COL[6]  = { false, true, false, true, false, true }
 // =========================================================================
 struct alignas(4) FaceCell {
     uint32_t  key;    // 0 = invisible; packed key used for merge decisions
-    uint8_t   ao[4];  // raw AO [0..3] for vertices 0..3
     BlockType type;   // block type at this cell
+    uint8_t   ao[4];  // raw AO [0..3] for vertices 0..3
     uint8_t   lightValue;
-    uint8_t   _pad;
 };
 
 
@@ -249,14 +248,14 @@ static bool IsSolidLocal(
     if (x >= 0 && x < CX && z >= 0 && z < CZ)
         return IsOpaque(chunk.GetUnchecked(x, y, z));
 
-    if (nPX    && x >= CX   && z >= 0  && z < CZ) return IsOpaque(nPX->GetUnchecked(0,    y, z));
-    if (nNX    && x  <  0   && z >= 0  && z < CZ) return IsOpaque(nNX->GetUnchecked(CX-1, y, z));
-    if (nPZ    && z >= CZ   && x >= 0  && x < CX) return IsOpaque(nPZ->GetUnchecked(x,    y, 0));
-    if (nNZ    && z  <  0   && x >= 0  && x < CX) return IsOpaque(nNZ->GetUnchecked(x,    y, CZ-1));
-    if (nPX_PZ && x >= CX   && z >= CZ)           return IsOpaque(nPX_PZ->GetUnchecked(0,    y, 0));
-    if (nPX_NZ && x >= CX   && z  <  0)           return IsOpaque(nPX_NZ->GetUnchecked(0,    y, CZ-1));
-    if (nNX_PZ && x  <  0   && z >= CZ)           return IsOpaque(nNX_PZ->GetUnchecked(CX-1, y, 0));
-    if (nNX_NZ && x  <  0   && z  <  0)           return IsOpaque(nNX_NZ->GetUnchecked(CX-1, y, CZ-1));
+    if (nPX    && x >= CX && z >= 0 && z < CZ) return IsOpaque(   nPX->GetUnchecked(0,    y, z   ));
+    if (nNX    && x  <  0 && z >= 0 && z < CZ) return IsOpaque(   nNX->GetUnchecked(CX-1, y, z   ));
+    if (nPZ    && z >= CZ && x >= 0 && x < CX) return IsOpaque(   nPZ->GetUnchecked(x,    y, 0   ));
+    if (nNZ    && z  <  0 && x >= 0 && x < CX) return IsOpaque(   nNZ->GetUnchecked(x,    y, CZ-1));
+    if (nPX_PZ && x >= CX && z >= CZ)          return IsOpaque(nPX_PZ->GetUnchecked(0,    y, 0   ));
+    if (nPX_NZ && x >= CX && z  <  0)          return IsOpaque(nPX_NZ->GetUnchecked(0,    y, CZ-1));
+    if (nNX_PZ && x  <  0 && z >= CZ)          return IsOpaque(nNX_PZ->GetUnchecked(CX-1, y, 0   ));
+    if (nNX_NZ && x  <  0 && z  <  0)          return IsOpaque(nNX_NZ->GetUnchecked(CX-1, y, CZ-1));
 
     return false;
 }
@@ -532,10 +531,10 @@ void ChunkMeshBuilder::BuildLayer(
 
     // Check all neighbor atomic dirty flags once using relaxed memory order to avoid loop stalls
     const bool rebuildAO = chunk.aoDirty.load(std::memory_order_relaxed)
-        || (nPX    && nPX->aoDirty.load(std::memory_order_relaxed))
-        || (nNX    && nNX->aoDirty.load(std::memory_order_relaxed))
-        || (nPZ    && nPZ->aoDirty.load(std::memory_order_relaxed))
-        || (nNZ    && nNZ->aoDirty.load(std::memory_order_relaxed))
+        || (nPX    && nPX   ->aoDirty.load(std::memory_order_relaxed))
+        || (nNX    && nNX   ->aoDirty.load(std::memory_order_relaxed))
+        || (nPZ    && nPZ   ->aoDirty.load(std::memory_order_relaxed))
+        || (nNZ    && nNZ   ->aoDirty.load(std::memory_order_relaxed))
         || (nPX_PZ && nPX_PZ->aoDirty.load(std::memory_order_relaxed))
         || (nPX_NZ && nPX_NZ->aoDirty.load(std::memory_order_relaxed))
         || (nNX_PZ && nNX_PZ->aoDirty.load(std::memory_order_relaxed))
@@ -599,11 +598,12 @@ void ChunkMeshBuilder::BuildLayer(
             }
             else
             {
-                // CORRECT — read from neighbor chunk's lightMap
+                // Read from neighbor chunk's lightMap
                 if (nPos.x == CX && face == POS_X && nPX)  lightValue = nPX->lightMap[0][nPos.y][nPos.z];
                 if (nPos.x == -1 && face == NEG_X && nNX)  lightValue = nNX->lightMap[CX - 1][nPos.y][nPos.z];
                 if (nPos.z == CZ && face == POS_Z && nPZ)  lightValue = nPZ->lightMap[nPos.x][nPos.y][0];
                 if (nPos.z == -1 && face == NEG_Z && nNZ)  lightValue = nNZ->lightMap[nPos.x][nPos.y][CZ - 1];
+                if (nPos.y == CY) lightValue = 0xF0;         // Full sunlight for top face of topmost block
             }
 
             // Store structural state and build a 32-bit key representing identical render properties

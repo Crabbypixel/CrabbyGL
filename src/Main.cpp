@@ -68,7 +68,7 @@ private:
 	ChunkDebug chunkDebug;
 
 	// Hotbar & Inventory
-	UIRenderer UIRenderer;
+	UIRenderer uiRenderer;
 	Inventory inventory;
 
 	// Framebuffer variables
@@ -114,9 +114,9 @@ public:
 		chunkDebug.Init("assets/shaders/ChunkDebug.glsl");
 
 		// UI Renderer
-		UIRenderer.Init(ScreenWidth(), ScreenHeight());
-		UIRenderer.LoadIcons("assets/textures/icons.png");
-		UIRenderer.LoadASCII("assets/textures/ascii.png");
+		uiRenderer.Init(ScreenWidth(), ScreenHeight());
+		uiRenderer.LoadIcons("assets/textures/icons.png");
+		uiRenderer.LoadASCII("assets/textures/ascii.png");
 
 		// Inventory
 		if (!inventory.Load("saves/player_inventory.bin"))
@@ -139,7 +139,7 @@ public:
 		{
 			// ───── Framebuffers ──────────────────────────────────────────────────
 			// Generate and bind the framebuffer
-			framebufferShader.load("assets/shaders/FrameBuffer.glsl");
+			framebufferShader.load("assets/shaders/Framebuffer.glsl");
 
 			// Generate and bind the framebuffer
 			glGenFramebuffers(1, &framebuffer);
@@ -347,31 +347,31 @@ public:
 		RenderCrosshair();
 
 		// Hotbar
-		UIRenderer.DrawHotbar();
+		uiRenderer.DrawHotbar();
 
 		// Hotbar icons
-		UIRenderer.DrawHotbarIcons(inventory);
+		uiRenderer.DrawHotbarIcons(inventory);
 
 		// Hotbar selector
-		UIRenderer.DrawHotbarCursor(inventory.GetHotbarIndex());
+		uiRenderer.DrawHotbarCursor(inventory.GetHotbarIndex());
 
 		// Inventory
 		if (inventory.IsOpen())
 		{
 			// Draw inventory screen
-			UIRenderer.DrawInventory();
+			uiRenderer.DrawInventory();
 
 			// Draw items
-			UIRenderer.DrawInventoryIcons(inventory);
+			uiRenderer.DrawInventoryIcons(inventory);
 
 			// Get inventory slot under mouse cursor
 			int inventoryMouseHoverIndex = UIRenderer::GetMouseInventorySlot(GetMousePosX(), ScreenHeight() - GetMousePosY());
 			if (inventoryMouseHoverIndex != -1)
 			{
-				glm::vec2 highlightPos = UIRenderer.GetInventorySlotPos(inventoryMouseHoverIndex);
+				glm::vec2 highlightPos = uiRenderer.GetInventorySlotPos(inventoryMouseHoverIndex);
 				
 				// Highlight the slot under the mouse cursor
-				UIRenderer.DrawHighlightRect(highlightPos.x, highlightPos.y, 32, 32, glm::vec4(0.7f, 0.7f, 0.7f, 0.6f));
+				uiRenderer.DrawHighlightRect(highlightPos.x, highlightPos.y, 32, 32, glm::vec4(0.7f, 0.7f, 0.7f, 0.6f));
 
 				// Remove item if Q selected while hovering over inventory slot
 				if (GetKey('Q').bPressed)
@@ -394,7 +394,7 @@ public:
 			}
 
 			// Draw held item above all
-			UIRenderer.DrawHeldItem(inventory, mouseX, mouseY);
+			uiRenderer.DrawHeldItem(inventory, mouseX, mouseY);
 		}
 
 		// Write and use the depth buffer

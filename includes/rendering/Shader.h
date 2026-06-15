@@ -49,6 +49,6 @@ public:
 private:
 	unsigned int m_id = 0;
 	std::unordered_map<std::string, int> m_uniformLocationCache;
-	unsigned int GetUniformLocation(const std::string& name) noexcept;
+	int GetUniformLocation(const std::string& name) noexcept;
 	unsigned int CompileShader(unsigned int type, const std::string& source, const std::string& shaderPath);
 };

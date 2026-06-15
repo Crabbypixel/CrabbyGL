@@ -45,9 +45,12 @@ private:
 
 	// Light accessors
 	int  GetTorchLight(Chunk* chunk, int x, int y, int z);
-	void SetTorchLight(Chunk* chunk, int x, int y, int z, int val);
 	int  GetSunlight(Chunk* chunk, int x, int y, int z);
+	void SetTorchLight(Chunk* chunk, int x, int y, int z, int val);
 	void SetSunlight(Chunk* chunk, int x, int y, int z, int val);
+
+	void SetTorchLightUnsafe(Chunk* chunk, int x, int y, int z, int val);
+	void SetSunlightUnsafe(Chunk* chunk, int x, int y, int z, int val);
 
 	// Torchlight BFS passes:
 	void PropagateTorch();

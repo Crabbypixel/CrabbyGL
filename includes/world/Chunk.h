@@ -63,6 +63,8 @@ public:
 	void Set(int x, int y, int z, BlockType type);
 	void SetUnchecked(int x, int y, int z, BlockType type);
 
+	[[nodiscard]] uint8_t GetLightMap(int x, int y, int z) const noexcept { return lightMap[x][y][z]; }
+
 	void Serialize(std::ofstream& outputStream) const;
 	[[nodiscard]] bool Deserialize(std::ifstream& inputStream);
 

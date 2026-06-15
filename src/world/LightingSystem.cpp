@@ -35,61 +35,36 @@ void LightingSystem::InitChunkLight(Chunk* chunk)
 
 	const glm::ivec2 pos = chunk->chunkPos;
 
-	// Sunlight
-	//for(int x = 0; x < CX; ++x)
-	//for(int z = 0; z < CZ; ++z)
-	//{
-	//	BlockType type = chunk->Get(x, CY - 1, z);
-	//	if (!IsOpaque(type))
-	//	{
-	//		SetSunlight(chunk, x, CY - 1, z, 15);
-	//		m_visitedChunks.insert(chunk);
-	//		m_sunlightBFSQueue.emplace(Encode(x, CY - 1, z), chunk);
-	//	}
-	//}
-
-	// Efficient
-	for (int x = 0; x < CX; ++x)
-	for (int z = 0; z < CZ; ++z)
+	// BFS
 	{
-		// Find the first opaque block from the top
-		// BFS from there, otherwise send light vertically down
-		int surfaceY = -1;
-		for (int y = CY - 1; y >= 0; --y)
-		{
-			if (IsOpaque(chunk->GetUnchecked(x, y, z)))
-			{
-				surfaceY = y;
-				break;
-			}
-		}
+		std::unique_lock lock(chunk->chunkMutex);
 
-		// Don't cross the world limits
-		int skyBottom = (surfaceY == -1) ? 0 : surfaceY + 1;
-		for (int y = skyBottom; y < CY; ++y)
+		for (int x = 0; x < CX; ++x)
+		for (int z = 0; z < CZ; ++z)
 		{
-			SetSunlight(chunk, x, y, z, 15);
-			//m_visitedChunks.insert(chunk);
+			SetSunlightUnsafe(chunk, x, CY - 1, z, 15);
+			m_sunlightBFSQueue.emplace(Encode(x, CY - 1, z), chunk);
 		}
-
-		if (skyBottom < CY)
-			m_sunlightBFSQueue.emplace(Encode(x, skyBottom, z), chunk);
 	}
 
-	chunk->dirty = true;
+	chunk->dirty = true;			// We dirty it here
 
 	// Torchlight
-	for(int y = 0; y < CY; ++y)
-	for(int x = 0; x < CX; ++x)
-	for(int z = 0; z < CZ; ++z)
 	{
-		int lightValue = GetDef(chunk->Get(x, y, z)).lightEmission;
+		std::unique_lock lock(chunk->chunkMutex);
 
-		if (lightValue > 0)
+		for(int y = 0; y < CY; ++y)
+		for(int x = 0; x < CX; ++x)
+		for(int z = 0; z < CZ; ++z)
 		{
-			SetTorchLight(chunk, x, y, z, lightValue);
-			m_visitedChunks.insert(chunk);
-			m_lightBFSQueue.emplace(Encode(x, y, z), chunk);
+			int lightValue = GetDef(chunk->GetUnchecked(x, y, z)).lightEmission;
+
+			if (lightValue > 0)
+			{
+				SetTorchLightUnsafe(chunk, x, y, z, lightValue);
+				m_visitedChunks.insert(chunk);
+				m_lightBFSQueue.emplace(Encode(x, y, z), chunk);
+			}
 		}
 	}
 
@@ -109,6 +84,8 @@ void LightingSystem::InitChunkLight(Chunk* chunk)
 
 	for (const auto& side : NEIGHBORS)
 	{
+		std::unique_lock lock(chunk->chunkMutex);
+
 		const glm::ivec2 nPos = pos + side.ND;
 		Chunk* neighborChunk = m_world->GetChunk(nPos.x * CX, nPos.y * CZ);
 
@@ -134,7 +111,7 @@ void LightingSystem::InitChunkLight(Chunk* chunk)
 			// Bleed-in torchlight
 			if (edgeLight < incomingLight)
 			{
-				SetTorchLight(chunk, edgePos.x, edgePos.y, edgePos.z, incomingLight);
+				SetTorchLightUnsafe(chunk, edgePos.x, edgePos.y, edgePos.z, incomingLight);
 				m_visitedChunks.insert(chunk);
 				m_lightBFSQueue.emplace(Encode(edgePos.x, edgePos.y, edgePos.z), chunk);
 			}
@@ -147,7 +124,7 @@ void LightingSystem::InitChunkLight(Chunk* chunk)
 				int edgeSun = GetSunlight(chunk, edgePos.x, edgePos.y, edgePos.z);
 				if (edgeSun < incomingSun)
 				{
-					SetSunlight(chunk, edgePos.x, edgePos.y, edgePos.z, incomingSun);
+					SetSunlightUnsafe(chunk, edgePos.x, edgePos.y, edgePos.z, incomingSun);
 					m_visitedChunks.insert(chunk);
 					m_sunlightBFSQueue.emplace(Encode(edgePos.x, edgePos.y, edgePos.z), chunk);
 				}
@@ -287,7 +264,7 @@ void LightingSystem::PropagateTorch()
 
 			// Change light levels and add into queue
 			// Only propagate light into non-opaque blocks
-			if (!IsOpaque(adjacentBlockChunk->Get(adjacentBlockPos.x, adjacentBlockPos.y, adjacentBlockPos.z))
+			if (!IsOpaque(adjacentBlockChunk->GetUnchecked(adjacentBlockPos.x, adjacentBlockPos.y, adjacentBlockPos.z))
 				&& GetTorchLight(adjacentBlockChunk, adjacentBlockPos.x, adjacentBlockPos.y, adjacentBlockPos.z) + 2 <= lightLevel)
 			{
 				// Set torch light of adjacent block
@@ -379,6 +356,7 @@ void LightingSystem::RemoveTorch()
 		}
 	}
 
+	// Dirty chunks
 	for (Chunk* c : m_visitedChunks)
 		c->dirty = true;
 	m_visitedChunks.clear();
@@ -438,7 +416,7 @@ void LightingSystem::PropagateSunlight()
 			}
 
 			// If neighboring block is opaque, skip this neighbot
-			if (IsOpaque(adjacentBlockChunk->Get(adjacentBlockPos.x, adjacentBlockPos.y, adjacentBlockPos.z)))
+			if (IsOpaque(adjacentBlockChunk->GetUnchecked(adjacentBlockPos.x, adjacentBlockPos.y, adjacentBlockPos.z)))
 				continue;
 
 			// Propagate sunlight fully only if the floodfill goes downwards
@@ -462,6 +440,7 @@ void LightingSystem::PropagateSunlight()
 		}
 	}
 
+	// Dirty chunks
 	for (Chunk* c : m_visitedChunks)
 		c->dirty = true;
 	m_visitedChunks.clear();
@@ -544,6 +523,7 @@ void LightingSystem::RemoveSunlight()
 		}
 	}
 
+	// Dirty chunks
 	for (Chunk* c : m_visitedChunks)
 		c->dirty = true;
 	m_visitedChunks.clear();
@@ -567,6 +547,13 @@ void LightingSystem::SetTorchLight(Chunk* chunk, int x, int y, int z, int val)
 	std::unique_lock lock(chunk->chunkMutex);
 	chunk->lightMap[x][y][z] = (chunk->lightMap[x][y][z] & 0xF0) | static_cast<uint8_t>(val);
 }
+void LightingSystem::SetTorchLightUnsafe(Chunk* chunk, int x, int y, int z, int val)
+{
+	if (!chunk)
+		return;
+
+	chunk->lightMap[x][y][z] = (chunk->lightMap[x][y][z] & 0xF0) | static_cast<uint8_t>(val);
+}
 
 // Get bits XXXX0000
 int LightingSystem::GetSunlight(Chunk* chunk, int x, int y, int z)
@@ -585,5 +572,11 @@ void LightingSystem::SetSunlight(Chunk* chunk, int x, int y, int z, int val)
 
 	std::unique_lock lock(chunk->chunkMutex);
 	chunk->lightMap[x][y][z] = (chunk->lightMap[x][y][z] & 0xF) | (static_cast<uint8_t>(val) << 4);
-	chunk->dirty = true;
+}
+void LightingSystem::SetSunlightUnsafe(Chunk* chunk, int x, int y, int z, int val)
+{
+	if (!chunk)
+		return;
+
+	chunk->lightMap[x][y][z] = (chunk->lightMap[x][y][z] & 0xF) | (static_cast<uint8_t>(val) << 4);
 }
