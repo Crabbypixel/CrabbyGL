@@ -108,82 +108,82 @@ void Shader::use() const noexcept
 
 void Shader::setBool(const std::string& name, bool value) noexcept
 {
-	glUniform1i(GetUniformLocation(name), (int)value);
+	glUniform1i(GetUniformLocationChecked(name), (int)value);
 }
 
 void Shader::setInt(const std::string& name, int value) noexcept
 {
-	glUniform1i(GetUniformLocation(name), value);
+	glUniform1i(GetUniformLocationChecked(name), value);
 }
 
 void Shader::setFloat(const std::string& name, float value) noexcept
 {
-	glUniform1f(GetUniformLocation(name), value);
+	glUniform1f(GetUniformLocationChecked(name), value);
 }
 
 void Shader::setMat4(const std::string& name, const glm::mat4& mat) noexcept
 {
-	glUniformMatrix4fv(GetUniformLocation(name), 1, GL_FALSE, glm::value_ptr(mat));
+	glUniformMatrix4fv(GetUniformLocationChecked(name), 1, GL_FALSE, glm::value_ptr(mat));
 }
 
-void Shader::setVec3(const std::string& name, const float& f1, const float& f2, const float& f3) noexcept
+void Shader::setVec3(const std::string& name, float f1, float f2, float f3) noexcept
 {
-	glUniform3f(GetUniformLocation(name), f1, f2, f3);
+	glUniform3f(GetUniformLocationChecked(name), f1, f2, f3);
 }
 
 void Shader::setVec3(const std::string& name, const glm::vec3& vec) noexcept
 {
-	glUniform3f(GetUniformLocation(name), vec.x, vec.y, vec.z);
+	glUniform3f(GetUniformLocationChecked(name), vec.x, vec.y, vec.z);
 }
 
 void Shader::setIvec3(const std::string& name, const glm::ivec3& ivec) noexcept
 {
-	glUniform3i(GetUniformLocation(name), ivec.x, ivec.y, ivec.z);
+	glUniform3i(GetUniformLocationChecked(name), ivec.x, ivec.y, ivec.z);
 }
 
-void Shader::setIvec3(const std::string& name, const int& i1, const int& i2, const int& i3) noexcept
+void Shader::setIvec3(const std::string& name, int i1, int i2, int i3) noexcept
 {
-	glUniform3i(GetUniformLocation(name), i1, i2, i3);
+	glUniform3i(GetUniformLocationChecked(name), i1, i2, i3);
 }
 
 void Shader::setVec4(const std::string& name, const glm::vec4& vec) noexcept
 {
-	glUniform4f(GetUniformLocation(name), vec.x, vec.y, vec.z, vec.w);
+	glUniform4f(GetUniformLocationChecked(name), vec.x, vec.y, vec.z, vec.w);
 }
 
-void Shader::setVec4(const std::string& name, const float& f1, const float& f2, const float& f3, const float& f4) noexcept
+void Shader::setVec4(const std::string& name, float f1, float f2, float f3, float f4) noexcept
 {
-	glUniform4f(GetUniformLocation(name), f1, f2, f3, f4);
+	glUniform4f(GetUniformLocationChecked(name), f1, f2, f3, f4);
 }
 
 void Shader::setIvec4(const std::string& name, const glm::ivec4& vec) noexcept
 {
-	glUniform4i(GetUniformLocation(name), vec.x, vec.y, vec.z, vec.w);
+	glUniform4i(GetUniformLocationChecked(name), vec.x, vec.y, vec.z, vec.w);
 }
 
-void Shader::setIvec4(const std::string& name, const int& f1, const int& f2, const int& f3, const int& f4) noexcept
+void Shader::setIvec4(const std::string& name, int f1, int f2, int f3, int f4) noexcept
 {
-	glUniform4i(GetUniformLocation(name), f1, f2, f3, f4);
+	glUniform4i(GetUniformLocationChecked(name), f1, f2, f3, f4);
 }
 
-void Shader::setVec2(const std::string& name, const float& f1, const float& f2) noexcept
+void Shader::setVec2(const std::string& name, float f1, float f2) noexcept
 {
-	glUniform2f(GetUniformLocation(name), f1, f2);
+	glUniform2f(GetUniformLocationChecked(name), f1, f2);
 }
 
 void Shader::setVec2(const std::string& name, const glm::vec2& vec) noexcept
 {
-	glUniform2f(GetUniformLocation(name), vec.x, vec.y);
+	glUniform2f(GetUniformLocationChecked(name), vec.x, vec.y);
 }
 
 void Shader::setIvec2(const std::string& name, const glm::ivec2& ivec) noexcept
 {
-	glUniform2i(GetUniformLocation(name), ivec.x, ivec.y);
+	glUniform2i(GetUniformLocationChecked(name), ivec.x, ivec.y);
 }
 
-void Shader::setIvec2(const std::string& name, const int& i1, const int& i2) noexcept
+void Shader::setIvec2(const std::string& name, int i1, int i2) noexcept
 {
-	glUniform2i(GetUniformLocation(name), i1, i2);
+	glUniform2i(GetUniformLocationChecked(name), i1, i2);
 }
 
 // Private utility function - to get uniform location with caching
@@ -196,6 +196,16 @@ int Shader::GetUniformLocation(const std::string& name) noexcept
 
 	int location = glGetUniformLocation(m_id, name.c_str());
 	m_uniformLocationCache[name] = location;
+
+	return location;
+}
+
+int Shader::GetUniformLocationChecked(const std::string& name) noexcept
+{
+	const int location = GetUniformLocation(name);
+
+	if (location == -1)
+		std::cerr << "Shader uniform not found: " << name << '\n';
 
 	return location;
 }

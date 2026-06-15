@@ -534,7 +534,7 @@ public:
 	{
 		chunkMeshShader.use();
 		chunkMeshShader.setVec3("u_lightDir", glm::vec3(0.0f, -1.0f, 0.0f));
-		chunkMeshShader.setVec3("u_ambient", glm::vec3(0.3f));
+		chunkMeshShader.setVec3("u_ambient", glm::vec3(0.15f));
 		chunkMeshShader.setVec3("u_diffuse", glm::vec3(0.7f));
 	}
 

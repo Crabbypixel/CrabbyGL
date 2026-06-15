@@ -185,7 +185,7 @@ void main()
    float NdotL = max(dot(normalize(NORMALS[fNormalIndex]), -normalize(u_lightDir)), 0.0f);
    
    // Sky contribution: exposure × time-of-day × directional face angle
-   float sunLight = skyExposure * 1.0f * (u_ambient.r + u_diffuse.r * NdotL);
+   float sunLight = skyExposure * 1.0f * (u_diffuse.r * NdotL) * 1.5f + u_ambient.r;
    
    // Torch overrides directional: torch=1 -> full omni, torch=0 -> sun only
    float finalLight = mix(sunLight, 1.0f, torch);
