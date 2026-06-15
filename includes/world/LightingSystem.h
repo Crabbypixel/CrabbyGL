@@ -29,8 +29,8 @@ class LightingSystem
 private:
 	World* m_world = nullptr;
 
-	std::queue<LightNode> m_lightBFSQueue;
-	std::queue<LightRemovalNode> m_lightRemovalBFSQueue;
+	std::queue<LightNode> m_torchlightBFSQueue;
+	std::queue<LightRemovalNode> m_torchlightRemovalBFSQueue;
 
 	std::queue<LightNode> m_sunlightBFSQueue;
 	std::queue<LightRemovalNode> m_sunlightRemovalBFSQueue;

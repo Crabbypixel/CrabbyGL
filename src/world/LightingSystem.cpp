@@ -47,7 +47,7 @@ void LightingSystem::InitChunkLight(Chunk* chunk)
 		}
 	}
 
-	chunk->dirty = true;			// We dirty it here
+	chunk->dirty = true;			// Dirty it here
 
 	// Torchlight
 	{
@@ -63,7 +63,7 @@ void LightingSystem::InitChunkLight(Chunk* chunk)
 			{
 				SetTorchLightUnsafe(chunk, x, y, z, lightValue);
 				m_visitedChunks.insert(chunk);
-				m_lightBFSQueue.emplace(Encode(x, y, z), chunk);
+				m_torchlightBFSQueue.emplace(Encode(x, y, z), chunk);
 			}
 		}
 	}
@@ -101,33 +101,34 @@ void LightingSystem::InitChunkLight(Chunk* chunk)
 			glm::ivec3 borderPos = (side.borderPos.x != -1) ? glm::ivec3(side.borderPos.x, y, i) : glm::ivec3(i, y, side.borderPos.y);
 			glm::ivec3 edgePos = (side.edgePos.x != -1) ? glm::ivec3(side.edgePos.x, y, i) : glm::ivec3(i, y, side.edgePos.y);
 
-			int borderLight = GetTorchLight(neighborChunk, borderPos.x, borderPos.y, borderPos.z);
-			int incomingLight = borderLight - 1;
-			int edgeLight = GetTorchLight(chunk, edgePos.x, edgePos.y, edgePos.z);
+			int borderTorchlight = GetTorchLight(neighborChunk, borderPos.x, borderPos.y, borderPos.z);
+			int incomingTorchlight = borderTorchlight - 1;
+			int edgeTorchlight = GetTorchLight(chunk, edgePos.x, edgePos.y, edgePos.z);
 
-			if (borderLight <= 1)
+			if (borderTorchlight <= 1)
 				continue;
 
-			// Bleed-in torchlight
-			if (edgeLight < incomingLight)
+			// Bleed-in torchlight from chunk boundaries
+			if (edgeTorchlight < incomingTorchlight)
 			{
-				SetTorchLightUnsafe(chunk, edgePos.x, edgePos.y, edgePos.z, incomingLight);
+				SetTorchLightUnsafe(chunk, edgePos.x, edgePos.y, edgePos.z, incomingTorchlight);
 				m_visitedChunks.insert(chunk);
-				m_lightBFSQueue.emplace(Encode(edgePos.x, edgePos.y, edgePos.z), chunk);
+				m_torchlightBFSQueue.emplace(Encode(edgePos.x, edgePos.y, edgePos.z), chunk);
 			}
 
-			// Bleed-in sunlight
-			int borderSun = GetSunlight(neighborChunk, borderPos.x, borderPos.y, borderPos.z);
-			if (borderSun > 1)
+			// Bleed-in sunlight from chunk boundaries
+			int borderSunlight = GetSunlight(neighborChunk, borderPos.x, borderPos.y, borderPos.z);
+			int incomingSunlight = borderSunlight - 1;
+			int edgeSunlight = GetSunlight(chunk, edgePos.x, edgePos.y, edgePos.z);
+
+			if (borderSunlight <= 1)
+				continue;
+
+			if (edgeSunlight < incomingSunlight)
 			{
-				int incomingSun = borderSun - 1;  // horizontal always decrements
-				int edgeSun = GetSunlight(chunk, edgePos.x, edgePos.y, edgePos.z);
-				if (edgeSun < incomingSun)
-				{
-					SetSunlightUnsafe(chunk, edgePos.x, edgePos.y, edgePos.z, incomingSun);
-					m_visitedChunks.insert(chunk);
-					m_sunlightBFSQueue.emplace(Encode(edgePos.x, edgePos.y, edgePos.z), chunk);
-				}
+				SetSunlightUnsafe(chunk, edgePos.x, edgePos.y, edgePos.z, incomingSunlight);
+				m_visitedChunks.insert(chunk);
+				m_sunlightBFSQueue.emplace(Encode(edgePos.x, edgePos.y, edgePos.z), chunk);
 			}
 		}
 	}
@@ -147,7 +148,7 @@ void LightingSystem::NotifyBlockPlaced(int wx, int wy, int wz, BlockType type)
 	{
 		SetTorchLight(chunk, local.x, local.y, local.z, emission);
 		m_visitedChunks.insert(chunk);
-		m_lightBFSQueue.emplace(Encode(local.x, local.y, local.z), chunk);
+		m_torchlightBFSQueue.emplace(Encode(local.x, local.y, local.z), chunk);
 	}
 
 	else if (IsOpaque(type))
@@ -155,7 +156,7 @@ void LightingSystem::NotifyBlockPlaced(int wx, int wy, int wz, BlockType type)
 		int existingLightLevel = GetTorchLight(chunk, local.x, local.y, local.z);
 		SetTorchLight(chunk, local.x, local.y, local.z, 0);
 		m_visitedChunks.insert(chunk);
-		m_lightRemovalBFSQueue.emplace(Encode(local.x, local.y, local.z), existingLightLevel, chunk);
+		m_torchlightRemovalBFSQueue.emplace(Encode(local.x, local.y, local.z), existingLightLevel, chunk);
 
 		int existingSunlight = GetSunlight(chunk, local.x, local.y, local.z);
 		SetSunlight(chunk, local.x, local.y, local.z, 0);
@@ -179,7 +180,7 @@ void LightingSystem::NotifyBlockRemoved(int wx, int wy, int wz)
 
 	// Torchlight
 	int lightValue = GetTorchLight(chunk, local.x, local.y, local.z);
-	m_lightRemovalBFSQueue.emplace(index, lightValue, chunk);
+	m_torchlightRemovalBFSQueue.emplace(index, lightValue, chunk);
 	SetTorchLight(chunk, local.x, local.y, local.z, 0);
 	m_visitedChunks.insert(chunk);
 
@@ -202,16 +203,16 @@ void LightingSystem::Update()
 void LightingSystem::PropagateTorch()
 {
 	// Process BFS
-	while (!m_lightBFSQueue.empty())
+	while (!m_torchlightBFSQueue.empty())
 	{
 		// Pop an element from the queue
 		uint16_t index = 0;
 		Chunk* chunk = nullptr;
 		{
-			LightNode& node = m_lightBFSQueue.front();
+			LightNode& node = m_torchlightBFSQueue.front();
 			index = node.index;
 			chunk = node.chunk;
-			m_lightBFSQueue.pop();
+			m_torchlightBFSQueue.pop();
 		}
 
 		if (!chunk)
@@ -272,7 +273,7 @@ void LightingSystem::PropagateTorch()
 				m_visitedChunks.insert(adjacentBlockChunk);
 
 				// Add adjacent block into queue
-				m_lightBFSQueue.emplace(Encode(adjacentBlockPos.x, adjacentBlockPos.y, adjacentBlockPos.z), adjacentBlockChunk);
+				m_torchlightBFSQueue.emplace(Encode(adjacentBlockPos.x, adjacentBlockPos.y, adjacentBlockPos.z), adjacentBlockChunk);
 			}
 		}
 	}
@@ -286,18 +287,18 @@ void LightingSystem::PropagateTorch()
 void LightingSystem::RemoveTorch()
 {
 	// Process BFS
-	while (!m_lightRemovalBFSQueue.empty())
+	while (!m_torchlightRemovalBFSQueue.empty())
 	{
 		// Pop an element from the queue
 		uint16_t index = 0;
 		int lightLevel = 0;
 		Chunk* chunk = nullptr;
 		{
-			LightRemovalNode& node = m_lightRemovalBFSQueue.front();
+			LightRemovalNode& node = m_torchlightRemovalBFSQueue.front();
 			index = node.index;
 			lightLevel = node.val;
 			chunk = node.chunk;
-			m_lightRemovalBFSQueue.pop();
+			m_torchlightRemovalBFSQueue.pop();
 		}
 
 		if (!chunk)
@@ -346,12 +347,12 @@ void LightingSystem::RemoveTorch()
 				// Set adjacent block light level
 				SetTorchLight(adjacentBlockChunk, adjacentBlockPos.x, adjacentBlockPos.y, adjacentBlockPos.z, 0);
 				m_visitedChunks.insert(adjacentBlockChunk);
-				m_lightRemovalBFSQueue.emplace(Encode(adjacentBlockPos.x, adjacentBlockPos.y, adjacentBlockPos.z), neighborLevel, adjacentBlockChunk);
+				m_torchlightRemovalBFSQueue.emplace(Encode(adjacentBlockPos.x, adjacentBlockPos.y, adjacentBlockPos.z), neighborLevel, adjacentBlockChunk);
 			}
 			else if(neighborLevel >= lightLevel)
 			{
 				// Kind of becomes a light source, propagate light
-				m_lightBFSQueue.emplace(Encode(adjacentBlockPos.x, adjacentBlockPos.y, adjacentBlockPos.z), adjacentBlockChunk);
+				m_torchlightBFSQueue.emplace(Encode(adjacentBlockPos.x, adjacentBlockPos.y, adjacentBlockPos.z), adjacentBlockChunk);
 			}
 		}
 	}
