@@ -6,6 +6,7 @@
 #include <atomic>
 #include <shared_mutex>
 #include <array>
+#include <cstring>
 
 constexpr int CX = 16;
 constexpr int CY = 256;
