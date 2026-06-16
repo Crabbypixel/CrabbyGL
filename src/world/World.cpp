@@ -140,7 +140,6 @@ void World::FillChunkData(Chunk& chunk, glm::ivec2 coord)
     // TODO: Add trees and grass
 	// Do all this in worldgen phase of development, not right now - to be done later
     // Fresh Perlin gen
-    chunk.chunkPos = coord;
     int cx = coord.x;
     int cz = coord.y;
 
@@ -839,8 +838,7 @@ void World::ChunkLoadWorkerLoop()
         }
 
         // Fill into worker-local chunk
-        auto chunk = std::make_unique<Chunk>();
-        chunk->chunkPos = coord;
+        auto chunk = std::make_unique<Chunk>(coord);                  // Make this on heap
 
         // No need to lock this, no shared resource used in this function
         FillChunkData(*chunk, coord);

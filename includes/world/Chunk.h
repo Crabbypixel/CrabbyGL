@@ -41,7 +41,7 @@ private:
 	friend class LightingSystem;
 
 public:
-	Chunk() { memset(aoCache, 0, sizeof(aoCache)); memset(lightMap, 0, sizeof(lightMap)); }
+	Chunk(glm::ivec2 pos) : chunkPos(pos) { memset(aoCache, 0, sizeof(aoCache)); memset(lightMap, 0, sizeof(lightMap)); }
 	Chunk(const Chunk&) = delete;
 	Chunk(Chunk&&) = delete;
 	Chunk& operator=(const Chunk&) = delete;
@@ -51,7 +51,7 @@ public:
 	mutable std::shared_mutex chunkMutex;
 
 	// World position of this chunk
-	glm::ivec2 chunkPos{0, 0};
+	const glm::ivec2 chunkPos;
 
 	// CRITICAL: Main thread owns the world state, workers CANNOT modify
 	bool dirty = true;				// Needs mesh rebuild
