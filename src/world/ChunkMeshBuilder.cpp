@@ -322,68 +322,8 @@ static void ComputeAO(
 
 
 // =========================================================================
-// Kept for translucent blocks (glass/leaves)
-// Identical to original, updated to emit new Vertex fields
-// =========================================================================
-
-void ChunkMeshBuilder::AddTranslucentFace(
-    std::vector<Vertex>& verts,
-    const glm::ivec3& worldPos,
-    const glm::ivec3& chunkLocalPos,
-    int face,
-    BlockType type,
-    const Chunk& chunk,
-    const Chunk* nPX, const Chunk* nNX,
-    const Chunk* nPZ, const Chunk* nNZ,
-    const Chunk* nPX_PZ, const Chunk* nPX_NZ,
-    const Chunk* nNX_PZ, const Chunk* nNX_NZ)
-{
-    const BlockDef& blockInfo = GetDef(type);
-    const bool useOverlay     = blockInfo.useOverlay && face > 1;
-
-    const glm::vec2 baseUVs[4] = {
-        {0.0f, 0.0f},
-        {1.0f, 0.0f},
-        {1.0f, 1.0f},
-        {0.0f, 1.0f},
-    };
-
-    uint8_t aoRaw[4];
-    ComputeAO(chunk, nPX, nNX, nPZ, nNZ, nPX_PZ, nPX_NZ, nNX_PZ, nNX_NZ, chunkLocalPos, face, aoRaw);
-
-    const bool flip = (aoRaw[0] + aoRaw[2] > aoRaw[1] + aoRaw[3]);
-    const int tri[2][6] = {
-        {0,1,2, 0,2,3},  // normal
-        {0,1,3, 1,2,3},  // flipped
-    };
-    const int* idx = flip ? tri[1] : tri[0];
-
-    for (int i = 0; i < 6; ++i)
-    {
-        const int k = idx[i];
-
-        //packed: normal (3b), useOverlay(1b), ao(2b)
-		uint8_t packed = ((uint8_t)face & 0x7)                  // lowest 3 bits
-					   | ((useOverlay ? 1u : 0u) << 3)          // next bit
-					   | ((aoRaw[k] & 3u) << 4);                // next 2 bits
-
-        verts.emplace_back(Vertex{
-            .pos         = worldPos + FACE_VERTS[face][k],
-            .baseUV      = baseUVs[k],            // tile-local (0..1 for 1×1 face)
-            .tileBase    = (uint8_t)blockInfo.faces[face],
-            .tileOverlay = (uint8_t)blockInfo.overlay,
-            .packed      = packed,
-            .lightValue  = chunk.lightMap[chunkLocalPos.x][chunkLocalPos.y][chunkLocalPos.z],
-            .tint        = PackRGBA(blockInfo.tint.x, blockInfo.tint.y, blockInfo.tint.z, 1.0f),
-        });
-    }
-}
-
-
-// =========================================================================
 // EmitCross - from earlier version
 // =========================================================================
-
 void ChunkMeshBuilder::EmitCross(
     std::vector<Vertex>& verts,
     const glm::ivec3& worldPos,
@@ -427,6 +367,64 @@ void ChunkMeshBuilder::EmitCross(
 
     emit(CROSS_VERTS1, FWD);  emit(CROSS_VERTS1, REV);
     emit(CROSS_VERTS2, FWD);  emit(CROSS_VERTS2, REV);
+}
+
+
+// =========================================================================
+// Kept for translucent blocks (glass/leaves)
+// Identical to original, updated to emit new Vertex fields
+// =========================================================================
+void ChunkMeshBuilder::AddTranslucentFace(
+    std::vector<Vertex>& verts,
+    const glm::ivec3& worldPos,
+    const glm::ivec3& chunkLocalPos,
+    int face,
+    BlockType type,
+    const Chunk& chunk,
+    const Chunk* nPX, const Chunk* nNX,
+    const Chunk* nPZ, const Chunk* nNZ,
+    const Chunk* nPX_PZ, const Chunk* nPX_NZ,
+    const Chunk* nNX_PZ, const Chunk* nNX_NZ)
+{
+    const BlockDef& blockInfo = GetDef(type);
+    const bool useOverlay = blockInfo.useOverlay && face > 1;
+
+    const glm::vec2 baseUVs[4] = {
+        {0.0f, 0.0f},
+        {1.0f, 0.0f},
+        {1.0f, 1.0f},
+        {0.0f, 1.0f},
+    };
+
+    uint8_t aoRaw[4];
+    ComputeAO(chunk, nPX, nNX, nPZ, nNZ, nPX_PZ, nPX_NZ, nNX_PZ, nNX_NZ, chunkLocalPos, face, aoRaw);
+
+    const bool flip = (aoRaw[0] + aoRaw[2] > aoRaw[1] + aoRaw[3]);
+    const int tri[2][6] = {
+        {0,1,2, 0,2,3},  // normal
+        {0,1,3, 1,2,3},  // flipped
+    };
+    const int* idx = flip ? tri[1] : tri[0];
+
+    for (int i = 0; i < 6; ++i)
+    {
+        const int k = idx[i];
+
+        //packed: normal (3b), useOverlay(1b), ao(2b)
+        uint8_t packed = ((uint8_t)face & 0x7)                  // lowest 3 bits
+                       | ((useOverlay ? 1u : 0u) << 3)          // next bit
+                       | ((aoRaw[k] & 3u) << 4);                // next 2 bits
+
+        verts.emplace_back(Vertex{
+            .pos         = worldPos + FACE_VERTS[face][k],
+            .baseUV      = baseUVs[k],            // tile-local (0..1 for 1×1 face)
+            .tileBase    = (uint8_t)blockInfo.faces[face],
+            .tileOverlay = (uint8_t)blockInfo.overlay,
+            .packed      = packed,
+            .lightValue  = chunk.lightMap[chunkLocalPos.x][chunkLocalPos.y][chunkLocalPos.z],
+            .tint        = PackRGBA(blockInfo.tint.x, blockInfo.tint.y, blockInfo.tint.z, 1.0f),
+        });
+    }
 }
 
 
@@ -564,7 +562,6 @@ void ChunkMeshBuilder::BuildLayer(
 
             // Skip drawing this face if it is entirely hidden by a solid neighbor block
             const glm::ivec3 neighborBlock = glm::ivec3(localX, localY, localZ) + NORMALS[face];
-
             if (IsNeighborOpaque(chunk, nPX, nNX, nPZ, nNZ, neighborBlock.x, neighborBlock.y, neighborBlock.z))
                 continue;
 
@@ -599,10 +596,10 @@ void ChunkMeshBuilder::BuildLayer(
             else
             {
                 // Read from neighbor chunk's lightMap
-                if (nPos.x == CX && face == POS_X && nPX)  lightValue = nPX->lightMap[0][nPos.y][nPos.z];
-                if (nPos.x == -1 && face == NEG_X && nNX)  lightValue = nNX->lightMap[CX - 1][nPos.y][nPos.z];
-                if (nPos.z == CZ && face == POS_Z && nPZ)  lightValue = nPZ->lightMap[nPos.x][nPos.y][0];
-                if (nPos.z == -1 && face == NEG_Z && nNZ)  lightValue = nNZ->lightMap[nPos.x][nPos.y][CZ - 1];
+                if (nPos.x == CX && face == POS_X && nPX) lightValue = nPX->lightMap[0][nPos.y][nPos.z];
+                if (nPos.x == -1 && face == NEG_X && nNX) lightValue = nNX->lightMap[CX - 1][nPos.y][nPos.z];
+                if (nPos.z == CZ && face == POS_Z && nPZ) lightValue = nPZ->lightMap[nPos.x][nPos.y][0];
+                if (nPos.z == -1 && face == NEG_Z && nNZ) lightValue = nNZ->lightMap[nPos.x][nPos.y][CZ - 1];
                 if (nPos.y == CY) lightValue = 0xF0;         // Full sunlight for top face of topmost block
             }
 
@@ -742,6 +739,7 @@ void ChunkMeshBuilder::Build(
         {
             for (int face = 0; face < 6; ++face)
             {
+                // Store the position of block perpendicular to the face being looped
                 const int neighborX = x + NORMALS[face].x;
                 const int neighborY = y + NORMALS[face].y;
                 const int neighborZ = z + NORMALS[face].z;
@@ -761,10 +759,10 @@ void ChunkMeshBuilder::Build(
                     BlockType neighborBlock{};
                     bool hasNeighbor = true;
 
-                    if      (neighborX <  0  && nNX) neighborBlock = nNX->GetUnchecked(CX-1, neighborY, neighborZ);
-                    else if (neighborX >= CX && nPX) neighborBlock = nPX->GetUnchecked(0,    neighborY, neighborZ);
-                    else if (neighborZ <  0  && nNZ) neighborBlock = nNZ->GetUnchecked(neighborX, neighborY, CZ-1);
-                    else if (neighborZ >= CZ && nPZ) neighborBlock = nPZ->GetUnchecked(neighborX, neighborY, 0);
+                    if      (neighborX <  0  && nNX) neighborBlock = nNX->GetUnchecked(CX-1     , neighborY, neighborZ);
+                    else if (neighborX >= CX && nPX) neighborBlock = nPX->GetUnchecked(0        , neighborY, neighborZ);
+                    else if (neighborZ <  0  && nNZ) neighborBlock = nNZ->GetUnchecked(neighborX, neighborY,      CZ-1);
+                    else if (neighborZ >= CZ && nPZ) neighborBlock = nPZ->GetUnchecked(neighborX, neighborY,         0);
                     else hasNeighbor = false;
 
                     if (hasNeighbor)
@@ -778,6 +776,9 @@ void ChunkMeshBuilder::Build(
                         shouldRenderFace = false;  // no neighbor -> face hidden
                     }
                 }
+
+                if (neighborY == -1 || neighborY == CY)
+                    shouldRenderFace = true;
 
                 if (shouldRenderFace)
                     AddTranslucentFace(outVertices, worldPos, localPos, static_cast<Face>(face), blockType, chunk, nPX, nNX, nPZ, nNZ, nPX_PZ, nPX_NZ, nNX_PZ, nNX_NZ);

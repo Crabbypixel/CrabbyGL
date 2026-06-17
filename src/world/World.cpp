@@ -129,7 +129,7 @@ float World::GetTerrainHeight(int wx, int wz)
 }
 
 // Invoked by worker
-void World::FillChunkData(Chunk& chunk, glm::ivec2 coord)
+void World::FillChunk(Chunk& chunk, glm::ivec2 coord)
 {
     // Try loading from disk first
     if (LoadChunkFromDisk(chunk, coord))
@@ -841,7 +841,7 @@ void World::ChunkLoadWorkerLoop()
         auto chunk = std::make_unique<Chunk>(coord);                  // Make this on heap
 
         // No need to lock this, no shared resource used in this function
-        FillChunkData(*chunk, coord);
+        FillChunk(*chunk, coord);
 
         // Move the chunk to staged section and remove the coord from queue
         {

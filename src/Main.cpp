@@ -80,7 +80,7 @@ private:
 	const float DOUBLE_TAP_WINDOW = 0.3f;
 	float spaceTimer = 0.0f;
 	bool waitingForSecondTap = false;
-
+	bool isAOEnabled = true;
 	bool shouldDrawAsWireframe = false;
 
 public:
@@ -325,6 +325,9 @@ public:
 		else
 			chunkMeshShader.setBool("u_isSelected", false);
 
+		// Toggle AO
+		chunkMeshShader.setBool("u_isAOEnabled", isAOEnabled);
+
 		// Draw world
 		glPolygonMode(GL_FRONT_AND_BACK, shouldDrawAsWireframe ? GL_LINE : GL_FILL);
 		world.DrawAll(matProjection, camera.getLookAt());
@@ -425,9 +428,10 @@ public:
 		ImGui::Text("Currently at chunk: %d %d", playerChunk.x, playerChunk.y);
 		ImGui::Text("Local chunk coord: %d %d", playerLocalChunk.x, playerLocalChunk.z);
 
-		ImGui::Text("Selected Block: %s", GetDef(inventory.GetHeldBlock()).name);
+		ImGui::Text("Selected block: %s", GetDef(inventory.GetHeldBlock()).name);
 		ImGui::Text("Raycast place position: %d %d %d", raycastPlacePos.x, raycastPlacePos.y, raycastPlacePos.z);
 		ImGui::Text("Chunk borders (G to toggle): %s", chunkDebug.visible ? "Enabled" : "Disabled");
+		ImGui::Text("AO: ", isAOEnabled ? "Enabled" : "Disabled");
 
 		static int teleportX = 0;
 		static int teleportY = 0;
@@ -524,8 +528,13 @@ public:
 		else if (GetMouseScroll() == Mouse::SCROLL_UP)
 			inventory.Scroll(-1);
 
+		// Toggle draw as wireframes or entire block
 		if (GetKey('J').bPressed)
 			shouldDrawAsWireframe = !shouldDrawAsWireframe;
+
+		// Toggle AO
+		if (GetKey('H').bPressed)
+			isAOEnabled = !isAOEnabled;
 
 		RequestCursor(bIsPaused || inventory.IsOpen());
 	}
@@ -534,7 +543,7 @@ public:
 	{
 		chunkMeshShader.use();
 		chunkMeshShader.setVec3("u_lightDir", glm::vec3(0.0f, -1.0f, 0.0f));
-		chunkMeshShader.setVec3("u_ambient", glm::vec3(0.15f));
+		chunkMeshShader.setVec3("u_ambient", glm::vec3(0.25f));
 		chunkMeshShader.setVec3("u_diffuse", glm::vec3(0.7f));
 	}
 

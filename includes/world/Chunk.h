@@ -6,6 +6,7 @@
 #include <atomic>
 #include <shared_mutex>
 #include <array>
+#include <cstring>
 
 constexpr int CX = 16;
 constexpr int CY = 256;
@@ -41,7 +42,7 @@ private:
 	friend class LightingSystem;
 
 public:
-	Chunk(glm::ivec2 pos) : chunkPos(pos) { memset(aoCache, 0, sizeof(aoCache)); memset(lightMap, 0, sizeof(lightMap)); }
+	explicit Chunk(glm::ivec2 pos) : chunkPos(pos) { memset(aoCache, 0, sizeof(aoCache)); memset(lightMap, 0, sizeof(lightMap)); }
 	Chunk(const Chunk&) = delete;
 	Chunk(Chunk&&) = delete;
 	Chunk& operator=(const Chunk&) = delete;

@@ -7,6 +7,12 @@
 
 enum class Blocktype;
 
+static const glm::ivec3 BLOCK_NEIGHBORS[] = {
+	{1, 0, 0}, {-1, 0, 0},	// +X, -X
+	{0, 0, 1}, { 0, 0,-1},	// +Z, -Z
+	{0, 1, 0}, { 0,-1, 0},	// +Y, -Y
+};
+
 // Index helpers
 static constexpr uint16_t Encode(uint8_t x, uint8_t y, uint8_t z) noexcept
 {
@@ -74,7 +80,7 @@ void LightingSystem::InitChunkLight(Chunk* chunk)
 		glm::ivec2 ND;          // Neighbor chunk direction offset
 		glm::ivec2 borderPos;   // Target coordinate inside the neighboring chunk
 		glm::ivec2 edgePos;     // Boundary coordinate inside the current chunk
-	} NEIGHBORS[] = {
+	} SIDES[] = {
 		// -1 means that index is run by a loop variable
 		{ {  1,  0 }, { 0,      -1 }, { CX - 1, -1     } },        // +X neighbor
 		{ { -1,  0 }, { CX - 1, -1 }, { 0,      -1     } },        // -X neighbor
@@ -82,7 +88,7 @@ void LightingSystem::InitChunkLight(Chunk* chunk)
 		{ {  0, -1 }, { -1, CZ - 1 }, { -1,     0      } }         // -Z neighbor
 	};
 
-	for (const auto& side : NEIGHBORS)
+	for (const auto& side : SIDES)
 	{
 		std::unique_lock lock(chunk->chunkMutex);
 
@@ -230,15 +236,8 @@ void LightingSystem::PropagateTorch()
 		// If its light level is 2 or more levels less than
 		// to the current one, add them to the queue
 
-		// Check all adjacent neighbors: +X, -X, +Z, -Z, +Y, -Y
-		static const glm::ivec3 NEIGHBORS[] = {
-			{1, 0, 0}, {-1, 0, 0},	// +X, -X
-			{0, 0, 1}, {0, 0, -1},	// +Z, -Z
-			{0, 1, 0}, {0, -1, 0},	// +Y, -Y
-		};
-
 		// Visit all neighbors
-		for (const auto& ND : NEIGHBORS)
+		for (const auto& ND : BLOCK_NEIGHBORS)
 		{
 			glm::ivec3 adjacentBlockPos = local + ND;
 			Chunk* adjacentBlockChunk = chunk;
@@ -309,14 +308,8 @@ void LightingSystem::RemoveTorch()
 
 		glm::ivec3 local = { DecodeX(index), DecodeY(index), DecodeZ(index) };
 
-		static const glm::ivec3 NEIGHBORS[] = {
-			{1, 0, 0}, {-1, 0, 0},	// +X, -X
-			{0, 0, 1}, { 0, 0,-1},	// +Z, -Z
-			{0, 1, 0}, { 0,-1, 0},	// +Y, -Y
-		};
-
 		// Visit all neighbors
-		for (const auto& ND : NEIGHBORS)
+		for (const auto& ND : BLOCK_NEIGHBORS)
 		{
 			glm::ivec3 adjacentBlockPos = local + ND;
 			Chunk* adjacentBlockChunk = chunk;
@@ -388,12 +381,8 @@ void LightingSystem::PropagateSunlight()
 		glm::ivec3 local = { DecodeX(index), DecodeY(index), DecodeZ(index) };
 		int lightLevel = GetSunlight(chunk, local.x, local.y, local.z);
 
-		static const glm::ivec3 NEIGHBORS[] = {
-			{1,0,0},{-1,0,0},{0,0,1},{0,0,-1},{0,1,0},{0,-1,0}
-		};
-
 		// Visit all neighbors
-		for (const auto& ND : NEIGHBORS)
+		for (const auto& ND : BLOCK_NEIGHBORS)
 		{
 			glm::ivec3 adjacentBlockPos = local + ND;
 			Chunk* adjacentBlockChunk = chunk;
@@ -473,12 +462,8 @@ void LightingSystem::RemoveSunlight()
 
 		glm::ivec3 local = { DecodeX(index), DecodeY(index), DecodeZ(index) };
 
-		static const glm::ivec3 NEIGHBORS[] = {
-			{1,0,0},{-1,0,0},{0,0,1},{0,0,-1},{0,1,0},{0,-1,0}
-		};
-
 		// Visit all neighbors
-		for (const auto& ND : NEIGHBORS)
+		for (const auto& ND : BLOCK_NEIGHBORS)
 		{
 			glm::ivec3 adjacentBlockPos = local + ND;
 			Chunk* adjacentBlockChunk = chunk;
@@ -492,7 +477,7 @@ void LightingSystem::RemoveSunlight()
 				adjacentBlockChunk = m_world->GetChunk(nChunkPos.x * CX, nChunkPos.y * CZ);
 				if (!adjacentBlockChunk) continue;
 
-				if (adjacentBlockPos.x == -1) adjacentBlockPos.x = CX - 1;
+				if		(adjacentBlockPos.x == -1) adjacentBlockPos.x = CX - 1;
 				else if (adjacentBlockPos.x == CX) adjacentBlockPos.x = 0;
 				else if (adjacentBlockPos.z == -1) adjacentBlockPos.z = CZ - 1;
 				else if (adjacentBlockPos.z == CZ) adjacentBlockPos.z = 0;

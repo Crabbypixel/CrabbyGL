@@ -19,6 +19,7 @@
 #include <atomic>
 #include <shared_mutex>
 #include <condition_variable>
+#include <optional>
 
 class Shader;
 
@@ -168,7 +169,7 @@ private:
     static void SaveChunkToDisk(const Chunk& chunk);
     static bool LoadChunkFromDisk(Chunk& chunk, glm::ivec2& coord);
 
-    // ──────── Load workers ────────
+    // -------- Load workers --------
     // Chunk Job queue: main thread pushes coords to load, workers pop
     std::queue<glm::ivec2> m_chunkLoadJobQueue;
     std::mutex m_chunkLoadJobMutex;
@@ -187,9 +188,9 @@ private:
     void ChunkLoadWorkerLoop();
 
 	// Called by worker thread to fill chunk - fetch from disk or generate terrain (if new chunk)
-    void FillChunkData(Chunk& chunk, glm::ivec2 coord);
+    void FillChunk(Chunk& chunk, glm::ivec2 coord);
 
-    // ──────── Mesh workers ────────
+    // -------- Mesh workers --------
     // Mesh Job queue: main thread pushes "dirty" chunks to mesh, workers pop
     std::queue<MeshJob> m_meshJobQueue;
     std::mutex m_meshJobMutex;
@@ -207,7 +208,7 @@ private:
     std::vector<std::thread> m_meshWorkers;
     void MeshWorkerLoop();
 
-    // ──────── Save worker ────────
+    // -------- Save worker --------
 	// Queue holds pointers to chunk to be saved to disk
     std::queue<std::unique_ptr<Chunk>> m_chunkSaveQueue;
     std::mutex m_chunkSaveMutex;

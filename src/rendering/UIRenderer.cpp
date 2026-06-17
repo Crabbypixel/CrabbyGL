@@ -194,6 +194,7 @@ static int GetIconIndex(BlockType t) noexcept
 		return 66;
 	default:
 		std::cerr << "Unknown block type: " << (int)t << '\n';
+		return -1;
 	}
 }
 
