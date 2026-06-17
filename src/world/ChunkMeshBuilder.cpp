@@ -727,14 +727,15 @@ void ChunkMeshBuilder::Build(
         if (blockType == BlockType::AIR) [[likely]]
             continue;
 
-        // Cross blocks (flowers, saplings, grass, etc)
+        // Emit cross faces (2 textures in a cross fashion) if the block found it a cross item
         if (IsCross(blockType)) [[unlikely]]
         {
+            // Final rendering call for rendering cross items
             EmitCross(outVertices, {chunkWX + x, y, chunkWZ + z}, chunk.lightMap[x][y][z], blockType);
             continue;
         }
 
-        // Translucent blocks (glass, leaves)
+        // Translucent blocks are rendered separately, no greedy meshing
         if (IsTranslucent(blockType)) [[unlikely]]
         {
             for (int face = 0; face < 6; ++face)
@@ -756,6 +757,7 @@ void ChunkMeshBuilder::Build(
                 }
                 else
                 {
+                    // If the neighbor is NOT in the current chunk, query properly
                     BlockType neighborBlock{};
                     bool hasNeighbor = true;
 
@@ -777,9 +779,11 @@ void ChunkMeshBuilder::Build(
                     }
                 }
 
+                // Render the face regardless if the neighbor is at the world height or 0
                 if (neighborY == -1 || neighborY == CY)
                     shouldRenderFace = true;
 
+                // Final rendering call to render faces of translucent blocks
                 if (shouldRenderFace)
                     AddTranslucentFace(outVertices, worldPos, localPos, static_cast<Face>(face), blockType, chunk, nPX, nNX, nPZ, nNZ, nPX_PZ, nPX_NZ, nNX_PZ, nNX_NZ);
             }

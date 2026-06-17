@@ -75,7 +75,7 @@ void LightingSystem::InitChunkLight(Chunk* chunk)
 	}
 
 	// Check if the chunk's neighbors edge blocks have light -> seed BFS
-	// Neighbor bleed-in
+	// Neighbor bleed-in (for both sunlight and torchlight)
 	static const struct {
 		glm::ivec2 ND;          // Neighbor chunk direction offset
 		glm::ivec2 borderPos;   // Target coordinate inside the neighboring chunk
@@ -108,33 +108,33 @@ void LightingSystem::InitChunkLight(Chunk* chunk)
 			glm::ivec3 edgePos = (side.edgePos.x != -1) ? glm::ivec3(side.edgePos.x, y, i) : glm::ivec3(i, y, side.edgePos.y);
 
 			int borderTorchlight = GetTorchLight(neighborChunk, borderPos.x, borderPos.y, borderPos.z);
-			int incomingTorchlight = borderTorchlight - 1;
-			int edgeTorchlight = GetTorchLight(chunk, edgePos.x, edgePos.y, edgePos.z);
-
-			if (borderTorchlight <= 1)
-				continue;
-
-			// Bleed-in torchlight from chunk boundaries
-			if (edgeTorchlight < incomingTorchlight)
+			if (borderTorchlight > 1)
 			{
-				SetTorchLightUnsafe(chunk, edgePos.x, edgePos.y, edgePos.z, incomingTorchlight);
-				m_visitedChunks.insert(chunk);
-				m_torchlightBFSQueue.emplace(Encode(edgePos.x, edgePos.y, edgePos.z), chunk);
+				int incomingTorchlight = borderTorchlight - 1;
+				int edgeTorchlight = GetTorchLight(chunk, edgePos.x, edgePos.y, edgePos.z);
+
+				// Bleed-in torchlight from chunk boundaries
+				if (edgeTorchlight < incomingTorchlight)
+				{
+					SetTorchLightUnsafe(chunk, edgePos.x, edgePos.y, edgePos.z, incomingTorchlight);
+					m_visitedChunks.insert(chunk);
+					m_torchlightBFSQueue.emplace(Encode(edgePos.x, edgePos.y, edgePos.z), chunk);
+				}
 			}
 
-			// Bleed-in sunlight from chunk boundaries
 			int borderSunlight = GetSunlight(neighborChunk, borderPos.x, borderPos.y, borderPos.z);
-			int incomingSunlight = borderSunlight - 1;
-			int edgeSunlight = GetSunlight(chunk, edgePos.x, edgePos.y, edgePos.z);
-
-			if (borderSunlight <= 1)
-				continue;
-
-			if (edgeSunlight < incomingSunlight)
+			if (borderSunlight > 1)
 			{
-				SetSunlightUnsafe(chunk, edgePos.x, edgePos.y, edgePos.z, incomingSunlight);
-				m_visitedChunks.insert(chunk);
-				m_sunlightBFSQueue.emplace(Encode(edgePos.x, edgePos.y, edgePos.z), chunk);
+				int incomingSunlight = borderSunlight - 1;
+				int edgeSunlight = GetSunlight(chunk, edgePos.x, edgePos.y, edgePos.z);
+
+				// Bleed-in sunlight from chunk boundaries
+				if (edgeSunlight < incomingSunlight)
+				{
+					SetSunlightUnsafe(chunk, edgePos.x, edgePos.y, edgePos.z, incomingSunlight);
+					m_visitedChunks.insert(chunk);
+					m_sunlightBFSQueue.emplace(Encode(edgePos.x, edgePos.y, edgePos.z), chunk);
+				}
 			}
 		}
 	}

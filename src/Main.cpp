@@ -424,14 +424,14 @@ public:
 		glm::ivec3 playerLocalChunk = World::ChunkLocalCoord(player.GetPos().x, player.GetPos().y, player.GetPos().z);
 		ImGui::Begin("Debug Console");
 		ImGui::Text("Hello World!");
-		ImGui::Text("Player Position: %d %d %d", (int)camera.position.x, (int)camera.position.y, (int)camera.position.z);
+		ImGui::Text("Player Position: %d %d %d", (int)player.GetPos().x, (int)player.GetPos().y, (int)player.GetPos().z);
 		ImGui::Text("Currently at chunk: %d %d", playerChunk.x, playerChunk.y);
 		ImGui::Text("Local chunk coord: %d %d", playerLocalChunk.x, playerLocalChunk.z);
 
 		ImGui::Text("Selected block: %s", GetDef(inventory.GetHeldBlock()).name);
 		ImGui::Text("Raycast place position: %d %d %d", raycastPlacePos.x, raycastPlacePos.y, raycastPlacePos.z);
 		ImGui::Text("Chunk borders (G to toggle): %s", chunkDebug.visible ? "Enabled" : "Disabled");
-		ImGui::Text("AO: ", isAOEnabled ? "Enabled" : "Disabled");
+		ImGui::Text("AO: %s", isAOEnabled ? "Enabled" : "Disabled");
 
 		static int teleportX = 0;
 		static int teleportY = 0;
