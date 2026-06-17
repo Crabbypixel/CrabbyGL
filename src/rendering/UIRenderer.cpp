@@ -167,6 +167,8 @@ static int GetIconIndex(BlockType t) noexcept
 		return 12;
 	case BlockType::SMOOTH_STONE:
 		return 13;
+	case BlockType::GLOWSTONE:
+		return 14;
 
 	case BlockType::GOLD_ORE:
 		return 16;
@@ -192,6 +194,7 @@ static int GetIconIndex(BlockType t) noexcept
 		return 66;
 	default:
 		std::cerr << "Unknown block type: " << (int)t << '\n';
+		return -1;
 	}
 }
 

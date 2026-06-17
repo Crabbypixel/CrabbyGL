@@ -4,7 +4,7 @@
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
 
-// GLM (needed for matProjection)
+// GLM (math library)
 #include <glm/glm.hpp>
 
 // Camera
@@ -15,9 +15,10 @@
 
 #include <string>
 #include <atomic>
+#include <mutex>
 
 // Constants
-constexpr float pi = 3.14159f;
+constexpr float PI = 3.14159f;
 
 class OpenGL_3D
 {
@@ -29,21 +30,12 @@ private:
 	// Window title name
 	std::string m_sAppName;
 
+	// Atomic variable for running console
+	std::atomic<bool> m_bIsRunning{ false };
+
 	// Maximum number of keys supported in GLFW
 	static constexpr int MAX_KEYS = GLFW_KEY_LAST;
 	static constexpr int MAX_MOUSE_BUTTONS = 3;
-
-	// Arrays to store key states
-	short m_keyNewState[MAX_KEYS] = { 0 };
-	short m_keyOldState[MAX_KEYS] = { 0 };
-
-	// True when main thread finishes writing into the buffer and ready to swap
-	std::atomic<bool> m_keySwapReady{ false };
-	bool m_keyRawPending[MAX_KEYS] = {};		// Main thread writes only
-	bool m_keyRaw[MAX_KEYS] = {};				// Renderer thread reads only
-
-	short m_mouseOldState[MAX_MOUSE_BUTTONS] = { 0 };
-	short m_mouseNewState[MAX_MOUSE_BUTTONS] = { 0 };
 
 	struct sKeyState
 	{
@@ -52,9 +44,24 @@ private:
 		bool bHeld;
 	} m_keys[MAX_KEYS] = {}, m_mouse[MAX_MOUSE_BUTTONS] = {};
 
+	// Arrays to store key states
+	short m_keyNewState[MAX_KEYS] = { 0 };
+	short m_keyOldState[MAX_KEYS] = { 0 };
+
+	// True when main thread finishes writing into the buffer and ready to swap
+	std::mutex m_keyMutex;				// Locks access to m_keyRaw
+	bool m_keyRaw[MAX_KEYS] = {};		// Main thread writes, renderer thread swap to local buffer using mutex
+
 	// Mouse variables
-	float m_mousePosX = 0.0f;
-	float m_mousePosY = 0.0f;
+	short m_mouseOldState[MAX_MOUSE_BUTTONS] = { 0 };
+	short m_mouseNewState[MAX_MOUSE_BUTTONS] = { 0 };
+
+	std::atomic<float> m_mousePosX = 0.0f;
+	std::atomic<float> m_mousePosY = 0.0f;
+
+	// Per frame mouse positions as m_mousePos may vary per frame (as it is updated from main thread)
+	float m_mousePosXFrame = 0.0f;
+	float m_mousePosYFrame = 0.0f;
 
 	// Written by main-thread GLFW callbacks, read by renderer thread
 	// Must be atomic to avoid undefined behavior and compiler register-caching
@@ -67,11 +74,12 @@ private:
 	// as the main thread can update the scroll at any time, we want to flush out asap
 	int m_mouseScrollFrame = 0;
 
-	// Atomic variable for running console
-	std::atomic<bool> m_bIsRunning{ false };
-
 	// Atomic variable for cursor visibility - renderer writes, main reads
 	std::atomic<bool> m_cursorVisible{ false };
+
+	// For title string
+	std::atomic<bool> m_titleDirty{ false };
+	char m_titleBuf[64] = {};
 
 protected:
 	GLFWwindow* window;
@@ -113,7 +121,7 @@ public:
 	OpenGL_3D& operator=(OpenGL_3D&&) = delete;
 
 	float fTimeSinceStart = 0.0f;
-	bool bFirstMouse = true;
+	std::atomic<bool> bFirstMouse = true;
 
 	Camera camera;
 	glm::mat4 matProjection;
@@ -127,8 +135,8 @@ public:
 
 	[[nodiscard]] int ScreenWidth() const noexcept { return m_width; }
 	[[nodiscard]] int ScreenHeight() const noexcept { return m_height; }
-	[[nodiscard]] float GetMousePosX() const noexcept { return m_mousePosX; }
-	[[nodiscard]] float GetMousePosY() const noexcept { return m_mousePosY; }
+	[[nodiscard]] float GetMousePosX() const noexcept { return m_mousePosXFrame; }
+	[[nodiscard]] float GetMousePosY() const noexcept { return m_mousePosYFrame; }
 	[[nodiscard]] Mouse GetMouseScroll() const noexcept { return (Mouse)m_mouseScrollFrame; }
 	[[nodiscard]] sKeyState GetMouseButton(Mouse button) const { return m_mouse[(int)button]; }
 	[[nodiscard]] sKeyState GetKey(int nKeyID) const { return m_keys[nKeyID]; }
@@ -143,8 +151,8 @@ public:
 
 	void ErrorLog(const std::string& str = "");
 
-	// Virtual functions
 protected:
+	// Virtual functions
 	// Has to be overridden by subclasses
 	virtual bool Setup() = 0;
 	virtual bool Update(float fElapsedTime) = 0;

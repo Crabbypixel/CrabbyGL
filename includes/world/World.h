@@ -3,6 +3,8 @@
 #include <glm/glm.hpp>
 
 #include "rendering/ChunkMesh.h"
+#include "physics/WorldPhysics.h"
+#include "world/LightingSystem.h"
 
 #include <cmath>
 #include <array>
@@ -17,6 +19,7 @@
 #include <atomic>
 #include <shared_mutex>
 #include <condition_variable>
+#include <optional>
 
 class Shader;
 
@@ -44,7 +47,7 @@ struct IVec2Hash
 
 struct Frustum
 {
-    std::array<glm::vec4, 6> planes;
+    std::array<glm::vec4, 6> planes {};
 
     void Extract(const glm::mat4& vp);
     bool ContainsAABB(const glm::vec3& min, const glm::vec3& max) const;
@@ -103,6 +106,13 @@ public:
     [[nodiscard]] bool PlaceBlock(const RaycastHit& hit, BlockType type);
     [[nodiscard]] bool BreakBlock(const RaycastHit& hit);
 
+    // Chunk access
+    [[nodiscard]] Chunk* GetChunk(int worldX, int worldZ);
+    [[nodiscard]] const Chunk* GetChunk(int worldX, int worldZ) const;
+
+    [[nodiscard]] WorldPhysics& GetWorldPhysics() noexcept { return m_worldPhysics; }
+    [[nodiscard]] LightingSystem& GetLightingSystem() noexcept { return m_lightingSystem; }
+
     // 1) Generate and unload chunks by sending jobs to chunk job threads
     void UpdateChunkStreaming(const glm::vec3& playerPos);
 
@@ -130,18 +140,22 @@ private:
 	// Frustum planes for Frustum Culling
 	Frustum m_frustum;
 
+    // World physics and lighting system manager
+    WorldPhysics m_worldPhysics;
+    LightingSystem m_lightingSystem;
+
+    // Chunk coordinates with lighting initialization postponed until their neighbors are loaded into the map
+    std::unordered_set<glm::ivec2, IVec2Hash> m_deferredLightingChunks;
+
 	// World-player variables
     // TODO: Make this dynamic and make user to control - to be done later
-    int m_viewDist = 8;			// Chunk load boundary
-    int m_unloadDist = 8;		// Chunk unload boundary
+    // Chunk load and unload distance
+    int m_viewDist = 3;
+    int m_unloadDist = 3;
     glm::ivec2 m_lastPlayerChunk = { INT_MAX, INT_MAX };	// Previous frame player chunk pos
 
 	// Global atomic shutdown flag for workers to exit
     std::atomic<bool> m_shutdown{ false };
-
-    // Internal chunk access
-    [[nodiscard]] Chunk* GetChunk(int worldX, int worldZ);
-    [[nodiscard]] const Chunk* GetChunk(int worldX, int worldZ) const;
 
     // Mark the adjacent chunk dirty if the world coord passed is at a chunk boundary (same with AO)
     void MarkAdjacentChunksDirty(int wx, int wy, int wz);
@@ -155,7 +169,7 @@ private:
     static void SaveChunkToDisk(const Chunk& chunk);
     static bool LoadChunkFromDisk(Chunk& chunk, glm::ivec2& coord);
 
-    // ──────── Load workers ────────
+    // -------- Load workers --------
     // Chunk Job queue: main thread pushes coords to load, workers pop
     std::queue<glm::ivec2> m_chunkLoadJobQueue;
     std::mutex m_chunkLoadJobMutex;
@@ -174,9 +188,9 @@ private:
     void ChunkLoadWorkerLoop();
 
 	// Called by worker thread to fill chunk - fetch from disk or generate terrain (if new chunk)
-    void FillChunkData(Chunk& chunk, glm::ivec2 coord);
+    void FillChunk(Chunk& chunk, glm::ivec2 coord);
 
-    // ──────── Mesh workers ────────
+    // -------- Mesh workers --------
     // Mesh Job queue: main thread pushes "dirty" chunks to mesh, workers pop
     std::queue<MeshJob> m_meshJobQueue;
     std::mutex m_meshJobMutex;
@@ -194,7 +208,7 @@ private:
     std::vector<std::thread> m_meshWorkers;
     void MeshWorkerLoop();
 
-    // ──────── Save worker ────────
+    // -------- Save worker --------
 	// Queue holds pointers to chunk to be saved to disk
     std::queue<std::unique_ptr<Chunk>> m_chunkSaveQueue;
     std::mutex m_chunkSaveMutex;

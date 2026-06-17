@@ -6,7 +6,8 @@ layout (location = 1) in vec2  aUV;
 layout (location = 2) in uint  aTileBase;
 layout (location = 3) in uint  aTileOverlay;
 layout (location = 4) in uint  aPacked;
-layout (location = 5) in vec4  aTint;
+layout (location = 5) in uint  aLightValue;
+layout (location = 6) in vec4  aTint;
 
 // Shared camera matrices
 layout (std140) uniform Matrices
@@ -24,6 +25,7 @@ flat out uint fUseOverlay;          // GLSL version 330 doesn't support flat boo
 flat out uint fNormalIndex;
 flat out uint fTileBase;
 flat out uint fTileOverlay;
+flat out uint fLightValue;
 
 void main()
 {
@@ -41,6 +43,9 @@ void main()
     fNormalIndex = aPacked & 0x7u;
     fUseOverlay  = (aPacked >> 3u) & 0x1u;
     fAo          = float((aPacked >> 4u) & 0x3u) / 3.0f;
+
+    // Sunlight & Torchlight
+    fLightValue = aLightValue;
 
     // RGBA8 tint arrives normalized to 0..1
     fTint = aTint.rgb;
@@ -81,6 +86,7 @@ flat in uint fUseOverlay;
 flat in uint fNormalIndex;
 flat in uint fTileBase;
 flat in uint fTileOverlay;
+flat in uint fLightValue;
 
 out vec4 FragColor;
 
@@ -173,18 +179,29 @@ void main()
         color *= fTint;
     }
 
-    // Flat per-face directional lighting
-    float NdotL = max(dot(normalize(NORMALS[fNormalIndex]), -normalize(u_lightDir)), 0.0f);
+   float skyExposure = float((fLightValue >> 4u) & 0xFu) / 15.0f;
+   float torch      = float(fLightValue       & 0xFu) / 15.0f;
+   
+   float NdotL = max(dot(normalize(NORMALS[fNormalIndex]), -normalize(u_lightDir)), 0.0f);
+   
+   // Sky contribution: exposure × time-of-day × directional face angle
+   float sunLight = skyExposure * 1.0f * (u_diffuse.r * NdotL) * 1.0f + u_ambient.r;
+   
+   // Torch overrides directional: torch=1 -> full omni, torch=0 -> sun only
+   float finalLight = mix(sunLight, 1.0f, torch);
+   
+   if(u_isAOEnabled)
+        color *= mix(0.8f, 1.0f, fAo * fAo);
 
-    color *= u_ambient + u_diffuse * NdotL;
-
-    // Ambient occlusion
-    color *= mix(0.5f, 1.0f, fAo);
+   color *= finalLight;
 
     // Selected block highlight
     if (u_isSelected && fragBlockPos() == u_selectedBlock)
     {
-        color /= 0.85f;
+        if(color == vec3(0.0f))     // Show some highlight if the color is completely zero
+            color += 0.1f;
+        else
+            color *= 1.2f;
     }
 
     FragColor = vec4(color, baseTex.a);

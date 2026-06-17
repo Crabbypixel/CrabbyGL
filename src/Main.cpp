@@ -14,6 +14,7 @@
 #include "world/World.h"
 #include "world/Chunk.h"
 #include "world/BlockRegistry.h"
+#include "world/LightingSystem.h"
 
 #include "player/Player.h"
 #include "player/Inventory.h"
@@ -62,13 +63,12 @@ private:
 
 	// World
 	World world;
-	WorldPhysics worldPhysics;
 
 	// Chunk outlines for debugging
 	ChunkDebug chunkDebug;
 
 	// Hotbar & Inventory
-	UIRenderer UIRenderer;
+	UIRenderer uiRenderer;
 	Inventory inventory;
 
 	// Framebuffer variables
@@ -80,13 +80,13 @@ private:
 	const float DOUBLE_TAP_WINDOW = 0.3f;
 	float spaceTimer = 0.0f;
 	bool waitingForSecondTap = false;
-
+	bool isAOEnabled = true;
 	bool shouldDrawAsWireframe = false;
 
 public:
 	bool Setup() override
 	{
-		player.SetPos(glm::vec3(20.0f, 39.0f, 78.0f));
+		player.SetPos(glm::vec3(65.0f, 256.0f, 38.0f));
 		camera.Init(player.GetPos(), glm::vec3(0.0f, 0.0f, -1.0f), ScreenWidth(), ScreenHeight());
 
 		// Axes
@@ -114,17 +114,15 @@ public:
 		chunkDebug.Init("assets/shaders/ChunkDebug.glsl");
 
 		// UI Renderer
-		UIRenderer.Init(ScreenWidth(), ScreenHeight());
-		UIRenderer.LoadIcons("assets/textures/icons.png");
-		UIRenderer.LoadASCII("assets/textures/ascii.png");
+		uiRenderer.Init(ScreenWidth(), ScreenHeight());
+		uiRenderer.LoadIcons("assets/textures/icons.png");
+		uiRenderer.LoadASCII("assets/textures/ascii.png");
 
 		// Inventory
 		if (!inventory.Load("saves/player_inventory.bin"))
 			std::cout << "Error loading player inventory\n";
 
 		// ───── World ──────────────────────────────────────────────────
-		auto dt1 = std::chrono::system_clock::now();
-
 		chunkMeshShader.load("assets/shaders/ChunkMesh.glsl");
 
 		world.SetChunkShader(chunkMeshShader);
@@ -135,17 +133,13 @@ public:
 		world.StartChunkLoadWorkers(4);
 		world.StartMeshWorkers(4);
 
-		auto dt2 = std::chrono::system_clock::now();
-		float fTimeTaken = std::chrono::duration_cast<std::chrono::milliseconds>(dt2 - dt1).count();
-		std::cout << "Time taken to generate world: " << std::fixed << std::setprecision(2) << fTimeTaken / 1000.0f << " seconds" << std::endl;
-
 		// ───── Shaders ──────────────────────────────────────────────────
 		InitShaders();
 
 		{
 			// ───── Framebuffers ──────────────────────────────────────────────────
 			// Generate and bind the framebuffer
-			framebufferShader.load("assets/shaders/FrameBuffer.glsl");
+			framebufferShader.load("assets/shaders/Framebuffer.glsl");
 
 			// Generate and bind the framebuffer
 			glGenFramebuffers(1, &framebuffer);
@@ -254,22 +248,21 @@ public:
 			// Physics test - generate a gravel platform to test physics (in development - prone to bugs)
 			if (GetKey('U').bPressed)
 			{
-				for (int i = 200; i < 220; ++i)
-					for (int j = 200; j < 220; ++j)
-						world.SetBlock(i, 150, j, BlockType::GRAVEL);
-
-				world.SetBlock(0, 100, 0, BlockType::BROWN_MUSHROOM);
+				for (int i = 0; i < 75; ++i)
+					for (int j = 0; j < 75; ++j)
+						world.SetBlock(i, 75, j, BlockType::AIR);
 			}
 		}
 
 		RaycastHit m_currentHit = RaycastDDA(camera.position, camera.front, world);
-		glm::ivec3 raycastPlacePos = m_currentHit.blockPos + m_currentHit.normal;
+		const glm::ivec3& raycastHitPos = m_currentHit.blockPos;
+		const glm::ivec3& raycastPlacePos = m_currentHit.blockPos + m_currentHit.normal;
 		glm::ivec3 playerPos = { (int)floor(player.GetPos().x), (int)floor(player.GetPos().y), (int)floor(player.GetPos().z)};
 
 		// Select block
 		if (!bIsPaused && shouldUpdateCamera && GetMouseButton(Mouse::MIDDLE).bPressed && m_currentHit.hit)
 		{
-			BlockType picked = world.GetBlock(m_currentHit.blockPos.x, m_currentHit.blockPos.y, m_currentHit.blockPos.z);
+			BlockType picked = world.GetBlock(raycastHitPos.x, raycastHitPos.y, raycastHitPos.z);
 			inventory.AddBlock(picked);
 		}
 
@@ -279,7 +272,10 @@ public:
 			bool isBlockBreakValid = world.BreakBlock(m_currentHit);
 
 			if (isBlockBreakValid)
-				worldPhysics.NotifyBlockChanged(m_currentHit.blockPos.x, m_currentHit.blockPos.y, m_currentHit.blockPos.z);
+			{
+				world.GetWorldPhysics().NotifyBlockChanged(raycastHitPos.x, raycastHitPos.y, raycastHitPos.z);
+				world.GetLightingSystem().NotifyBlockRemoved(raycastHitPos.x, raycastHitPos.y, raycastHitPos.z);
+			}
 		}
 
 		// Place block
@@ -288,10 +284,15 @@ public:
 			bool isBlockPlaceValid = world.PlaceBlock(m_currentHit, inventory.GetHeldBlock());
 
 			if (isBlockPlaceValid)
-				worldPhysics.NotifyBlockChanged(raycastPlacePos.x, raycastPlacePos.y, raycastPlacePos.z);
+			{
+				world.GetWorldPhysics().NotifyBlockChanged(raycastPlacePos.x, raycastPlacePos.y, raycastPlacePos.z);
+				world.GetLightingSystem().NotifyBlockPlaced(raycastPlacePos.x, raycastPlacePos.y, raycastPlacePos.z, inventory.GetHeldBlock());
+			}
 		}
 
-		worldPhysics.Update(dt, world);
+		// Update world physics & world lighting
+		world.GetWorldPhysics().Update(dt);
+		world.GetLightingSystem().Update();
 
 		// ───── Rendering ───────────────────────────────────────────────
 		// Update chunk streaming state based on player position:
@@ -324,6 +325,9 @@ public:
 		else
 			chunkMeshShader.setBool("u_isSelected", false);
 
+		// Toggle AO
+		chunkMeshShader.setBool("u_isAOEnabled", isAOEnabled);
+
 		// Draw world
 		glPolygonMode(GL_FRONT_AND_BACK, shouldDrawAsWireframe ? GL_LINE : GL_FILL);
 		world.DrawAll(matProjection, camera.getLookAt());
@@ -346,31 +350,31 @@ public:
 		RenderCrosshair();
 
 		// Hotbar
-		UIRenderer.DrawHotbar();
+		uiRenderer.DrawHotbar();
 
 		// Hotbar icons
-		UIRenderer.DrawHotbarIcons(inventory);
+		uiRenderer.DrawHotbarIcons(inventory);
 
 		// Hotbar selector
-		UIRenderer.DrawHotbarCursor(inventory.GetHotbarIndex());
+		uiRenderer.DrawHotbarCursor(inventory.GetHotbarIndex());
 
 		// Inventory
 		if (inventory.IsOpen())
 		{
 			// Draw inventory screen
-			UIRenderer.DrawInventory();
+			uiRenderer.DrawInventory();
 
 			// Draw items
-			UIRenderer.DrawInventoryIcons(inventory);
+			uiRenderer.DrawInventoryIcons(inventory);
 
 			// Get inventory slot under mouse cursor
 			int inventoryMouseHoverIndex = UIRenderer::GetMouseInventorySlot(GetMousePosX(), ScreenHeight() - GetMousePosY());
 			if (inventoryMouseHoverIndex != -1)
 			{
-				glm::vec2 highlightPos = UIRenderer.GetInventorySlotPos(inventoryMouseHoverIndex);
+				glm::vec2 highlightPos = uiRenderer.GetInventorySlotPos(inventoryMouseHoverIndex);
 				
 				// Highlight the slot under the mouse cursor
-				UIRenderer.DrawHighlightRect(highlightPos.x, highlightPos.y, 32, 32, glm::vec4(0.7f, 0.7f, 0.7f, 0.6f));
+				uiRenderer.DrawHighlightRect(highlightPos.x, highlightPos.y, 32, 32, glm::vec4(0.7f, 0.7f, 0.7f, 0.6f));
 
 				// Remove item if Q selected while hovering over inventory slot
 				if (GetKey('Q').bPressed)
@@ -393,7 +397,7 @@ public:
 			}
 
 			// Draw held item above all
-			UIRenderer.DrawHeldItem(inventory, mouseX, mouseY);
+			uiRenderer.DrawHeldItem(inventory, mouseX, mouseY);
 		}
 
 		// Write and use the depth buffer
@@ -420,13 +424,14 @@ public:
 		glm::ivec3 playerLocalChunk = World::ChunkLocalCoord(player.GetPos().x, player.GetPos().y, player.GetPos().z);
 		ImGui::Begin("Debug Console");
 		ImGui::Text("Hello World!");
-		ImGui::Text("Player Position: %d %d %d", (int)camera.position.x, (int)camera.position.y, (int)camera.position.z);
+		ImGui::Text("Player Position: %d %d %d", (int)player.GetPos().x, (int)player.GetPos().y, (int)player.GetPos().z);
 		ImGui::Text("Currently at chunk: %d %d", playerChunk.x, playerChunk.y);
 		ImGui::Text("Local chunk coord: %d %d", playerLocalChunk.x, playerLocalChunk.z);
 
-		ImGui::Text("Selected Block: %s", GetDef(inventory.GetHeldBlock()).name);
+		ImGui::Text("Selected block: %s", GetDef(inventory.GetHeldBlock()).name);
 		ImGui::Text("Raycast place position: %d %d %d", raycastPlacePos.x, raycastPlacePos.y, raycastPlacePos.z);
 		ImGui::Text("Chunk borders (G to toggle): %s", chunkDebug.visible ? "Enabled" : "Disabled");
+		ImGui::Text("AO: %s", isAOEnabled ? "Enabled" : "Disabled");
 
 		static int teleportX = 0;
 		static int teleportY = 0;
@@ -523,8 +528,13 @@ public:
 		else if (GetMouseScroll() == Mouse::SCROLL_UP)
 			inventory.Scroll(-1);
 
+		// Toggle draw as wireframes or entire block
 		if (GetKey('J').bPressed)
 			shouldDrawAsWireframe = !shouldDrawAsWireframe;
+
+		// Toggle AO
+		if (GetKey('H').bPressed)
+			isAOEnabled = !isAOEnabled;
 
 		RequestCursor(bIsPaused || inventory.IsOpen());
 	}
@@ -533,7 +543,7 @@ public:
 	{
 		chunkMeshShader.use();
 		chunkMeshShader.setVec3("u_lightDir", glm::vec3(0.0f, -1.0f, 0.0f));
-		chunkMeshShader.setVec3("u_ambient", glm::vec3(0.4f));
+		chunkMeshShader.setVec3("u_ambient", glm::vec3(0.25f));
 		chunkMeshShader.setVec3("u_diffuse", glm::vec3(0.7f));
 	}
 

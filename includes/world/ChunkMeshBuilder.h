@@ -24,7 +24,7 @@ public:
     // Builds mesh for chunk, queries world for cross-chunk neighbors
     // The pointers point to neighboring chunks, caching for performance (no need of map lookups)
     static void Build(
-        Chunk& chunk,
+        const Chunk& chunk,
         const Chunk* nPX, const Chunk* nNX,
         const Chunk* nPZ, const Chunk* nNZ,
         const Chunk* nPX_PZ, const Chunk* nPX_NZ,
@@ -59,6 +59,7 @@ private:
     static void EmitCross(
         std::vector<Vertex>& verts,
         const glm::ivec3& worldPos,
+        uint8_t lightValue,
         BlockType type
     );
 
@@ -70,7 +71,7 @@ private:
         std::vector<Vertex>& out);
 
     static void BuildLayer(
-        Chunk& chunk,
+        const Chunk& chunk,
         const Chunk* nPX, const Chunk* nNX,
         const Chunk* nPZ, const Chunk* nNZ,
         const Chunk* nPX_PZ, const Chunk* nPX_NZ,

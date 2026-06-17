@@ -68,7 +68,7 @@ void BufferLayout::setBufferLayout(const VertexArray& va, const VertexBuffer<T>&
 	buffer.bind();
 
 	size_t sz = buffer.getVertexCount() * buffer.typeSize;
-	glVertexAttribPointer(location, count, (GLenum)type, GL_FALSE, sz, (const void*)stride);
+	glVertexAttribPointer(location, count, (GLenum)type, GL_FALSE, sz, reinterpret_cast<const void*>(stride));
 	glEnableVertexAttribArray(location);
 
 	stride += count * getSizeFromType(type);

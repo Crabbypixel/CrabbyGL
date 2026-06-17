@@ -25,28 +25,31 @@ public:
 	void use() const noexcept;
 
 	[[nodiscard]]
-	unsigned int getID() const noexcept { return id; }
+	unsigned int getID() const noexcept { return m_id; }
 
-	void setBool(const std::string& name, bool value) const noexcept;
-	void setInt(const std::string& name, int value) const noexcept;
-	void setFloat(const std::string& name, float value) const noexcept;
-	void setMat4(const std::string& name, const glm::mat4& mat) const noexcept;
-	void setVec3(const std::string& name, const float& f1, const float& f2, const float& f3) const noexcept;
-	void setVec3(const std::string& name, const glm::vec3& vec) const noexcept;
-	void setIvec3(const std::string& name, const glm::ivec3& ivec) const noexcept;
-	void setIvec3(const std::string& name, const int& i1, const int& i2, const int& i3) const noexcept;
-	void setVec2(const std::string& name, const float& f1, const float& f2) const noexcept;
-	void setVec2(const std::string& name, const glm::vec2& vec) const noexcept;
-	void setIvec2(const std::string& name, const glm::ivec2& ivec) const noexcept;
-	void setIvec2(const std::string& name, const int& i1, const int& i2) const noexcept;
-	void setVec4(const std::string& name, const glm::vec4& vec) const noexcept;
-	void setVec4(const std::string& name, const float& f1, const float& f2, const float& f3, const float& f4) const noexcept;
-	void setIvec4(const std::string& name, const glm::ivec4& vec) const noexcept;
-	void setIvec4(const std::string& name, const int& f1, const int& f2, const int& f3, const int& f4) const noexcept;
+	void setBool(const std::string& name, bool value) noexcept;
+	void setInt(const std::string& name, int value) noexcept;
+	void setFloat(const std::string& name, float value) noexcept;
+	void setMat4(const std::string& name, const glm::mat4& mat) noexcept;
+	void setVec3(const std::string& name, float f1, float f2, float f3) noexcept;
+	void setVec3(const std::string& name, const glm::vec3& vec) noexcept;
+	void setIvec3(const std::string& name, const glm::ivec3& ivec) noexcept;
+	void setIvec3(const std::string& name, int i1, int i2, int i3) noexcept;
+	void setVec2(const std::string& name, float f1, float f2) noexcept;
+	void setVec2(const std::string& name, const glm::vec2& vec) noexcept;
+	void setIvec2(const std::string& name, const glm::ivec2& ivec) noexcept;
+	void setIvec2(const std::string& name, int i1, int i2) noexcept;
+	void setVec4(const std::string& name, const glm::vec4& vec) noexcept;
+	void setVec4(const std::string& name, float f1, float f2, float f3, float f4) noexcept;
+	void setIvec4(const std::string& name, const glm::ivec4& vec) noexcept;
+	void setIvec4(const std::string& name, int f1, int f2, int f3, int f4) noexcept;
 
 	~Shader();
 
 private:
-	unsigned int id = 0;
+	unsigned int m_id = 0;
+	std::unordered_map<std::string, int> m_uniformLocationCache;
+	int GetUniformLocation(const std::string& name) noexcept;
+	int GetUniformLocationChecked(const std::string& name) noexcept;
 	unsigned int CompileShader(unsigned int type, const std::string& source, const std::string& shaderPath);
 };

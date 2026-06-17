@@ -4,17 +4,6 @@
 #include <mutex>
 #include <fstream>
 
-static int GetIndex(int x, int y, int z)
-{
-	// YZX ordering!!!
-	return (y * CX * CZ) + (x * CZ) + z;
-}
-
-constexpr bool Chunk::InBounds(int x, int y, int z) noexcept
-{
-	return (x >= 0 && x < CX) && (y >= 0 && y < CY) && (z >= 0 && z < CZ);
-}
-
 BlockType Chunk::Get(int x, int y, int z) const noexcept
 {
 	if (!InBounds(x, y, z))
@@ -37,13 +26,11 @@ void Chunk::Set(int x, int y, int z, BlockType type)
 
 BlockType Chunk::GetUnchecked(int x, int y, int z) const
 {
-	// YZX ordering!!!
 	return blocks[GetIndex(x, y, z)];
 }
 
 void Chunk::SetUnchecked(int x, int y, int z, BlockType type)
 {
-	// YZX ordering!!!
 	blocks[GetIndex(x, y, z)] = type;
 
 	dirty = true;
@@ -51,19 +38,19 @@ void Chunk::SetUnchecked(int x, int y, int z, BlockType type)
 	aoDirty = true;
 }
 
-void Chunk::Serialize(std::ofstream& f) const
+void Chunk::Serialize(std::ofstream& outputStream) const
 {
-	if (!f)
+	if (!outputStream)
 		return;
 
-	f.write(reinterpret_cast<const char*>(blocks.data()), sizeof(blocks));
+	outputStream.write(reinterpret_cast<const char*>(blocks.data()), sizeof(blocks));
 }
 
-bool Chunk::Deserialize(std::ifstream& f)
+bool Chunk::Deserialize(std::ifstream& inputSteam)
 {
-	if (!f)
+	if (!inputSteam)
 		return false;
 
-	f.read(reinterpret_cast<char*>(blocks.data()), sizeof(blocks));
-	return f.gcount() == sizeof(blocks);
+	inputSteam.read(reinterpret_cast<char*>(blocks.data()), sizeof(blocks));
+	return inputSteam.gcount() == sizeof(blocks);
 }

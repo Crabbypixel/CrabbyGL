@@ -11,6 +11,7 @@
 #include "world/World.h"
 #include "world/BlockRegistry.h"
 #include "world/ChunkMeshBuilder.h"
+#include "world/LightingSystem.h"
 #include "rendering/Shader.h"
 
 static constexpr glm::ivec2 GUARDED_NEIGHBORS[] =
@@ -26,7 +27,7 @@ static constexpr glm::ivec2 GUARDED_NEIGHBORS[] =
     {-1, -1 }
 };
 
-World::World()
+World::World() : m_worldPhysics(this), m_lightingSystem(this)
 {
     chunks.reserve(1000);
     m_chunkSaveWorker = std::thread(&World::SaveWorkerLoop, this);
@@ -88,7 +89,7 @@ BlockType World::GetBlock(int worldX, int worldY, int worldZ) const
         return BlockType::AIR;
 
     auto l = ChunkLocalCoord(worldX, worldY, worldZ);
-    return chunk->GetUnchecked(l.x, l.y, l.z);
+    return chunk->Get(l.x, l.y, l.z);               // Locks before accessing
 }
 
 void World::SetBlock(int worldX, int worldY, int worldZ, BlockType type)
@@ -101,7 +102,7 @@ void World::SetBlock(int worldX, int worldY, int worldZ, BlockType type)
         return;
 
     auto l = ChunkLocalCoord(worldX, worldY, worldZ);
-    chunk->SetUnchecked(l.x, l.y, l.z, type);
+    chunk->Set(l.x, l.y, l.z, type);                // Locks before accessing
 
     // TODO: Mark this & neighboring chunks dirty - this is the reason for seam issue in world physics, to be done later
     // NOTE: This still has a visual bug
@@ -128,20 +129,17 @@ float World::GetTerrainHeight(int wx, int wz)
 }
 
 // Invoked by worker
-void World::FillChunkData(Chunk& chunk, glm::ivec2 coord)
+void World::FillChunk(Chunk& chunk, glm::ivec2 coord)
 {
     // Try loading from disk first
     if (LoadChunkFromDisk(chunk, coord))
     {
-        //chunk.dirty = true;
-        //chunk.modified = false;
         return;
     }
 
     // TODO: Add trees and grass
 	// Do all this in worldgen phase of development, not right now - to be done later
     // Fresh Perlin gen
-    chunk.chunkPos = coord;
     int cx = coord.x;
     int cz = coord.y;
 
@@ -171,13 +169,6 @@ void World::FillChunkData(Chunk& chunk, glm::ivec2 coord)
                 chunk.SetUnchecked(x, height + 1, z, BlockType::BRICK);
         }
     }   
-    
-	// Uncomment these lines to make all generated chunks dirty -> so that they can be stored to disk
-	// But this causes a huge performance drop because of the disk IO, so only enable this when you want
-    // to test the chunk saving/loading functionality
-    // 
-    //chunk.dirty = true;
-    //chunk.modified = false;
 }
 
 // ───── File IO ──────────────────────────────────────────────────
@@ -245,6 +236,7 @@ void World::UnloadChunks()
 
     chunks.clear();
     m_chunkMeshes.clear();
+    m_deferredLightingChunks.clear();
 }
 
 // ───── Raycast CRUD ──────────────────────────────────────────────────
@@ -263,7 +255,6 @@ bool World::PlaceBlock(const RaycastHit& hit, BlockType type)
     if (IsSolid(target.x, target.y, target.z))
         return false;
 
-    // TODO
     // Log blocks have directional variants based on placement face
     const bool isLog = type == BlockType::TREE_LOG_Y ||
                        type == BlockType::TREE_LOG_X ||
@@ -403,14 +394,25 @@ void World::SyncRenderer()
     m_meshJobCV.notify_all();
 
     // Phase 2: Drain mesh staging, move the meshes from the staging region to local main thread memory
-    std::unordered_map<glm::ivec2, std::vector<Vertex>, IVec2Hash> ready;
+    // Amortized GPU vertex upload
+    const int MAX_UPLOADS_PER_FRAME = 4;
+    int uploadsThisFrame = 0;
+
+    std::vector<std::pair<glm::ivec2, std::vector<Vertex>>> chunksToUpload;
     {
         std::lock_guard<std::mutex> lock(m_meshStagingMutex);
-        ready.swap(m_meshStaging);
+
+        auto it = m_meshStaging.begin();
+        while (it != m_meshStaging.end() && uploadsThisFrame < MAX_UPLOADS_PER_FRAME)
+        {
+            chunksToUpload.push_back({ it->first, std::move(it->second) });
+            it = m_meshStaging.erase(it);
+            uploadsThisFrame++;
+        }
     }
 
     // Phase 3: Upload meshes to the GPU
-    for (auto& [coord, verts] : ready)
+    for (auto& [coord, verts] : chunksToUpload)
     {
         auto it = m_chunkMeshes.find(coord);
         if (it != m_chunkMeshes.end())
@@ -438,6 +440,7 @@ void World::LoadAtlasTexture(const char* path)
 
     unsigned int id;
     glGenTextures(1, &id);
+    glActiveTexture(GL_TEXTURE1);
     glBindTexture(GL_TEXTURE_2D, id);
 
     GLenum fmt = (channels == 4) ? GL_RGBA : GL_RGB;
@@ -587,6 +590,7 @@ void World::UpdateChunkStreaming(const glm::vec3& playerPos)
         m_chunkMeshes[chunkCoord].Destroy();
         m_chunkMeshes.erase(chunkCoord);
         chunks.erase(chunkCoord);
+        m_deferredLightingChunks.erase(chunkCoord);             // Remove from deferred list if out of render distance
     }
 
     // Make list of chunks to load
@@ -614,7 +618,9 @@ void World::UpdateChunkStreaming(const glm::vec3& playerPos)
         chunksToLoad.end(),
         [&playerChunkCoord](const glm::ivec2& a, const glm::ivec2& b)
         {
-            return a.x * a.x + a.y * a.y < b.x * b.x + b.y * b.y;
+            glm::ivec2 deltaA = a - playerChunkCoord;
+            glm::ivec2 deltaB = b - playerChunkCoord;
+            return deltaA.x * deltaA.x + deltaA.y * deltaA.y < deltaB.x * deltaB.x + deltaB.y * deltaB.y;
         }
     );
 
@@ -665,7 +671,17 @@ void World::CommitGeneratedChunks()
     // Mark the chunks dirty for meshing
     for (auto& [coord, chunkPtr] : queued)
     {
-        // TODO
+        static constexpr glm::ivec2 NEIGHBORING_CHUNK_OFFSET[] = {
+            {1, 0}, {-1, 0}, {0, 1}, {0, -1},
+            {1, 1}, {1, -1}, {-1, 1}, {-1, -1}
+        };
+
+        // Uncomment these lines to make all generated chunks modified -> so that they can be stored to disk
+        // But this causes a huge performance drop because of the disk IO, so only enable this when you want
+        // to test the chunk saving/loading functionality or when there's complex worldgen, for now worldgen
+        // is simple enough to run without significant frame drops
+        // chunkPtr->modified = true;
+
         chunkPtr->dirty = true;
         chunkPtr->modified = false;
         chunkPtr->aoDirty = true;
@@ -673,15 +689,56 @@ void World::CommitGeneratedChunks()
         chunks[coord] = std::move(chunkPtr);
 		m_chunkMeshes.try_emplace(coord);   // default construct mesh for this chunk
 
+        // Build light values for present chunk and 4 neighboring chunks
+        // Add current chunk
+        m_lightingSystem.InitChunkLight(chunks.find(coord)->second.get());
+
+        // Try adding 4 neighbors
+        for (int i = 0; i < 4; i++)
+        {
+            const glm::ivec2 neighboringChunkCoord = coord + NEIGHBORING_CHUNK_OFFSET[i];
+
+            // If this neighboring chunk is already present in coord, it will initalize itself later
+            if (queued.count(neighboringChunkCoord))
+                continue;
+
+            auto neighboringChunk = chunks.find(neighboringChunkCoord);
+            if (neighboringChunk != chunks.end())
+            {
+                m_lightingSystem.InitChunkLight(neighboringChunk->second.get());
+            }
+            else
+            {
+                // Deferred loading, add the coord to the vector to be loaded later
+                m_deferredLightingChunks.insert(neighboringChunkCoord);
+            }
+        }
+
+        // Load deferred lighting chunks, remove if init successful
+        std::erase_if(m_deferredLightingChunks, [&](const glm::ivec2& deferredCoord) {
+            // This chunk has just been light initalized, remove it from deferred list
+            if (deferredCoord == coord)
+                return true;
+
+            // If coord is present in queued, don't remove
+            // as its light will be initalized later
+            if (queued.count(deferredCoord))
+                return false;
+
+            auto it = chunks.find(deferredCoord);
+            if (it != chunks.end())
+            {
+                m_lightingSystem.InitChunkLight(it->second.get());
+                return true;
+            }
+            return false;
+        });
+
         // Re-dirty all 8 neighbours NOW (after chunks have been loaded) that 
-        // this chunk is actually in the live map.  UpdateChunkStreaming 
-        // already marked them dirty when  chunk was *queued*, but the 
-        // neighbours may have been re-meshed with null neighbour pointers 
-        // before we committed. This guarantees they rebuild with the correct neighbour data.
-        static constexpr glm::ivec2 NEIGHBORING_CHUNK_OFFSET[] = {
-			{1, 0}, {-1, 0}, {0, 1}, {0, -1},
-			{1, 1}, {1, -1}, {-1, 1}, {-1, -1}
-        };
+        // this chunk is actually in the live map, UpdateChunkStreaming 
+        // already marked them dirty when chunk was *queued*, but the 
+        // neighbours may have been re-meshed with null neighbour pointers before we committed
+        // This guarantees they rebuild with the correct neighbour data
 
         for (auto& off : NEIGHBORING_CHUNK_OFFSET)
         {
@@ -694,10 +751,10 @@ void World::CommitGeneratedChunks()
         }
 
         /*
-         * Release the reservation AFTER promotion, not before.
+         * Release the reservation AFTER promotion, not before
          *
          * m_chunkLoadReservations prevents the main thread from re-scheduling
-         * a coord that is already in-flight (queued or sitting in staging).
+         * a coord that is already in-flight (queued or sitting in staging)
          *
          * If the worker erased the reservation inside the thread itself, a race opens:
          *   Worker  -> pushes to staging, erases reservation
@@ -781,11 +838,10 @@ void World::ChunkLoadWorkerLoop()
         }
 
         // Fill into worker-local chunk
-        auto chunk = std::make_unique<Chunk>();
-        chunk->chunkPos = coord;
+        auto chunk = std::make_unique<Chunk>(coord);                  // Make this on heap
 
         // No need to lock this, no shared resource used in this function
-        FillChunkData(*chunk, coord);
+        FillChunk(*chunk, coord);
 
         // Move the chunk to staged section and remove the coord from queue
         {
@@ -806,7 +862,7 @@ void World::MeshWorkerLoop()
         // current chunk and all its 4 neighbors 
         // (no need to access map, this results in reduced hashing)
 
-		// 1) Obtain chunk to mesh
+		// 1. Obtain chunk to mesh
         MeshJob job;
         {
             std::unique_lock<std::mutex> lock(m_meshJobMutex);
@@ -817,13 +873,12 @@ void World::MeshWorkerLoop()
             if (m_shutdown && m_meshJobQueue.empty())
                 break;
 
-            // Pop out a mesh job from the queue
-            // for further processing: generate mesh
+            // Pop out a mesh job from the queue for further processing: generate mesh
             job = m_meshJobQueue.front();
             m_meshJobQueue.pop();
         }
 
-        // 2) Now chunk coord is owned, build the vertices
+        // 2. Now chunk coord is owned, build the vertices
         {
             verts.clear();
 
@@ -838,7 +893,7 @@ void World::MeshWorkerLoop()
                 );
         }
 
-        // 3) Push built vertices to staging
+        // 3. Push built vertices to staging
         {
             std::lock_guard<std::mutex> lock(m_meshStagingMutex);
 
@@ -848,7 +903,7 @@ void World::MeshWorkerLoop()
             m_meshStaging[job.coord] = std::move(toStage);
         }
 
-        // 4) Decrement refcounts, so that the chunk can be unloaded (unguard now)
+        // 4. Decrement refcounts, so that the chunk can be unloaded (unguard now)
         {
             std::lock_guard<std::mutex> lock(m_chunkMeshUsageGuardMutex);
 

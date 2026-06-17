@@ -10,7 +10,7 @@
 
 void OpenGL_3D::RendererThread()
 {
-	// We want the window to be in the renderer thread context (important!)
+	// We want the OpenGL context to be in the renderer thread (important!)
 	glfwMakeContextCurrent(window);
 
 	float fAccumulatedTime = 0.0f;
@@ -36,18 +36,27 @@ void OpenGL_3D::RendererThread()
 		float fElapsedTime = elapsedTime.count();
 		fTimeSinceStart += fElapsedTime;
 
+		// Capture mouse positions into a per-frame stable snapshot and query from this
+		// GetMousePosX() and GetMousePosY() return this stable snapshot
+		m_mousePosXFrame = m_mousePosX.load(std::memory_order_relaxed);
+		m_mousePosYFrame = m_mousePosY.load(std::memory_order_relaxed);
+
 		// Capture scroll atomic once per frame into a stable snapshot
 		// This also resets the atomic to 0, so the main thread can update it for the next frame without worrying about synchronization
 		m_mouseScrollFrame = m_mouseScroll.exchange(0, std::memory_order_relaxed);
 
-		if (m_keySwapReady.exchange(false, std::memory_order_acquire))
-			std::swap(m_keyRaw, m_keyRawPending);		// Swap the raw state buffers when the main thread signals a fresh snapshot is ready
+		// Capture key buffer to thread-local key buffer
+		bool localKeyRaw[MAX_KEYS];
+		{
+			std::lock_guard<std::mutex> lock(m_keyMutex);
+			std::memcpy(localKeyRaw, m_keyRaw, sizeof(m_keyRaw));
+		}
 
 		// Update key and mouse states on each frame, they may be used later by the programmer
 		// 1. Update key states
 		for (int i = 0; i < MAX_KEYS; ++i)
 		{
-			m_keyNewState[i] = m_keyRaw[i];		// Use the raw state captured by the main thread callback
+			m_keyNewState[i] = localKeyRaw[i];		// Use the raw state (captured by the main thread callback)
 
 			m_keys[i].bPressed = false;
 			m_keys[i].bReleased = false;
@@ -134,20 +143,23 @@ void OpenGL_3D::RendererThread()
 
 			if (window)
 			{
-				char s[32];
-				snprintf(s, 32, "%s : %d FPS", m_sAppName.c_str(), fps);
-				glfwSetWindowTitle(window, s);
+				snprintf(m_titleBuf, 32, "%s : %d FPS", m_sAppName.c_str(), fps);
+				m_titleDirty.store(true, std::memory_order_release);
 			}
 
 			fAccumulatedTime = 0.0f;
 			iFrameCount = 0;
 		}
 
-		// Swap buffers
+		// Swap buffers, this GLFW function is thread-safe to call from renderer thread
 		glfwSwapBuffers(window);
 	}
 
+	// Calls derived virtual function
 	Destroy();
+
+	// Not in destructor since by then the context is dead
+	glDeleteBuffers(1, &uboMatrices);
 
 	// Give the window context back to the main thread
 	glfwMakeContextCurrent(nullptr);
@@ -175,18 +187,18 @@ void OpenGL_3D::UpdateCameraControls(float fElapsedTime)
 			camera.Init(glm::vec3(0.0f, 0.0f, 3.0f), glm::vec3(0.0f, 0.0f, -1.0f), ScreenWidth(), ScreenHeight());
 
 		/* ------------------------------------------ - Mouse Control - ------------------------------------------ */
-		camera.ProcessMouse(GetMousePosX(), GetMousePosY(), ScreenWidth(), ScreenHeight(), bFirstMouse);
+		camera.ProcessMouse(GetMousePosX(), GetMousePosY(), ScreenWidth(), ScreenHeight(), bFirstMouse.load(std::memory_order_relaxed));
 	}
 
 	if (!shouldUpdateCamera && !bIsPaused)
-		camera.ProcessMouse(camera.fLastX, camera.fLastY, ScreenWidth(), ScreenHeight(), bFirstMouse);
+		camera.ProcessMouse(camera.fLastX, camera.fLastY, ScreenWidth(), ScreenHeight(), bFirstMouse.load(std::memory_order_relaxed));
 
 	UpdateViewMatrix();
 }
 
 void OpenGL_3D::UpdateProjectionMatrix()
 {
-	matProjection = glm::perspective(fFov * pi / 180.0f, (float)ScreenWidth() / (float)ScreenHeight(), 0.1f, 1000.0f);
+	matProjection = glm::perspective(fFov * PI / 180.0f, (float)ScreenWidth() / (float)ScreenHeight(), 0.1f, 1000.0f);
 	glBindBuffer(GL_UNIFORM_BUFFER, uboMatrices);
 	glBufferSubData(GL_UNIFORM_BUFFER, 0, sizeof(glm::mat4), glm::value_ptr(matProjection));
 	glBindBuffer(GL_UNIFORM_BUFFER, 0);
@@ -274,9 +286,16 @@ void OpenGL_3D::Start()
 	// Start the renderer
 	std::thread rendererThread = std::thread(&OpenGL_3D::RendererThread, this);
 
+	bool lastCursorVisible = m_cursorVisible.load(std::memory_order_relaxed);
+	glfwSetInputMode(window, GLFW_CURSOR, lastCursorVisible ? GLFW_CURSOR_NORMAL : GLFW_CURSOR_DISABLED);
+
 	// While the renderer thread is running, the main thread handles poll events
 	while (m_bIsRunning)
 	{
+		// Update window title
+		if (m_titleDirty.exchange(false, std::memory_order_acquire))
+			glfwSetWindowTitle(window, m_titleBuf);
+
 		// Check for "esc" key press
 		if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS)
 		{
@@ -284,8 +303,13 @@ void OpenGL_3D::Start()
 			glfwSetWindowShouldClose(window, true);
 		}
 
-		// Set cursor mode
-		glfwSetInputMode(window, GLFW_CURSOR, m_cursorVisible.load(std::memory_order_relaxed) ? GLFW_CURSOR_NORMAL : GLFW_CURSOR_DISABLED);
+		// Only change when a state mutation occurs
+		bool currentCursorVisible = m_cursorVisible.load(std::memory_order_relaxed);
+		if (currentCursorVisible != lastCursorVisible)
+		{
+			glfwSetInputMode(window, GLFW_CURSOR, currentCursorVisible ? GLFW_CURSOR_NORMAL : GLFW_CURSOR_DISABLED);
+			lastCursorVisible = currentCursorVisible;
+		}
 		
 		// Initiate shutdown when window is closed
 		if (glfwWindowShouldClose(window))
@@ -324,12 +348,9 @@ void OpenGL_3D::Error(const std::string& message)
 
 void OpenGL_3D::PollKeys()
 {
-	// Called from main thread - defined behavior
+	std::lock_guard<std::mutex> lock(m_keyMutex);
 	for (int i = 0; i < MAX_KEYS; ++i)
-		m_keyRawPending[i] = (glfwGetKey(window, i) == GLFW_PRESS);
-
-	// Signal renderer that a fresh snapshot is ready for swapping
-	m_keySwapReady.store(true, std::memory_order_release);
+		m_keyRaw[i] = (glfwGetKey(window, i) == GLFW_PRESS);
 }
 
 void OpenGL_3D::mouse_callback(GLFWwindow* window, double xPos, double yPos)
@@ -408,9 +429,6 @@ void OpenGL_3D::DisplayGPU()
 	std::cout << "[Features]\n";
 	std::cout << "Compute Shader Support : " << (computeSupported ? "YES" : "NO") << '\n';
 
-	GLint workGroupCount[3];
-	GLint workGroupSize[3];
-
 	// VRAM (NVIDIA)
 #ifdef GL_NVX_gpu_memory_info
 	GLint totalMemKB = 0;
@@ -441,9 +459,6 @@ void OpenGL_3D::DisplayGPU()
 
 	std::cout << "\n=====================================\n\n";
 }
-
 OpenGL_3D::~OpenGL_3D()
 {
-	glDeleteBuffers(1, &uboMatrices);
-	std::cout << "Destructor called" << std::endl;
 }
