@@ -331,7 +331,7 @@ void ChunkMeshBuilder::EmitCross(
     BlockType type)
 {
     const BlockDef& crossItem = GetDef(type);
-    const glm::vec3 tint     = crossItem.tint;
+    const glm::vec4& tint     = crossItem.tint;
 
     const glm::vec2 uvs[4] = {
         {0.0f, 0.0f},
@@ -360,7 +360,7 @@ void ChunkMeshBuilder::EmitCross(
                 .tileOverlay = (uint8_t)0,
                 .packed      = packed,
                 .lightValue  = lightValue,
-                .tint        = PackRGBA(tint.x, tint.y, tint.z, 1.0f),
+                .tint        = PackRGBA(tint.r, tint.g, tint.b, tint.a),
             });
         }
     };
@@ -422,7 +422,7 @@ void ChunkMeshBuilder::AddTranslucentFace(
             .tileOverlay = (uint8_t)blockInfo.overlay,
             .packed      = packed,
             .lightValue  = chunk.lightMap[chunkLocalPos.x][chunkLocalPos.y][chunkLocalPos.z],
-            .tint        = PackRGBA(blockInfo.tint.x, blockInfo.tint.y, blockInfo.tint.z, 1.0f),
+            .tint        = PackRGBA(blockInfo.tint.r, blockInfo.tint.g, blockInfo.tint.b, blockInfo.tint.a),
         });
     }
 }
@@ -449,8 +449,13 @@ void ChunkMeshBuilder::EmitGreedyQuad(
     
     // Grass uses a green tint for its top and side overlay
     // The bottom face is dirt and must remain untinted
-    uint32_t tint = (face == BOTTOM)
-        ? PackRGBA(1.0f, 1.0f, 1.0f, 1.0f) : PackRGBA(def.tint.x, def.tint.y, def.tint.z, 1.0f);
+    uint32_t tint = PackRGBA(def.tint.r, def.tint.g, def.tint.b, def.tint.a);
+
+    if (ref.type == BlockType::GRASS_BLOCK)
+    {
+        const glm::vec4& dirtTint = GetDef(BlockType::DIRT).tint;
+        tint = (face == BOTTOM) ? PackRGBA(dirtTint.r, dirtTint.g, dirtTint.b, dirtTint.a) : PackRGBA(def.tint.r, def.tint.g, def.tint.b, def.tint.a);
+    }
 
     // Face-plane layer coord: positive normal, one step forward
     const int layerFace = layer + (axes.normalDir > 0 ? 1 : 0);
@@ -782,6 +787,28 @@ void ChunkMeshBuilder::Build(
                 // Render the face regardless if the neighbor is at the world height or 0
                 if (neighborY == -1 || neighborY == CY)
                     shouldRenderFace = true;
+
+                // TODO!!!!
+                /* Things needed:
+                * 1) worldPos
+                * 2) localPos
+                * 3) shouldRenderFace
+                * 
+                * struct WaterPass {
+                *       glm::vec3 worldPos;
+                *       glm::vec3 localPos;
+                *       bool shouldRenderFace;
+                * };
+                * 
+                * std::vector<WaterPass> waterMeshes;
+                * 
+                *if(blockType == BlockType::WATER) {
+                *       waterMesh.emplace_back(worldPos, localPos, shouldRenderFace);
+                *}
+                * 
+                * // After all blocks rendered, render water
+                * for(const auto& waterVertex
+                */
 
                 // Final rendering call to render faces of translucent blocks
                 if (shouldRenderFace)

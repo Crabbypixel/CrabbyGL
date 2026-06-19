@@ -36,6 +36,8 @@ namespace Tiles
 	constexpr int BROWN_MUSHROOM = 31;
 	constexpr int RED_MUSHROOM = 30;
 	constexpr int GRASS = 29;
+
+	constexpr int WATER = 48;
 }
 
 struct BlockDef
@@ -43,7 +45,7 @@ struct BlockDef
 	const char* name;
 	int faces[6];
 	int overlay = -1;
-	glm::vec3 tint;
+	glm::vec4 tint;
 	uint16_t flags;
 	float hardness;		// later for mining speed and tool requirements - to be done later
 	bool useOverlay;

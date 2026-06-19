@@ -248,9 +248,7 @@ public:
 			// Physics test - generate a gravel platform to test physics (in development - prone to bugs)
 			if (GetKey('U').bPressed)
 			{
-				for (int i = 0; i < 75; ++i)
-					for (int j = 0; j < 75; ++j)
-						world.SetBlock(i, 75, j, BlockType::AIR);
+				world.SetBlock(0, 60, 0, BlockType::WATER);
 			}
 		}
 

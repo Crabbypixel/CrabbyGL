@@ -178,6 +178,8 @@ static int GetIconIndex(BlockType t) noexcept
 		return 18;
 	case BlockType::DIAMOND_ORE:
 		return 19;
+	case BlockType::WATER:
+		return 20;
 
 	case BlockType::SAPLING:
 		return 48;

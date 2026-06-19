@@ -32,7 +32,7 @@ struct IVec2Hash
 {
     size_t operator()(const glm::ivec2& v) const noexcept
     {
-        // Murmur3 finalizer mix — breaks clustering on grid coords
+        // Murmur3 — breaks clustering on grid coords
         // XOR-shift + multiply scrambles bit patterns from axis-aligned sequences
         size_t h = (size_t)(uint32_t)v.x;
         h ^= (size_t)(uint32_t)v.y + 0x9e3779b9u + (h << 6) + (h >> 2);

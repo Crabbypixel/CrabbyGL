@@ -30,5 +30,6 @@ enum class BlockType : uint8_t
 	/*24*/  TREE_LOG_X,
 	/*25*/  TREE_LOG_Z,
 	/*26*/ GLOWSTONE,
+	/*27*/ WATER,
 	MAX_VALUE			// Ending sentinel - not a real block type, used for validation and iteration
 };

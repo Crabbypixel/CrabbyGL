@@ -20,6 +20,7 @@ out vec3  fWorldPos;
 out vec2  fUV;
 out vec3  fTint;
 out float fAo;
+out float fAlpha;
 
 flat out uint fUseOverlay;          // GLSL version 330 doesn't support flat bools, so we use uint instead
 flat out uint fNormalIndex;
@@ -48,7 +49,8 @@ void main()
     fLightValue = aLightValue;
 
     // RGBA8 tint arrives normalized to 0..1
-    fTint = aTint.rgb;
+    fTint  = aTint.rgb;
+    fAlpha = aTint.a;
 
     gl_Position = matProjection * matView * vec4(aPos, 1.0f);
 }
@@ -81,6 +83,7 @@ in vec3  fWorldPos;
 in vec2  fUV;
 in vec3  fTint;
 in float fAo;
+in float fAlpha;
 
 flat in uint fUseOverlay;
 flat in uint fNormalIndex;
@@ -180,7 +183,7 @@ void main()
     }
 
    float skyExposure = float((fLightValue >> 4u) & 0xFu) / 15.0f;
-   float torch      = float(fLightValue       & 0xFu) / 15.0f;
+   float torch = float(fLightValue & 0xFu) / 15.0f;
    
    float NdotL = max(dot(normalize(NORMALS[fNormalIndex]), -normalize(u_lightDir)), 0.0f);
    
@@ -205,6 +208,7 @@ void main()
     }
 
     FragColor = vec4(color, baseTex.a);
+    //FragColor = vec4(color, fAlpha);
 }
 
 #endif
