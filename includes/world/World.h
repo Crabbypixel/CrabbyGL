@@ -134,6 +134,7 @@ private:
     // Global world variables - meshes for all loaded chunks, chunk shader and atlas texture index
 	// Each chunk (chunk coord) has a corresponding chunk mesh
     std::unordered_map<glm::ivec2, ChunkMesh, IVec2Hash> m_chunkMeshes;
+    std::unordered_map<glm::ivec2, ChunkMesh, IVec2Hash> m_waterMeshes;
     Shader* m_chunkShader = nullptr;
     unsigned int m_atlasTexture = 0;
 
@@ -150,8 +151,8 @@ private:
 	// World-player variables
     // TODO: Make this dynamic and make user to control - to be done later
     // Chunk load and unload distance
-    int m_viewDist = 3;
-    int m_unloadDist = 3;
+    int m_viewDist = 4;
+    int m_unloadDist = 4;
     glm::ivec2 m_lastPlayerChunk = { INT_MAX, INT_MAX };	// Previous frame player chunk pos
 
 	// Global atomic shutdown flag for workers to exit
@@ -198,6 +199,7 @@ private:
 
     // Staging: workers push generated meshes, main promotes
     std::unordered_map<glm::ivec2, std::vector<Vertex>, IVec2Hash> m_meshStaging;
+    std::unordered_map<glm::ivec2, std::vector<Vertex>, IVec2Hash> m_waterMeshStaging;
     std::mutex m_meshStagingMutex;
 
 	// List of chunks to not unload while being meshed

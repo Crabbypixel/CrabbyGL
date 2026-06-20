@@ -422,7 +422,7 @@ void ChunkMeshBuilder::AddTranslucentFace(
             .tileOverlay = (uint8_t)blockInfo.overlay,
             .packed      = packed,
             .lightValue  = chunk.lightMap[chunkLocalPos.x][chunkLocalPos.y][chunkLocalPos.z],
-            .tint        = PackRGBA(blockInfo.tint.r, blockInfo.tint.g, blockInfo.tint.b, blockInfo.tint.a),
+            .tint        = PackRGBA(1.0f, 1.0f, 1.0f, blockInfo.tint.a),
         });
     }
 }
@@ -681,7 +681,8 @@ void ChunkMeshBuilder::Build(
     const Chunk* nPZ, const Chunk* nNZ,
     const Chunk* nPX_PZ, const Chunk* nPX_NZ,
     const Chunk* nNX_PZ, const Chunk* nNX_NZ,
-    std::vector<Vertex>& outVertices)
+    std::vector<Vertex>& outVertices,
+    std::vector<Vertex>& waterVertices)
 {
     // SAFETY: shared_lock allows N concurrent readers — no deadlock possible between workers
     // even with overlapping neighbor sets. Invariant: workers NEVER acquire unique_lock.
@@ -758,7 +759,13 @@ void ChunkMeshBuilder::Build(
                     const bool isTranslucent = IsTranslucent(neighborBlock);
                     const bool isSolid       = IsSolid(neighborBlock);
 
-                    shouldRenderFace = !((isSolid || isTranslucent) && !(isTranslucent && neighborBlock  != blockType));
+                    shouldRenderFace = !((isSolid || isTranslucent) && !(isTranslucent && neighborBlock != blockType));
+
+                    if (blockType == BlockType::WATER && neighborBlock == BlockType::WATER)
+                    {
+                        shouldRenderFace = false;
+                    }
+
                 }
                 else
                 {
@@ -775,8 +782,13 @@ void ChunkMeshBuilder::Build(
                     if (hasNeighbor)
                     {
                         const bool isTranslucent = IsTranslucent(neighborBlock);
-                        const bool isSolid       = IsSolid(neighborBlock);
+                        const bool isSolid = IsSolid(neighborBlock);
                         shouldRenderFace = !((isSolid || isTranslucent) && !(isTranslucent && neighborBlock != blockType));
+
+                        if (blockType == BlockType::WATER && neighborBlock == BlockType::WATER)
+                        {
+                            shouldRenderFace = false;
+                        }
                     }
                     else 
                     {
@@ -788,27 +800,15 @@ void ChunkMeshBuilder::Build(
                 if (neighborY == -1 || neighborY == CY)
                     shouldRenderFace = true;
 
-                // TODO!!!!
-                /* Things needed:
-                * 1) worldPos
-                * 2) localPos
-                * 3) shouldRenderFace
-                * 
-                * struct WaterPass {
-                *       glm::vec3 worldPos;
-                *       glm::vec3 localPos;
-                *       bool shouldRenderFace;
-                * };
-                * 
-                * std::vector<WaterPass> waterMeshes;
-                * 
-                *if(blockType == BlockType::WATER) {
-                *       waterMesh.emplace_back(worldPos, localPos, shouldRenderFace);
-                *}
-                * 
-                * // After all blocks rendered, render water
-                * for(const auto& waterVertex
-                */
+                if (blockType == BlockType::WATER)
+                {
+                    // Render water at the end
+                    if (shouldRenderFace)
+                    {
+                        AddTranslucentFace(waterVertices, worldPos, localPos, static_cast<Face>(face), blockType, chunk, nPX, nNX, nPZ, nNZ, nPX_PZ, nPX_NZ, nNX_PZ, nNX_NZ);
+                    }
+                    continue;
+                }
 
                 // Final rendering call to render faces of translucent blocks
                 if (shouldRenderFace)

@@ -207,8 +207,9 @@ void main()
             color *= 1.2f;
     }
 
-    FragColor = vec4(color, baseTex.a);
-    //FragColor = vec4(color, fAlpha);
+    //FragColor = vec4(color, baseTex.a);
+    float finalAlpha = baseTex.a * fAlpha;
+    FragColor = vec4(color, finalAlpha);
 }
 
 #endif
