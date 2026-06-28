@@ -99,6 +99,9 @@
     <ClCompile Include="src\player\Inventory.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="src\world\LightingSystem.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="externals\glad\glad.h">
@@ -1088,6 +1091,9 @@
     <ClInclude Include="includes\world\BlockType.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="includes\world\LightingSystem.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <None Include="externals\glm\detail\func_common.inl">
@@ -1520,6 +1526,7 @@
     <None Include="assets\shaders\DebugRect.glsl" />
     <None Include="assets\shaders\Icons.glsl" />
     <None Include="assets\shaders\ASCII.glsl" />
+    <None Include="assets\shaders\WaterMesh.glsl" />
   </ItemGroup>
   <ItemGroup>
     <Library Include="libraries\glfw3.lib" />

@@ -92,7 +92,7 @@ public:
     void UnloadChunks();
 
     // Load shader and texture file
-    void SetChunkShader(Shader& shader);
+    void SetChunkShader(Shader& shader, Shader& waterShader);
     void LoadAtlasTexture(const char* path);
 
     // Block access & Chunk coord functions
@@ -136,6 +136,7 @@ private:
     std::unordered_map<glm::ivec2, ChunkMesh, IVec2Hash> m_chunkMeshes;
     std::unordered_map<glm::ivec2, ChunkMesh, IVec2Hash> m_waterMeshes;
     Shader* m_chunkShader = nullptr;
+    Shader* m_waterShader = nullptr;
     unsigned int m_atlasTexture = 0;
 
 	// Frustum planes for Frustum Culling
@@ -153,6 +154,7 @@ private:
     // Chunk load and unload distance
     int m_viewDist = 4;
     int m_unloadDist = 4;
+    glm::vec3 m_playerPos;
     glm::ivec2 m_lastPlayerChunk = { INT_MAX, INT_MAX };	// Previous frame player chunk pos
 
 	// Global atomic shutdown flag for workers to exit

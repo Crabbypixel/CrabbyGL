@@ -396,8 +396,8 @@ void ChunkMeshBuilder::AddTranslucentFace(
         {0.0f, 1.0f},
     };
 
-    uint8_t aoRaw[4];
-    ComputeAO(chunk, nPX, nNX, nPZ, nNZ, nPX_PZ, nPX_NZ, nNX_PZ, nNX_NZ, chunkLocalPos, face, aoRaw);
+    uint8_t aoRaw[4] = { 3, 3, 3, 3 };
+        ComputeAO(chunk, nPX, nNX, nPZ, nNZ, nPX_PZ, nPX_NZ, nNX_PZ, nNX_NZ, chunkLocalPos, face, aoRaw);
 
     const bool flip = (aoRaw[0] + aoRaw[2] > aoRaw[1] + aoRaw[3]);
     const int tri[2][6] = {
@@ -413,7 +413,7 @@ void ChunkMeshBuilder::AddTranslucentFace(
         //packed: normal (3b), useOverlay(1b), ao(2b)
         uint8_t packed = ((uint8_t)face & 0x7)                  // lowest 3 bits
                        | ((useOverlay ? 1u : 0u) << 3)          // next bit
-                       | ((aoRaw[k] & 3u) << 4);                // next 2 bits
+                       | ((0 & 3u) << 4);                       // next 2 bits
 
         verts.emplace_back(Vertex{
             .pos         = worldPos + FACE_VERTS[face][k],
@@ -421,7 +421,7 @@ void ChunkMeshBuilder::AddTranslucentFace(
             .tileBase    = (uint8_t)blockInfo.faces[face],
             .tileOverlay = (uint8_t)blockInfo.overlay,
             .packed      = packed,
-            .lightValue  = chunk.lightMap[chunkLocalPos.x][chunkLocalPos.y][chunkLocalPos.z],
+            .lightValue  = (!IsWater(type)) ? chunk.lightMap[chunkLocalPos.x][chunkLocalPos.y][chunkLocalPos.z] : static_cast<uint8_t>(7),
             .tint        = PackRGBA(1.0f, 1.0f, 1.0f, blockInfo.tint.a),
         });
     }
@@ -761,7 +761,7 @@ void ChunkMeshBuilder::Build(
 
                     shouldRenderFace = !((isSolid || isTranslucent) && !(isTranslucent && neighborBlock != blockType));
 
-                    if (blockType == BlockType::WATER && neighborBlock == BlockType::WATER)
+                    if (IsWater(blockType) && IsWater(neighborBlock))
                     {
                         shouldRenderFace = false;
                     }
@@ -785,7 +785,7 @@ void ChunkMeshBuilder::Build(
                         const bool isSolid = IsSolid(neighborBlock);
                         shouldRenderFace = !((isSolid || isTranslucent) && !(isTranslucent && neighborBlock != blockType));
 
-                        if (blockType == BlockType::WATER && neighborBlock == BlockType::WATER)
+                        if (IsWater(blockType) && IsWater(neighborBlock))
                         {
                             shouldRenderFace = false;
                         }
@@ -800,7 +800,7 @@ void ChunkMeshBuilder::Build(
                 if (neighborY == -1 || neighborY == CY)
                     shouldRenderFace = true;
 
-                if (blockType == BlockType::WATER)
+                if (IsWater(blockType))
                 {
                     // Render water at the end
                     if (shouldRenderFace)

@@ -252,8 +252,10 @@ bool World::PlaceBlock(const RaycastHit& hit, BlockType type)
     if (!hit.hit)
         return false;
 
-    // Prevent placing beside non-solid blocks (cross-face blocks)
-    if (GetDef(GetBlock(hit.blockPos.x, hit.blockPos.y, hit.blockPos.z)).flags & BLOCK_CROSS)
+    BlockType hitBlockType = GetBlock(hit.blockPos.x, hit.blockPos.y, hit.blockPos.z);
+
+    // Prevent placing beside non-solid blocks (cross-face blocks
+    if (IsCross(hitBlockType))
         return false;
 
     glm::ivec3 target = hit.blockPos + hit.normal;
@@ -261,6 +263,13 @@ bool World::PlaceBlock(const RaycastHit& hit, BlockType type)
     // Prevent placing inside solid blocks
     if (IsSolid(target.x, target.y, target.z))
         return false;
+
+    // If hit block type is water, then set the block there directly
+    if (IsWater(hitBlockType))
+    {
+        SetBlock(hit.blockPos.x, hit.blockPos.y, hit.blockPos.z, type);
+        return true;
+    }
 
     // Log blocks have directional variants based on placement face
     const bool isLog = type == BlockType::TREE_LOG_Y ||
@@ -353,9 +362,14 @@ void World::MarkAdjacentChunksDirty(int wx, int wy, int wz)
 }
 
 // ───── Textures ───────────────────────────────────────────────
-void World::SetChunkShader(Shader& shader)
+void World::SetChunkShader(Shader& shader, Shader& waterShader)
 {
     m_chunkShader = &shader;
+    m_waterShader = &waterShader;
+
+    waterShader.use();
+    waterShader.setInt("u_atlas", 1);
+
     shader.use();
     shader.setInt("u_atlas", 1);   // single sampler, slot 1
 }
@@ -425,6 +439,7 @@ bool Frustum::ContainsAABB(const glm::vec3& minP, const glm::vec3& maxP) const
 // ───── Infinite World ───────────────────────────────────────────────
 void World::UpdateChunkStreaming(const glm::vec3& playerPos)
 {
+    m_playerPos = playerPos;
     glm::ivec2 playerChunkCoord = ChunkCoord(playerPos.x, playerPos.z);
 
 	// If the player is still in the same chunk as last update, check if all chunks in the view distance are loaded
@@ -601,6 +616,7 @@ void World::CommitGeneratedChunks()
         // Build light values for present chunk and 4 neighboring chunks
         // Add current chunk
         m_lightingSystem.InitChunkLight(chunks.find(coord)->second.get());
+        m_worldPhysics.InitChunkWater(chunks.find(coord)->second.get());
 
         // Try adding 4 neighbors
         for (int i = 0; i < 4; i++)
@@ -615,6 +631,7 @@ void World::CommitGeneratedChunks()
             if (neighboringChunk != chunks.end())
             {
                 m_lightingSystem.InitChunkLight(neighboringChunk->second.get());
+                m_worldPhysics.InitChunkWater(neighboringChunk->second.get());
             }
             else
             {
@@ -638,6 +655,7 @@ void World::CommitGeneratedChunks()
             if (it != chunks.end())
             {
                 m_lightingSystem.InitChunkLight(it->second.get());
+                m_worldPhysics.InitChunkWater(it->second.get());
                 return true;
             }
             return false;
@@ -714,14 +732,14 @@ void World::SyncRenderer()
             MeshJob job;
             job.coord = chunkPos;
             job.chunk = chunk.get();
-            job.nPX = getChunkFromChunkCoords(chunkPos + glm::ivec2{ 1,  0 });
-            job.nNX = getChunkFromChunkCoords(chunkPos + glm::ivec2{ -1,  0 });
-            job.nPZ = getChunkFromChunkCoords(chunkPos + glm::ivec2{ 0,  1 });
-            job.nNZ = getChunkFromChunkCoords(chunkPos + glm::ivec2{ 0, -1 });
-            job.nPX_PZ = getChunkFromChunkCoords(chunkPos + glm::ivec2{ 1,  1 });                   // (+X, +Z)
-            job.nPX_NZ = getChunkFromChunkCoords(chunkPos + glm::ivec2{ 1, -1 });                   // (+X, -Z)
-            job.nNX_PZ = getChunkFromChunkCoords(chunkPos + glm::ivec2{ -1,  1 });                  // (-X, +Z)
-            job.nNX_NZ = getChunkFromChunkCoords(chunkPos + glm::ivec2{ -1, -1 });                  // (-X, -Z)
+            job.nPX    = getChunkFromChunkCoords(chunkPos + glm::ivec2{ 1,  0 });
+            job.nNX    = getChunkFromChunkCoords(chunkPos + glm::ivec2{-1,  0 });
+            job.nPZ    = getChunkFromChunkCoords(chunkPos + glm::ivec2{ 0,  1 });
+            job.nNZ    = getChunkFromChunkCoords(chunkPos + glm::ivec2{ 0, -1 });
+            job.nPX_PZ = getChunkFromChunkCoords(chunkPos + glm::ivec2{ 1,  1 });   // (+X, +Z)
+            job.nPX_NZ = getChunkFromChunkCoords(chunkPos + glm::ivec2{ 1, -1 });   // (+X, -Z)
+            job.nNX_PZ = getChunkFromChunkCoords(chunkPos + glm::ivec2{-1,  1 });   // (-X, +Z)
+            job.nNX_NZ = getChunkFromChunkCoords(chunkPos + glm::ivec2{-1, -1 });   // (-X, -Z)
 
             m_meshJobQueue.push(job);
             chunk->dirty = false;
@@ -806,20 +824,26 @@ void World::DrawAll(const glm::mat4& proj, const glm::mat4& view)
         mesh.Draw();
     }
 
-    // Water pass
+    //if (!m_waterShader)
+    //    return;
+
+    //m_waterShader->use();
+
+    //// Bind textures once — shared across all chunk draw calls
+    //glActiveTexture(GL_TEXTURE1);
+    //glBindTexture(GL_TEXTURE_2D, m_atlasTexture);
+
+    m_frustum.Extract(proj * view);
+
     glEnable(GL_BLEND);
-    glDepthMask(GL_FALSE);          // don't let water write depth — avoids self-occlusion artifacts
+    glDepthMask(GL_FALSE);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
     for (auto& [chunkPos, mesh] : m_waterMeshes)
     {
-        glm::vec3 minP = { chunkPos.x * CX,    0,  chunkPos.y * CZ };
-        glm::vec3 maxP = { chunkPos.x * CX + CX, CY, chunkPos.y * CZ + CZ };
-
-        // Implement frustum culling
-        if (!m_frustum.ContainsAABB(minP, maxP))
-            continue;
-
         mesh.Draw();
     }
+
     glDepthMask(GL_TRUE);
     glDisable(GL_BLEND);
 }

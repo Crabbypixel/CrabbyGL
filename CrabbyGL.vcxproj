@@ -516,6 +516,7 @@
     <None Include="assets\shaders\Hotbar_Selector.glsl" />
     <None Include="assets\shaders\Icons.glsl" />
     <None Include="assets\shaders\Inventory.glsl" />
+    <None Include="assets\shaders\WaterMesh.glsl" />
     <None Include="CrabbyGL.exe" />
     <None Include="externals\glm\detail\func_common.inl" />
     <None Include="externals\glm\detail\func_common_simd.inl" />
