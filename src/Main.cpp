@@ -256,6 +256,7 @@ public:
 			}
 		}
 
+		// Raycast
 		RaycastHit m_currentHit = RaycastDDA(camera.position, camera.front, world);
 		const glm::ivec3& raycastHitPos = m_currentHit.blockPos;
 		const glm::ivec3& raycastPlacePos = m_currentHit.blockPos + m_currentHit.normal;
