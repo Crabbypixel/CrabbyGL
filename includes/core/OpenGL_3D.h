@@ -37,6 +37,7 @@ private:
 	static constexpr int MAX_KEYS = GLFW_KEY_LAST;
 	static constexpr int MAX_MOUSE_BUTTONS = 3;
 
+	// Key state structure
 	struct sKeyState
 	{
 		bool bPressed;
@@ -82,8 +83,10 @@ private:
 	char m_titleBuf[64] = {};
 
 protected:
+	// GLFW window pointer
 	GLFWwindow* window;
 
+	// Mouse state structure
 	enum class Mouse
 	{
 		LEFT = 0,
@@ -93,7 +96,7 @@ protected:
 		SCROLL_DOWN = 4
 	};
 
-	bool bIsPaused = false;
+	bool bIsPaused = false;				// Engine pause flag, disables camera and stops view/projection matrix updates
 	bool shouldUpdateCamera = true;		// Set to false to disable camera controls and view/projection updates
 
 	// Call from Update(), the atomic m_cursorVisible flag toggles cursor visibility
