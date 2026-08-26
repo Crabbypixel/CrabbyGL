@@ -36,6 +36,8 @@ namespace Tiles
 	constexpr int BROWN_MUSHROOM = 31;
 	constexpr int RED_MUSHROOM = 30;
 	constexpr int GRASS = 29;
+
+	constexpr int WATER = 48;
 }
 
 struct BlockDef
@@ -43,7 +45,7 @@ struct BlockDef
 	const char* name;
 	int faces[6];
 	int overlay = -1;
-	glm::vec3 tint;
+	glm::vec4 tint;
 	uint16_t flags;
 	float hardness;		// later for mining speed and tool requirements - to be done later
 	bool useOverlay;
@@ -57,7 +59,8 @@ enum BlockFlags : uint16_t
 	BLOCK_TRANSPARENT = 1 << 2,
 	BLOCK_TRANSLUCENT = 1 << 3,
 	BLOCK_EMISSIVE = 1 << 4,
-	BLOCK_CROSS = 1 << 5
+	BLOCK_CROSS = 1 << 5,
+	BLOCK_WATER = 1 << 6
 };
 
 [[nodiscard]] const BlockDef& GetDef(BlockType t) noexcept;
@@ -66,3 +69,4 @@ enum BlockFlags : uint16_t
 [[nodiscard]] bool IsSolid(BlockType t) noexcept;
 [[nodiscard]] bool IsTranslucent(BlockType t) noexcept;
 [[nodiscard]] bool IsCross(BlockType t) noexcept;
+[[nodiscard]] bool IsWater(BlockType t) noexcept;

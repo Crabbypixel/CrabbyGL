@@ -29,7 +29,8 @@ public:
         const Chunk* nPZ, const Chunk* nNZ,
         const Chunk* nPX_PZ, const Chunk* nPX_NZ,
         const Chunk* nNX_PZ, const Chunk* nNX_NZ,
-        std::vector<Vertex>& outVertices
+        std::vector<Vertex>& outVertices,
+        std::vector<Vertex>& waterVertices
     );
 
 private:

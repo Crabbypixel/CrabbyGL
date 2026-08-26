@@ -57,6 +57,7 @@ private:
 	Shader framebufferShader;
 	Shader crosshairShader;
 	Shader chunkMeshShader;
+	Shader waterMeshShader;
 
 	// Player
 	Player player;
@@ -87,6 +88,7 @@ public:
 	bool Setup() override
 	{
 		player.SetPos(glm::vec3(65.0f, 256.0f, 38.0f));
+		//player.SetPos(glm::vec3(7526.0f, 49.0f, 3784.0f));
 		camera.Init(player.GetPos(), glm::vec3(0.0f, 0.0f, -1.0f), ScreenWidth(), ScreenHeight());
 
 		// Axes
@@ -124,8 +126,9 @@ public:
 
 		// ───── World ──────────────────────────────────────────────────
 		chunkMeshShader.load("assets/shaders/ChunkMesh.glsl");
+		waterMeshShader.load("assets/shaders/WaterMesh.glsl");
 
-		world.SetChunkShader(chunkMeshShader);
+		world.SetChunkShader(chunkMeshShader, waterMeshShader);
 		world.LoadAtlasTexture("assets/textures/textures.png");
 
 		// Spawn 4 threads for loading chunks and 4 threads for generating meshes
@@ -175,6 +178,7 @@ public:
 			// Bind "Matrices" uniform to binding index 0 in every shader
 			glUniformBlockBinding(axesShader.getID(), glGetUniformBlockIndex(axesShader.getID(), "Matrices"), 0);
 			glUniformBlockBinding(chunkMeshShader.getID(), glGetUniformBlockIndex(chunkMeshShader.getID(), "Matrices"), 0);
+			glUniformBlockBinding(waterMeshShader.getID(), glGetUniformBlockIndex(waterMeshShader.getID(), "Matrices"), 0);
 
 			ErrorLog();
 
@@ -248,12 +252,11 @@ public:
 			// Physics test - generate a gravel platform to test physics (in development - prone to bugs)
 			if (GetKey('U').bPressed)
 			{
-				for (int i = 0; i < 75; ++i)
-					for (int j = 0; j < 75; ++j)
-						world.SetBlock(i, 75, j, BlockType::AIR);
+				world.SetBlock(0, 60, 0, BlockType::WATER_FLOWING);
 			}
 		}
 
+		// Raycast
 		RaycastHit m_currentHit = RaycastDDA(camera.position, camera.front, world);
 		const glm::ivec3& raycastHitPos = m_currentHit.blockPos;
 		const glm::ivec3& raycastPlacePos = m_currentHit.blockPos + m_currentHit.normal;
@@ -272,8 +275,8 @@ public:
 			bool isBlockBreakValid = world.BreakBlock(m_currentHit);
 
 			if (isBlockBreakValid)
-			{
-				world.GetWorldPhysics().NotifyBlockChanged(raycastHitPos.x, raycastHitPos.y, raycastHitPos.z);
+			{	
+				world.GetWorldPhysics().NotifyBlockRemoved(raycastHitPos.x, raycastHitPos.y, raycastHitPos.z);
 				world.GetLightingSystem().NotifyBlockRemoved(raycastHitPos.x, raycastHitPos.y, raycastHitPos.z);
 			}
 		}
@@ -285,7 +288,9 @@ public:
 
 			if (isBlockPlaceValid)
 			{
-				world.GetWorldPhysics().NotifyBlockChanged(raycastPlacePos.x, raycastPlacePos.y, raycastPlacePos.z);
+				world.GetWorldPhysics().NotifyBlockRemoved(raycastPlacePos.x, raycastPlacePos.y, raycastPlacePos.z);
+				if (inventory.GetHeldBlock() == BlockType::WATER)
+					world.GetWorldPhysics().NotifyWaterSourcePlaced(raycastPlacePos.x, raycastPlacePos.y, raycastPlacePos.z);
 				world.GetLightingSystem().NotifyBlockPlaced(raycastPlacePos.x, raycastPlacePos.y, raycastPlacePos.z, inventory.GetHeldBlock());
 			}
 		}
@@ -422,6 +427,8 @@ public:
 
 		glm::ivec2 playerChunk = World::ChunkCoord(player.GetPos().x, player.GetPos().z);
 		glm::ivec3 playerLocalChunk = World::ChunkLocalCoord(player.GetPos().x, player.GetPos().y, player.GetPos().z);
+		BlockType raycastHitBlock = world.GetBlock(raycastHitPos.x, raycastHitPos.y, raycastHitPos.z);
+
 		ImGui::Begin("Debug Console");
 		ImGui::Text("Hello World!");
 		ImGui::Text("Player Position: %d %d %d", (int)player.GetPos().x, (int)player.GetPos().y, (int)player.GetPos().z);
@@ -429,6 +436,7 @@ public:
 		ImGui::Text("Local chunk coord: %d %d", playerLocalChunk.x, playerLocalChunk.z);
 
 		ImGui::Text("Selected block: %s", GetDef(inventory.GetHeldBlock()).name);
+		ImGui::Text("Raycast hit block: %s", GetDef(raycastHitBlock).name);
 		ImGui::Text("Raycast place position: %d %d %d", raycastPlacePos.x, raycastPlacePos.y, raycastPlacePos.z);
 		ImGui::Text("Chunk borders (G to toggle): %s", chunkDebug.visible ? "Enabled" : "Disabled");
 		ImGui::Text("AO: %s", isAOEnabled ? "Enabled" : "Disabled");

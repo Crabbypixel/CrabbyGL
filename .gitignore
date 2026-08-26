@@ -18,6 +18,7 @@ assets/textures/test
 
 # Saves (world data — optional, exclude for clean repo)
 saves/
+backups/
 
 # Dependencies (if vendored and large)
 # vendor/  <- only ignore if deps are huge

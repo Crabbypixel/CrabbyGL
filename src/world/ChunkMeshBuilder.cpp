@@ -331,7 +331,7 @@ void ChunkMeshBuilder::EmitCross(
     BlockType type)
 {
     const BlockDef& crossItem = GetDef(type);
-    const glm::vec3 tint     = crossItem.tint;
+    const glm::vec4& tint     = crossItem.tint;
 
     const glm::vec2 uvs[4] = {
         {0.0f, 0.0f},
@@ -360,7 +360,7 @@ void ChunkMeshBuilder::EmitCross(
                 .tileOverlay = (uint8_t)0,
                 .packed      = packed,
                 .lightValue  = lightValue,
-                .tint        = PackRGBA(tint.x, tint.y, tint.z, 1.0f),
+                .tint        = PackRGBA(tint.r, tint.g, tint.b, tint.a),
             });
         }
     };
@@ -396,8 +396,8 @@ void ChunkMeshBuilder::AddTranslucentFace(
         {0.0f, 1.0f},
     };
 
-    uint8_t aoRaw[4];
-    ComputeAO(chunk, nPX, nNX, nPZ, nNZ, nPX_PZ, nPX_NZ, nNX_PZ, nNX_NZ, chunkLocalPos, face, aoRaw);
+    uint8_t aoRaw[4] = { 3, 3, 3, 3 };
+        ComputeAO(chunk, nPX, nNX, nPZ, nNZ, nPX_PZ, nPX_NZ, nNX_PZ, nNX_NZ, chunkLocalPos, face, aoRaw);
 
     const bool flip = (aoRaw[0] + aoRaw[2] > aoRaw[1] + aoRaw[3]);
     const int tri[2][6] = {
@@ -413,7 +413,7 @@ void ChunkMeshBuilder::AddTranslucentFace(
         //packed: normal (3b), useOverlay(1b), ao(2b)
         uint8_t packed = ((uint8_t)face & 0x7)                  // lowest 3 bits
                        | ((useOverlay ? 1u : 0u) << 3)          // next bit
-                       | ((aoRaw[k] & 3u) << 4);                // next 2 bits
+                       | ((0 & 3u) << 4);                       // next 2 bits
 
         verts.emplace_back(Vertex{
             .pos         = worldPos + FACE_VERTS[face][k],
@@ -421,8 +421,8 @@ void ChunkMeshBuilder::AddTranslucentFace(
             .tileBase    = (uint8_t)blockInfo.faces[face],
             .tileOverlay = (uint8_t)blockInfo.overlay,
             .packed      = packed,
-            .lightValue  = chunk.lightMap[chunkLocalPos.x][chunkLocalPos.y][chunkLocalPos.z],
-            .tint        = PackRGBA(blockInfo.tint.x, blockInfo.tint.y, blockInfo.tint.z, 1.0f),
+            .lightValue  = (!IsWater(type)) ? chunk.lightMap[chunkLocalPos.x][chunkLocalPos.y][chunkLocalPos.z] : static_cast<uint8_t>(7),
+            .tint        = PackRGBA(1.0f, 1.0f, 1.0f, blockInfo.tint.a),
         });
     }
 }
@@ -449,8 +449,13 @@ void ChunkMeshBuilder::EmitGreedyQuad(
     
     // Grass uses a green tint for its top and side overlay
     // The bottom face is dirt and must remain untinted
-    uint32_t tint = (face == BOTTOM)
-        ? PackRGBA(1.0f, 1.0f, 1.0f, 1.0f) : PackRGBA(def.tint.x, def.tint.y, def.tint.z, 1.0f);
+    uint32_t tint = PackRGBA(def.tint.r, def.tint.g, def.tint.b, def.tint.a);
+
+    if (ref.type == BlockType::GRASS_BLOCK)
+    {
+        const glm::vec4& dirtTint = GetDef(BlockType::DIRT).tint;
+        tint = (face == BOTTOM) ? PackRGBA(dirtTint.r, dirtTint.g, dirtTint.b, dirtTint.a) : PackRGBA(def.tint.r, def.tint.g, def.tint.b, def.tint.a);
+    }
 
     // Face-plane layer coord: positive normal, one step forward
     const int layerFace = layer + (axes.normalDir > 0 ? 1 : 0);
@@ -676,7 +681,8 @@ void ChunkMeshBuilder::Build(
     const Chunk* nPZ, const Chunk* nNZ,
     const Chunk* nPX_PZ, const Chunk* nPX_NZ,
     const Chunk* nNX_PZ, const Chunk* nNX_NZ,
-    std::vector<Vertex>& outVertices)
+    std::vector<Vertex>& outVertices,
+    std::vector<Vertex>& waterVertices)
 {
     // SAFETY: shared_lock allows N concurrent readers — no deadlock possible between workers
     // even with overlapping neighbor sets. Invariant: workers NEVER acquire unique_lock.
@@ -753,7 +759,13 @@ void ChunkMeshBuilder::Build(
                     const bool isTranslucent = IsTranslucent(neighborBlock);
                     const bool isSolid       = IsSolid(neighborBlock);
 
-                    shouldRenderFace = !((isSolid || isTranslucent) && !(isTranslucent && neighborBlock  != blockType));
+                    shouldRenderFace = !((isSolid || isTranslucent) && !(isTranslucent && neighborBlock != blockType));
+
+                    if (IsWater(blockType) && IsWater(neighborBlock))
+                    {
+                        shouldRenderFace = false;
+                    }
+
                 }
                 else
                 {
@@ -770,8 +782,13 @@ void ChunkMeshBuilder::Build(
                     if (hasNeighbor)
                     {
                         const bool isTranslucent = IsTranslucent(neighborBlock);
-                        const bool isSolid       = IsSolid(neighborBlock);
+                        const bool isSolid = IsSolid(neighborBlock);
                         shouldRenderFace = !((isSolid || isTranslucent) && !(isTranslucent && neighborBlock != blockType));
+
+                        if (IsWater(blockType) && IsWater(neighborBlock))
+                        {
+                            shouldRenderFace = false;
+                        }
                     }
                     else 
                     {
@@ -782,6 +799,16 @@ void ChunkMeshBuilder::Build(
                 // Render the face regardless if the neighbor is at the world height or 0
                 if (neighborY == -1 || neighborY == CY)
                     shouldRenderFace = true;
+
+                if (IsWater(blockType))
+                {
+                    // Render water at the end
+                    if (shouldRenderFace)
+                    {
+                        AddTranslucentFace(waterVertices, worldPos, localPos, static_cast<Face>(face), blockType, chunk, nPX, nNX, nPZ, nNZ, nPX_PZ, nPX_NZ, nNX_PZ, nNX_NZ);
+                    }
+                    continue;
+                }
 
                 // Final rendering call to render faces of translucent blocks
                 if (shouldRenderFace)

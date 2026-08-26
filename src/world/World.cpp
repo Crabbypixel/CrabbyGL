@@ -232,10 +232,17 @@ void World::UnloadChunks()
             m_chunkMeshes[coord].Destroy();
             m_chunkMeshes.erase(coord);
         }
+
+        if (m_waterMeshes.contains(coord))
+        {
+            m_waterMeshes[coord].Destroy();
+            m_waterMeshes.erase(coord);
+        }
     }
 
     chunks.clear();
     m_chunkMeshes.clear();
+    m_waterMeshes.clear();
     m_deferredLightingChunks.clear();
 }
 
@@ -245,8 +252,10 @@ bool World::PlaceBlock(const RaycastHit& hit, BlockType type)
     if (!hit.hit)
         return false;
 
-    // Prevent placing beside non-solid blocks (cross-face blocks)
-    if (GetDef(GetBlock(hit.blockPos.x, hit.blockPos.y, hit.blockPos.z)).flags & BLOCK_CROSS)
+    BlockType hitBlockType = GetBlock(hit.blockPos.x, hit.blockPos.y, hit.blockPos.z);
+
+    // Prevent placing beside non-solid blocks (cross-face blocks
+    if (IsCross(hitBlockType))
         return false;
 
     glm::ivec3 target = hit.blockPos + hit.normal;
@@ -254,6 +263,13 @@ bool World::PlaceBlock(const RaycastHit& hit, BlockType type)
     // Prevent placing inside solid blocks
     if (IsSolid(target.x, target.y, target.z))
         return false;
+
+    // If hit block type is water, then set the block there directly
+    if (IsWater(hitBlockType))
+    {
+        SetBlock(hit.blockPos.x, hit.blockPos.y, hit.blockPos.z, type);
+        return true;
+    }
 
     // Log blocks have directional variants based on placement face
     const bool isLog = type == BlockType::TREE_LOG_Y ||
@@ -345,85 +361,15 @@ void World::MarkAdjacentChunksDirty(int wx, int wy, int wz)
 	if (maxX && maxZ) markDirty(1, 1);
 }
 
-// ───── Sync ──────────────────────────────────────────────────────────
-void World::SyncRenderer()
-{
-    auto getChunkFromChunkCoords = [&](glm::ivec2 c) -> Chunk* {
-        auto it = chunks.find(c);
-        return it != chunks.end() ? it->second.get() : nullptr;
-    };
-
-    // Phase 1: Enqueue dirty chunks to mesh workers
-    {
-        std::lock_guard<std::mutex> lockQ(m_meshJobMutex);
-        std::lock_guard<std::mutex> lockR(m_chunkMeshUsageGuardMutex);
-
-        for (auto& [chunkPos, chunk] : chunks)
-        {
-            // Only mesh dirty chunks
-            if (!chunk->dirty)
-                continue;
-
-            // Skip if already present
-            if (m_chunkMeshUsageGuards.count(chunkPos))
-                continue;
-
-            // Protect coord (and +4 neighbors) from unload/deletion later by the main thread
-            m_chunkMeshUsageGuards[chunkPos]++;
-            for (auto& neighborPos : GUARDED_NEIGHBORS)
-                ++m_chunkMeshUsageGuards[chunkPos + neighborPos];    // We check if this coord is present in worker thread, no need to check now
-
-			// Do this to ensure the worker thread can access the chunk data without worrying about concurrent deletion by the main thread
-			// This is used in ChunkMeshBuilder when it accesses neighbor chunk data for Ambient Occlusion (and later greedy meshing)
-            MeshJob job;
-            job.coord = chunkPos;
-            job.chunk = chunk.get();
-            job.nPX = getChunkFromChunkCoords(chunkPos + glm::ivec2{ 1,  0 });
-            job.nNX = getChunkFromChunkCoords(chunkPos + glm::ivec2{ -1,  0 });
-            job.nPZ = getChunkFromChunkCoords(chunkPos + glm::ivec2{ 0,  1 });
-            job.nNZ = getChunkFromChunkCoords(chunkPos + glm::ivec2{ 0, -1 });
-            job.nPX_PZ = getChunkFromChunkCoords(chunkPos + glm::ivec2{ 1,  1 });                   // (+X, +Z)
-            job.nPX_NZ = getChunkFromChunkCoords(chunkPos + glm::ivec2{ 1, -1 });                   // (+X, -Z)
-            job.nNX_PZ = getChunkFromChunkCoords(chunkPos + glm::ivec2{ -1,  1 });                  // (-X, +Z)
-            job.nNX_NZ = getChunkFromChunkCoords(chunkPos + glm::ivec2{ -1, -1 });                  // (-X, -Z)
-
-            m_meshJobQueue.push(job);
-            chunk->dirty = false;
-        }
-    }
-    m_meshJobCV.notify_all();
-
-    // Phase 2: Drain mesh staging, move the meshes from the staging region to local main thread memory
-    // Amortized GPU vertex upload
-    const int MAX_UPLOADS_PER_FRAME = 4;
-    int uploadsThisFrame = 0;
-
-    std::vector<std::pair<glm::ivec2, std::vector<Vertex>>> chunksToUpload;
-    {
-        std::lock_guard<std::mutex> lock(m_meshStagingMutex);
-
-        auto it = m_meshStaging.begin();
-        while (it != m_meshStaging.end() && uploadsThisFrame < MAX_UPLOADS_PER_FRAME)
-        {
-            chunksToUpload.push_back({ it->first, std::move(it->second) });
-            it = m_meshStaging.erase(it);
-            uploadsThisFrame++;
-        }
-    }
-
-    // Phase 3: Upload meshes to the GPU
-    for (auto& [coord, verts] : chunksToUpload)
-    {
-        auto it = m_chunkMeshes.find(coord);
-        if (it != m_chunkMeshes.end())
-            it->second.Upload(verts);
-    }
-}
-
-// ───── Textures & Draw ───────────────────────────────────────────────
-void World::SetChunkShader(Shader& shader)
+// ───── Textures ───────────────────────────────────────────────
+void World::SetChunkShader(Shader& shader, Shader& waterShader)
 {
     m_chunkShader = &shader;
+    m_waterShader = &waterShader;
+
+    waterShader.use();
+    waterShader.setInt("u_atlas", 1);
+
     shader.use();
     shader.setInt("u_atlas", 1);   // single sampler, slot 1
 }
@@ -457,34 +403,6 @@ void World::LoadAtlasTexture(const char* path)
     stbi_image_free(data);
 
     m_atlasTexture = id;
-}
-
-void World::DrawAll(const glm::mat4& proj, const glm::mat4& view)
-{
-    if (!m_chunkShader)
-        return;
-
-    m_chunkShader->use();
-
-    // Bind textures once — shared across all chunk draw calls
-    glActiveTexture(GL_TEXTURE1);
-    glBindTexture(GL_TEXTURE_2D, m_atlasTexture);
-
-    // Extract frustum planes
-    m_frustum.Extract(proj * view);
-
-    // Draw all meshes (computed earlier)
-    for (auto& [chunkPos, mesh] : m_chunkMeshes)
-    {
-        glm::vec3 minP = { chunkPos.x * CX,    0,  chunkPos.y * CZ };
-        glm::vec3 maxP = { chunkPos.x * CX + CX, CY, chunkPos.y * CZ + CZ };
-
-        // Implement frustum culling
-        if (!m_frustum.ContainsAABB(minP, maxP)) 
-            continue;
-
-        mesh.Draw();
-    }
 }
 
 // ───── Frustum Culling ───────────────────────────────────────────────
@@ -521,6 +439,7 @@ bool Frustum::ContainsAABB(const glm::vec3& minP, const glm::vec3& maxP) const
 // ───── Infinite World ───────────────────────────────────────────────
 void World::UpdateChunkStreaming(const glm::vec3& playerPos)
 {
+    m_playerPos = playerPos;
     glm::ivec2 playerChunkCoord = ChunkCoord(playerPos.x, playerPos.z);
 
 	// If the player is still in the same chunk as last update, check if all chunks in the view distance are loaded
@@ -589,6 +508,10 @@ void World::UpdateChunkStreaming(const glm::vec3& playerPos)
         // Remove chunk from memory
         m_chunkMeshes[chunkCoord].Destroy();
         m_chunkMeshes.erase(chunkCoord);
+
+        m_waterMeshes[chunkCoord].Destroy();
+        m_waterMeshes.erase(chunkCoord);
+
         chunks.erase(chunkCoord);
         m_deferredLightingChunks.erase(chunkCoord);             // Remove from deferred list if out of render distance
     }
@@ -688,10 +611,12 @@ void World::CommitGeneratedChunks()
 
         chunks[coord] = std::move(chunkPtr);
 		m_chunkMeshes.try_emplace(coord);   // default construct mesh for this chunk
+        m_waterMeshes.try_emplace(coord);
 
         // Build light values for present chunk and 4 neighboring chunks
         // Add current chunk
         m_lightingSystem.InitChunkLight(chunks.find(coord)->second.get());
+        m_worldPhysics.InitChunkWater(chunks.find(coord)->second.get());
 
         // Try adding 4 neighbors
         for (int i = 0; i < 4; i++)
@@ -706,6 +631,7 @@ void World::CommitGeneratedChunks()
             if (neighboringChunk != chunks.end())
             {
                 m_lightingSystem.InitChunkLight(neighboringChunk->second.get());
+                m_worldPhysics.InitChunkWater(neighboringChunk->second.get());
             }
             else
             {
@@ -729,6 +655,7 @@ void World::CommitGeneratedChunks()
             if (it != chunks.end())
             {
                 m_lightingSystem.InitChunkLight(it->second.get());
+                m_worldPhysics.InitChunkWater(it->second.get());
                 return true;
             }
             return false;
@@ -772,6 +699,155 @@ void World::CommitGeneratedChunks()
         }
     }
 }
+
+void World::SyncRenderer()
+{
+    auto getChunkFromChunkCoords = [&](glm::ivec2 c) -> Chunk* {
+        auto it = chunks.find(c);
+        return it != chunks.end() ? it->second.get() : nullptr;
+        };
+
+    // Phase 1: Enqueue dirty chunks to mesh workers
+    {
+        std::lock_guard<std::mutex> lockQ(m_meshJobMutex);
+        std::lock_guard<std::mutex> lockR(m_chunkMeshUsageGuardMutex);
+
+        for (auto& [chunkPos, chunk] : chunks)
+        {
+            // Only mesh dirty chunks
+            if (!chunk->dirty)
+                continue;
+
+            // Skip if already present
+            if (m_chunkMeshUsageGuards.count(chunkPos))
+                continue;
+
+            // Protect coord (and +4 neighbors) from unload/deletion later by the main thread
+            m_chunkMeshUsageGuards[chunkPos]++;
+            for (auto& neighborPos : GUARDED_NEIGHBORS)
+                ++m_chunkMeshUsageGuards[chunkPos + neighborPos];    // We check if this coord is present in worker thread, no need to check now
+
+            // Do this to ensure the worker thread can access the chunk data without worrying about concurrent deletion by the main thread
+            // This is used in ChunkMeshBuilder when it accesses neighbor chunk data for Ambient Occlusion (and later greedy meshing)
+            MeshJob job;
+            job.coord = chunkPos;
+            job.chunk = chunk.get();
+            job.nPX    = getChunkFromChunkCoords(chunkPos + glm::ivec2{ 1,  0 });
+            job.nNX    = getChunkFromChunkCoords(chunkPos + glm::ivec2{-1,  0 });
+            job.nPZ    = getChunkFromChunkCoords(chunkPos + glm::ivec2{ 0,  1 });
+            job.nNZ    = getChunkFromChunkCoords(chunkPos + glm::ivec2{ 0, -1 });
+            job.nPX_PZ = getChunkFromChunkCoords(chunkPos + glm::ivec2{ 1,  1 });   // (+X, +Z)
+            job.nPX_NZ = getChunkFromChunkCoords(chunkPos + glm::ivec2{ 1, -1 });   // (+X, -Z)
+            job.nNX_PZ = getChunkFromChunkCoords(chunkPos + glm::ivec2{-1,  1 });   // (-X, +Z)
+            job.nNX_NZ = getChunkFromChunkCoords(chunkPos + glm::ivec2{-1, -1 });   // (-X, -Z)
+
+            m_meshJobQueue.push(job);
+            chunk->dirty = false;
+        }
+    }
+    m_meshJobCV.notify_all();
+
+    // Phase 2: Drain mesh staging, move the meshes from the staging region to local main thread memory
+    // Amortized GPU vertex upload
+    const int MAX_UPLOADS_PER_FRAME = 4;
+    int uploadsThisFrame = 0;
+
+    // Opaque pass
+    std::vector<std::pair<glm::ivec2, std::vector<Vertex>>> chunksToUpload;
+    {
+        std::lock_guard<std::mutex> lock(m_meshStagingMutex);
+
+        auto it = m_meshStaging.begin();
+        while (it != m_meshStaging.end() && uploadsThisFrame < MAX_UPLOADS_PER_FRAME)
+        {
+            chunksToUpload.push_back({ it->first, std::move(it->second) });
+            it = m_meshStaging.erase(it);
+            uploadsThisFrame++;
+        }
+    }
+
+    // Water pass
+    std::vector<std::pair<glm::ivec2, std::vector<Vertex>>> waterChunksToUpload;
+    {
+        std::lock_guard<std::mutex> lock(m_meshStagingMutex);
+
+        auto it = m_waterMeshStaging.begin();
+        while (it != m_waterMeshStaging.end())
+        {
+            waterChunksToUpload.push_back({ it->first, std::move(it->second) });
+            it = m_waterMeshStaging.erase(it);
+        }
+    }
+
+    // Phase 3: Upload meshes to the GPU
+    // Opaque pass
+    for (auto& [coord, verts] : chunksToUpload)
+    {
+        auto it = m_chunkMeshes.find(coord);
+        if (it != m_chunkMeshes.end())
+            it->second.Upload(verts);
+    }
+
+    // Water pass
+    for (auto& [coord, verts] : waterChunksToUpload)
+    {
+        auto it = m_waterMeshes.find(coord);
+        if (it != m_waterMeshes.end())
+            it->second.Upload(verts);
+    }
+}
+
+void World::DrawAll(const glm::mat4& proj, const glm::mat4& view)
+{
+    if (!m_chunkShader)
+        return;
+
+    m_chunkShader->use();
+
+    // Bind textures once — shared across all chunk draw calls
+    glActiveTexture(GL_TEXTURE1);
+    glBindTexture(GL_TEXTURE_2D, m_atlasTexture);
+
+    // Extract frustum planes
+    m_frustum.Extract(proj * view);
+
+    // Draw all meshes (computed earlier)
+    for (auto& [chunkPos, mesh] : m_chunkMeshes)
+    {
+        glm::vec3 minP = { chunkPos.x * CX,    0,  chunkPos.y * CZ };
+        glm::vec3 maxP = { chunkPos.x * CX + CX, CY, chunkPos.y * CZ + CZ };
+
+        // Implement frustum culling
+        if (!m_frustum.ContainsAABB(minP, maxP))
+            continue;
+
+        mesh.Draw();
+    }
+
+    //if (!m_waterShader)
+    //    return;
+
+    //m_waterShader->use();
+
+    //// Bind textures once — shared across all chunk draw calls
+    //glActiveTexture(GL_TEXTURE1);
+    //glBindTexture(GL_TEXTURE_2D, m_atlasTexture);
+
+    m_frustum.Extract(proj * view);
+
+    glEnable(GL_BLEND);
+    glDepthMask(GL_FALSE);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
+    for (auto& [chunkPos, mesh] : m_waterMeshes)
+    {
+        mesh.Draw();
+    }
+
+    glDepthMask(GL_TRUE);
+    glDisable(GL_BLEND);
+}
+
 
 // ───── Multithreading ───────────────────────────────────────────────
 // Start and Stop workers
@@ -853,8 +929,10 @@ void World::ChunkLoadWorkerLoop()
 
 void World::MeshWorkerLoop()
 {
-    std::vector<Vertex> verts;
-    verts.reserve(CX * CZ * 64);
+    std::vector<Vertex> opaqueVerts;
+    std::vector<Vertex> waterVerts;
+    opaqueVerts.reserve(CX * CZ * 64);
+    waterVerts.reserve(CX * CZ);
 
     while (true)
     {
@@ -880,27 +958,34 @@ void World::MeshWorkerLoop()
 
         // 2. Now chunk coord is owned, build the vertices
         {
-            verts.clear();
+            opaqueVerts.clear();
+            waterVerts.clear();
 
             if (job.chunk)
+            {
                 ChunkMeshBuilder::Build(
                     *job.chunk,
                     job.nPX, job.nNX,
                     job.nPZ, job.nNZ,
                     job.nPX_PZ, job.nPX_NZ,
                     job.nNX_PZ, job.nNX_NZ,
-                    verts
+                    opaqueVerts, waterVerts
                 );
+            }
         }
 
         // 3. Push built vertices to staging
         {
             std::lock_guard<std::mutex> lock(m_meshStagingMutex);
 
-            std::vector<Vertex> toStage;
-            toStage.swap(verts);
+            std::vector<Vertex> toStageOpaqueVerts;
+            toStageOpaqueVerts.swap(opaqueVerts);
 
-            m_meshStaging[job.coord] = std::move(toStage);
+            std::vector<Vertex> toStageWaterVerts;
+            toStageWaterVerts.swap(waterVerts);
+
+            m_meshStaging[job.coord] = std::move(toStageOpaqueVerts);
+            m_waterMeshStaging[job.coord] = std::move(toStageWaterVerts);
         }
 
         // 4. Decrement refcounts, so that the chunk can be unloaded (unguard now)
